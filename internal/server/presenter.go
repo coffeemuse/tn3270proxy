@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"net"
 	"strings"
 
@@ -65,6 +66,25 @@ func (go3270Presenter) Menu(conn net.Conn, svcs []store.Service, errMsg string) 
 // realBridger adapts bridge.Bridge to the Bridger interface.
 type realBridger struct{}
 
-func (realBridger) Bridge(client net.Conn, addr, termType string, escapeAID byte) (bridge.Cause, error) {
-	return bridge.Bridge(client, addr, termType, escapeAID, nil)
+func (realBridger) Bridge(client net.Conn, addr, termType string, escapeAID byte, btls BackendTLS) (bridge.Cause, error) {
+	return bridge.Bridge(client, addr, termType, escapeAID, backendTLSConfig(addr, btls))
+}
+
+// backendTLSConfig builds the dial-time tls.Config for a backend, or nil for a
+// plaintext dial. ServerName is always the configured host; verification uses
+// the system root store (browser-like). Verify=false encrypts without
+// authenticating (for internal hosts with self-signed certs).
+func backendTLSConfig(addr string, btls BackendTLS) *tls.Config {
+	if !btls.Enabled {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		ServerName:         host,
+		InsecureSkipVerify: !btls.Verify,
+	}
 }
