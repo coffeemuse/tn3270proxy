@@ -170,6 +170,15 @@ func TestAdminScreensBottomAnchored(t *testing.T) {
 	if e.Row != g.ErrorRow() {
 		t.Errorf("form error row = %d, want %d", e.Row, g.ErrorRow())
 	}
+	formHelpOK := false
+	for _, f := range form {
+		if f.Row == g.HelpRow() && strings.Contains(f.Content, "PF3 = cancel") {
+			formHelpOK = true
+		}
+	}
+	if !formHelpOK {
+		t.Errorf("form: no help line on last row %d", g.HelpRow())
+	}
 }
 
 func TestAdminListScreenPageSizeGrowsWithRows(t *testing.T) {

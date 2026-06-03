@@ -45,6 +45,8 @@ var _ AdminStore = (*store.Store)(nil)
 // to the screen.
 const msgTempError = "TEMPORARY ERROR; TRY AGAIN"
 
+// adminPageSize is transitional: always 14 (DefaultGeometry's page size).
+// Task 6 deletes this and replaces pageBounds with a method on adminFlow.
 var adminPageSize = screens.DefaultGeometry.ListPageSize()
 
 // adminFlow drives the admin screen set for one authenticated admin. Policy

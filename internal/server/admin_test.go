@@ -291,7 +291,12 @@ func TestAdminUserListPaging(t *testing.T) {
 		f.store.CreateUser(ctx, fmt.Sprintf("user%02d", i), "h")
 	}
 	f.Run(ctx, nil)
-	wants := []string{"ROW 1 TO 14 OF 22", "ROW 15 TO 22 OF 22", "ROW 1 TO 14 OF 22"}
+	ps := screens.DefaultGeometry.ListPageSize() // 14
+	wants := []string{
+		fmt.Sprintf("ROW 1 TO %d OF 22", ps),
+		fmt.Sprintf("ROW %d TO 22 OF 22", ps+1),
+		fmt.Sprintf("ROW 1 TO %d OF 22", ps),
+	}
 	for i, want := range wants {
 		if got := p.gotLists[i].RowInfo; got != want {
 			t.Errorf("render %d RowInfo = %q, want %q", i, got, want)
