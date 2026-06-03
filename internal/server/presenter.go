@@ -40,9 +40,9 @@ func (go3270Presenter) Login(conn net.Conn, errMsg string) (string, string, bool
 		resp.Values[screens.FieldPassword], false, nil
 }
 
-func (go3270Presenter) Menu(conn net.Conn, svcs []store.Service, errMsg string) (*store.Service, bool, error) {
+func (go3270Presenter) Menu(conn net.Conn, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
 	for {
-		screen, mapping := screens.MenuScreen(svcs, errMsg)
+		screen, mapping := screens.MenuScreen(svcs, admin, errMsg)
 		resp, err := go3270.HandleScreen(
 			screen, nil, map[string]string{},
 			[]go3270.AID{go3270.AIDEnter},
@@ -50,14 +50,17 @@ func (go3270Presenter) Menu(conn net.Conn, svcs []store.Service, errMsg string) 
 			screens.FieldError, 19, 8, conn,
 		)
 		if err != nil {
-			return nil, false, err
+			return nil, false, false, err
 		}
 		if resp.AID == go3270.AIDPF3 {
-			return nil, true, nil
+			return nil, false, true, nil
 		}
-		key := strings.TrimSpace(resp.Values[screens.FieldSelection])
+		key := strings.ToUpper(strings.TrimSpace(resp.Values[screens.FieldSelection]))
+		if admin && key == "A" {
+			return nil, true, false, nil
+		}
 		if svc, ok := mapping[key]; ok {
-			return &svc, false, nil
+			return &svc, false, false, nil
 		}
 		errMsg = "Invalid selection: " + key
 	}
