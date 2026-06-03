@@ -8,6 +8,7 @@ package screens
 type Geometry struct{ Rows, Cols int }
 
 // DefaultGeometry is the 24×80 MOD 2 screen every 3270 client supports.
+// It is the safe fallback value; callers must not mutate it.
 var DefaultGeometry = Geometry{Rows: 24, Cols: 80}
 
 // norm clamps zero/unknown/sub-MOD 2 dimensions to the 24×80 default.
@@ -39,7 +40,8 @@ func (g Geometry) InputRow() int { return g.norm().Rows - 5 }
 func (g Geometry) ListPageSize() int { return g.norm().Rows - 10 }
 
 // FormMaxFields is how many labeled inputs fit on an admin form
-// (rows 3, 5, ..., Rows-5; 9 on MOD 2).
+// (rows 3, 5, 7, …, two apart, ending at Rows-5 or Rows-6 by parity;
+// 9 on MOD 2).
 func (g Geometry) FormMaxFields() int { return (g.norm().Rows-8)/2 + 1 }
 
 // MenuCapacity is how many service lines fit on the menu (rows 4 .. Rows-7,

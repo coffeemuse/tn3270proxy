@@ -39,6 +39,8 @@ func TestGeometryMenuCapacity(t *testing.T) {
 		{Geometry{Rows: 24, Cols: 80}, true, 13},  // one row reserved for the A entry
 		{Geometry{Rows: 32, Cols: 80}, false, 22},
 		{Geometry{Rows: 43, Cols: 80}, true, 32},
+		{Geometry{Rows: 27, Cols: 132}, false, 17},
+		{Geometry{Rows: 27, Cols: 132}, true, 16},
 		{Geometry{}, false, 14}, // zero value normalizes
 	}
 	for _, c := range cases {
