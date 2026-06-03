@@ -1,6 +1,8 @@
 package screens
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -69,5 +71,18 @@ func TestMenuScreenAdminEntry(t *testing.T) {
 	f, _ = fieldByName(screen, FieldSelection)
 	if !f.NumericOnly {
 		t.Errorf("non-admin selection stays numeric-only")
+	}
+}
+
+func TestMenuScreenAdminEntryClampedWithManyServices(t *testing.T) {
+	svcs := make([]store.Service, 16)
+	for i := range svcs {
+		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
+	}
+	screen, _ := MenuScreen(svcs, true, "")
+	for _, f := range screen {
+		if strings.Contains(f.Content, "Administration") && f.Row > 17 {
+			t.Errorf("admin entry at row %d would collide with the input line", f.Row)
+		}
 	}
 }

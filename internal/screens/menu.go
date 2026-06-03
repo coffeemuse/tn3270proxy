@@ -35,7 +35,11 @@ func MenuScreen(services []store.Service, admin bool, errMsg string) (go3270.Scr
 		row = 5
 	}
 	if admin {
-		screen = append(screen, go3270.Field{Row: row + 1, Col: 4, Content: " A.  Administration"})
+		adminRow := row + 1
+		if adminRow > 17 {
+			adminRow = 17 // never collide with the row-19 input line (long service lists are a pre-existing limitation)
+		}
+		screen = append(screen, go3270.Field{Row: adminRow, Col: 4, Content: " A.  Administration"})
 	}
 
 	screen = append(screen,
