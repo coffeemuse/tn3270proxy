@@ -52,11 +52,12 @@ type sessionHandler struct {
 
 func (h sessionHandler) Handle(conn net.Conn) {
 	s := &Session{
-		Store:        h.store,
-		Authenticate: auth.Authenticate,
-		Presenter:    go3270Presenter{},
-		Bridger:      realBridger{},
-		EscapeAID:    h.escapeAID,
+		Store:          h.store,
+		Authenticate:   auth.Authenticate,
+		Presenter:      go3270Presenter{},
+		Bridger:        realBridger{},
+		EscapeAID:      h.escapeAID,
+		AdminPresenter: go3270Presenter{},
 	}
 	s.Run(conn)
 }

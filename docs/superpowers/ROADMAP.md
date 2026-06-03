@@ -9,11 +9,11 @@ existing code, design considerations, a suggested approach, and dependencies.
 implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
 
-**Progress:** Milestones **1 (TLS-terminated inbound listener) and 2 (backend-side TLS
-dialing) are complete.** Remaining order (deliberately pulled #3 forward, 2026-06-03):
-**3 → 5 → 7 → 4 → 6** — admin tooling next so operators can manage users and TLS services
-without hand-editing seed JSON, then audit (still wanted before going public), larger
-terminals (7), protocol breadth, scale. **Next up: #3 (admin management UI).**
+**Progress:** Milestones **1, 2, and 3 are complete** (3 merged to `main`; live smoke test
+passed 2026-06-03). Smoke testing #3 surfaced UX refinements, slated as **#3.5**. Remaining
+order: **3.5 → 5 → 7 → 4 → 6** — admin/menu UX polish first (small), then audit logging
+(still wanted before going public), larger terminals (7), protocol breadth, scale.
+**Next up: #3.5 (admin/menu UX refinements).**
 
 **Carried-over debt:** #2's manual live smoke test (real emulator + TLS TN3270 backend; see
 the checklist at the end of `docs/superpowers/plans/2026-06-03-backend-tls-dialing.md`) has
@@ -99,7 +99,18 @@ existing `TestBridgeNegotiatesAndRelays`.
 
 ---
 
-## 3. Admin management UI for users / groups / services
+## 3. Admin management UI for users / groups / services  ✅ **DONE** *(merged to `main`; smoke test passed)*
+
+> **Completed.** Spec: `docs/superpowers/specs/2026-06-03-admin-ui-design.md`;
+> plan: `docs/superpowers/plans/2026-06-03-admin-ui.md`. Delivered: ZZADMIN reserved group
+> (ZZ* namespace, case-insensitive `store.ReservedGroupPrefix`; ZZADMIN auto-created in
+> `migrate()`), `A` menu entry visible only to ZZADMIN members, full CRUD via ISPF-style
+> screens (paging PF7/PF8, line commands, delete confirm round-trip) for users, groups,
+> services, and memberships/access links; guardrails (no self-delete, last-admin guard,
+> ZZ* create/delete blocked); store list/update/cascade-delete/count methods;
+> `auth.HashPassword` as the single bcrypt path (seed + admin UI); generic
+> `AdminListScreen`/`AdminFormScreen` builders in `internal/screens`. The historical notes
+> below are retained for reference.
 
 **Goal:** Manage users, groups, services, and their links without hand-editing JSON + re-seed.
 Today the only path is `seed -file`.
@@ -135,6 +146,40 @@ screens (#2). Brainstorm the surface choice explicitly before planning.
 
 **Dependencies:** none functionally, but more useful after #1/#2 so admins can manage TLS
 services.
+
+---
+
+## 3.5 Admin / menu UX refinements
+
+**Goal:** Polish items surfaced by the #3 live smoke test (2026-06-03). Three changes,
+all small, all in the session/adminFlow/screens layer — no schema work.
+
+1. **Group → members view.** From the admin GROUPS list, a line command (e.g. `S` or `M`)
+   on a group opens a members screen for that group, instead of only showing a count.
+   *Suggested shape:* reuse the existing toggle-list pattern (`userGroups`/`serviceGroups`):
+   list all users with an `X` marker for members, `A`/`R` to add/remove — membership becomes
+   manageable from either side. The last-ZZADMIN guard (`guardLastAdmin`) already applies.
+   Store may want `ListUsersInGroup(ctx, gid)` (or reuse `ListUsers`+`GetUserGroups`).
+
+2. **Drop PA3 from the admin screens.** PA3's product meaning is "escape the remote host"
+   (bridge escape); having it also mean "jump to service menu" inside admin screens is
+   confusing. Remove PA3 from the admin exit keys and rely on PF3 walking up one level at a
+   time. *Bonus:* this deletes the `bail bool` plumbing threaded through every adminFlow
+   method and `adminListExitKeys`/form exit keys lose `AIDPA3`. PA3 stays bridge-only.
+
+3. **Layered PF3 logout.** PF3 from the service menu logs out (back to the login screen)
+   instead of disconnecting; PF3 from the login screen disconnects. `Session.Run` loops
+   from menu-quit back to `doLogin` instead of returning. Update help-line texts
+   ("PF3 = logoff" on the menu). Note: a disconnect from the menu becomes two PF3 presses —
+   standard mainframe layering. Re-login re-evaluates groups (nice side effect: a demoted
+   admin loses the `A` entry at logout, partially addressing the live-effect caveat).
+
+**Where it hooks in:** `internal/server/session.go` (Run loop), `internal/server/admin*.go`
+(exit-key handling, bail plumbing removal), `internal/server/presenter*.go` (exit keys),
+`internal/screens` (help-line texts, members screen via existing `AdminListScreen`).
+
+**Dependencies:** none; do before #5 so audit logging (#5) captures the final
+login/logout/disconnect event shapes.
 
 ---
 
@@ -272,7 +317,7 @@ slotted after audit since it's UX polish rather than edge-hardening.
 | Backend TLS | ✅ done — per-service `tls_verify`; `bridge.Bridge` takes a `*tls.Config` |
 | Configurable escape key | `Session.EscapeAID` / `bridge.EscapeAIDPA3` (hard-coded to PA3 at wiring) |
 | Alternate transport (TLS in) | ✅ done — `internal/listen.Build` + `server.ServeAll`; `Server` stayed `net.Listener`-based |
-| Admin via 3270 | group model + session machine; an "admin" group + admin menu branch |
+| Admin via 3270 | ✅ done — `A` menu entry + adminFlow; see `internal/server/admin*.go` |
 | Audit | `Session.Run` sees Identity + service + bridge Cause; add an `Auditor` seam |
 | Pluggable identity source | `auth.UserStore` interface already abstracts the store (LDAP later = new impl) |
 | Larger terminals (MOD 3/4/5) | `go3270` `DevInfo.AltDimensions()` + `HandleScreenAlt`; screen builders need to take dimensions |

@@ -76,6 +76,10 @@ func (s *Store) migrate() error {
 		"ALTER TABLE services ADD COLUMN tls_verify INTEGER NOT NULL DEFAULT 1"); err != nil {
 		return err
 	}
+	// The reserved admin group always exists; seeding only assigns members.
+	if _, err := s.db.Exec("INSERT OR IGNORE INTO groups (name) VALUES (?)", AdminGroup); err != nil {
+		return fmt.Errorf("ensure %s group: %w", AdminGroup, err)
+	}
 	return nil
 }
 
@@ -253,21 +257,5 @@ func (s *Store) ListServicesForGroups(ctx context.Context, groups []string) ([]S
 		JOIN groups g ON g.id = gs.group_id
 		WHERE g.name IN (` + strings.Join(placeholders, ",") + `)
 		ORDER BY s.name`
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []Service
-	for rows.Next() {
-		var svc Service
-		var tlsInt, verifyInt int
-		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Host, &svc.Port, &tlsInt, &verifyInt); err != nil {
-			return nil, err
-		}
-		svc.TLS = tlsInt != 0
-		svc.TLSVerify = verifyInt != 0
-		out = append(out, svc)
-	}
-	return out, rows.Err()
+	return s.queryServices(ctx, query, args...)
 }

@@ -14,11 +14,12 @@ import (
 // --- fakes ---
 
 type fakePresenter struct {
-	termType    string
-	logins      []loginResult
-	menuPicks   []menuResult
-	menuErrors  []string
-	loginErrors []string
+	termType     string
+	logins       []loginResult
+	menuPicks    []menuResult
+	menuErrors   []string
+	loginErrors  []string
+	gotAdminFlag []bool
 }
 
 type loginResult struct {
@@ -27,9 +28,10 @@ type loginResult struct {
 	err        error
 }
 type menuResult struct {
-	sel  *store.Service
-	quit bool
-	err  error
+	sel   *store.Service
+	admin bool
+	quit  bool
+	err   error
 }
 
 func (f *fakePresenter) Negotiate(conn net.Conn) (string, error) { return f.termType, nil }
@@ -41,11 +43,12 @@ func (f *fakePresenter) Login(conn net.Conn, errMsg string) (string, string, boo
 	return r.user, r.pass, r.quit, r.err
 }
 
-func (f *fakePresenter) Menu(conn net.Conn, svcs []store.Service, errMsg string) (*store.Service, bool, error) {
+func (f *fakePresenter) Menu(conn net.Conn, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
 	f.menuErrors = append(f.menuErrors, errMsg)
+	f.gotAdminFlag = append(f.gotAdminFlag, admin)
 	r := f.menuPicks[0]
 	f.menuPicks = f.menuPicks[1:]
-	return r.sel, r.quit, r.err
+	return r.sel, r.admin, r.quit, r.err
 }
 
 type fakeBridger struct {
@@ -69,6 +72,9 @@ func (f *fakeBridger) Bridge(conn net.Conn, addr, termType string, escapeAID byt
 func authStub(ctx context.Context, st auth.UserStore, user, pass string) (auth.Identity, error) {
 	if user == "alice" && pass == "good" {
 		return auth.Identity{UserID: 1, Username: "alice", Groups: []string{"ops"}}, nil
+	}
+	if user == "root" && pass == "good" {
+		return auth.Identity{UserID: 9, Username: "root", Groups: []string{store.AdminGroup}}, nil
 	}
 	return auth.Identity{}, auth.ErrInvalidCredentials
 }
@@ -218,5 +224,63 @@ func TestSessionClientClosedEndsSession(t *testing.T) {
 
 	if b.calls != 1 {
 		t.Errorf("bridge calls = %d, want 1", b.calls)
+	}
+}
+
+func TestSessionAdminFlagFollowsGroup(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "alice", pass: "good"}}, // groups: ops
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.AdminPresenter = &fakeAdminPresenter{}
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+	if len(p.gotAdminFlag) != 1 || p.gotAdminFlag[0] {
+		t.Errorf("admin flag for non-admin = %v, want [false]", p.gotAdminFlag)
+	}
+}
+
+func TestSessionAdminSelectionRunsFlowAndReturnsToMenu(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "root", pass: "good"}}, // groups: ZZADMIN
+		menuPicks: []menuResult{{admin: true}, {quit: true}},
+	}
+	ap := &fakeAdminPresenter{menu: []adminMenuStep{{back: true}}}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.AdminPresenter = ap
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+	if len(ap.menu) != 0 {
+		t.Errorf("admin flow was not run")
+	}
+	if len(p.gotAdminFlag) != 2 || !p.gotAdminFlag[0] {
+		t.Errorf("admin flag = %v, want [true true]", p.gotAdminFlag)
+	}
+	if len(p.menuPicks) != 0 {
+		t.Errorf("expected return to menu after admin flow; %d picks left", len(p.menuPicks))
+	}
+}
+
+func TestSessionNonAdminAdminSelIgnored(t *testing.T) {
+	// Even if a (buggy) presenter reports adminSel=true for a non-admin,
+	// the session's isAdmin double-guard must not run the admin flow.
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "alice", pass: "good"}}, // ops, not ZZADMIN
+		menuPicks: []menuResult{{admin: true}, {quit: true}},
+	}
+	ap := &fakeAdminPresenter{} // no scripted steps: any call would panic
+	s := newTestSession(t, p, &fakeBridger{})
+	s.AdminPresenter = ap
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+	if len(ap.gotMenuErrs) != 0 {
+		t.Errorf("admin flow ran for non-admin user")
 	}
 }

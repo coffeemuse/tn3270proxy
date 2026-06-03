@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // SeedUser describes one user to create.
@@ -58,11 +58,11 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 	}
 
 	for _, u := range data.Users {
-		hash, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+		hash, err := auth.HashPassword(u.Password)
 		if err != nil {
 			return fmt.Errorf("hash password for %q: %w", u.Username, err)
 		}
-		uid, err := st.CreateUser(ctx, u.Username, string(hash))
+		uid, err := st.CreateUser(ctx, u.Username, hash)
 		if err != nil {
 			return fmt.Errorf("create user %q: %w", u.Username, err)
 		}

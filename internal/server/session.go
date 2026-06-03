@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"slices"
 	"strconv"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
@@ -19,7 +20,7 @@ import (
 type Presenter interface {
 	Negotiate(conn net.Conn) (termType string, err error)
 	Login(conn net.Conn, errMsg string) (username, password string, quit bool, err error)
-	Menu(conn net.Conn, services []store.Service, errMsg string) (selected *store.Service, quit bool, err error)
+	Menu(conn net.Conn, services []store.Service, admin bool, errMsg string) (selected *store.Service, adminSel bool, quit bool, err error)
 }
 
 // BackendTLS expresses a service's backend-TLS intent. The server layer keeps
@@ -45,6 +46,9 @@ type Session struct {
 	Presenter    Presenter
 	Bridger      Bridger
 	EscapeAID    byte
+	// AdminPresenter renders the admin screens. When nil (or the user is not
+	// in store.AdminGroup) the menu shows no admin entry.
+	AdminPresenter AdminPresenter
 }
 
 // Run executes the session state machine for one connection. It returns when
@@ -64,6 +68,7 @@ func (s *Session) Run(conn net.Conn) {
 		return
 	}
 
+	isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
 	errMsg := ""
 	for {
 		services, err := s.Store.ListServicesForGroups(ctx, identity.Groups)
@@ -72,11 +77,19 @@ func (s *Session) Run(conn net.Conn) {
 			services = nil
 			errMsg = "Temporary error retrieving services; try again"
 		}
-		selected, quit, err := s.Presenter.Menu(conn, services, errMsg)
+		selected, adminSel, quit, err := s.Presenter.Menu(conn, services, isAdmin, errMsg)
 		if err != nil || quit {
 			return
 		}
 		errMsg = ""
+		if adminSel && isAdmin {
+			flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter, identity: identity}
+			if aerr := flow.Run(ctx, conn); aerr != nil {
+				log.Printf("admin flow for %s ended: %v", identity.Username, aerr)
+				return
+			}
+			continue // re-render the menu: fresh service list shows admin edits
+		}
 		if selected == nil {
 			continue
 		}

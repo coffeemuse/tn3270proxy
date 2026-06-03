@@ -1,6 +1,7 @@
 {
   "groups": ["ops", "dev"],
   "users": [
+    { "username": "admin", "password": "changeme", "groups": ["ZZADMIN"] },
     { "username": "alice", "password": "changeme", "groups": ["ops"] },
     { "username": "bob",   "password": "changeme", "groups": ["dev"] }
   ],

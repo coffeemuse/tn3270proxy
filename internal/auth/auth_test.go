@@ -18,11 +18,11 @@ func seedUser(t *testing.T) (*store.Store, string) {
 	}
 	t.Cleanup(func() { st.Close() })
 	ctx := context.Background()
-	hash, err := bcrypt.GenerateFromPassword([]byte("s3cret"), bcrypt.DefaultCost)
+	hash, err := HashPassword("s3cret")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uid, err := st.CreateUser(ctx, "alice", string(hash))
+	uid, err := st.CreateUser(ctx, "alice", hash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,5 +55,18 @@ func TestAuthenticateUnknownUserSameError(t *testing.T) {
 	_, err := Authenticate(context.Background(), st, "nobody", "whatever")
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Errorf("err = %v, want ErrInvalidCredentials (no user-existence leak)", err)
+	}
+}
+
+func TestHashPasswordRoundTrip(t *testing.T) {
+	hash, err := HashPassword("s3cret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash == "" || hash == "s3cret" {
+		t.Fatalf("hash = %q", hash)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte("s3cret")); err != nil {
+		t.Errorf("hash does not verify: %v", err)
 	}
 }

@@ -8,6 +8,7 @@ A **TN3270 gateway**. It presents itself as a TN3270 *server* on the (eventually
 internet, authenticates users against a local SQLite DB, shows a **group-filtered menu**
 of internal TN3270 services, and **bridges** the user to the selected backend host. During
 a bridged session, **PA3** returns the user to the menu; **PF3** at the menu disconnects.
+Members of the reserved `ZZADMIN` group get an extra `A` menu entry opening a full-CRUD admin screen set (users / groups / services).
 
 The connect → login → menu → bridge core loop (the MVP) is **complete and on `main`**.
 Remaining work is in `docs/superpowers/ROADMAP.md`.
@@ -45,6 +46,8 @@ internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,U
                   bcrypt; uniform ErrInvalidCredentials (no username-enumeration leak).
 internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(svcs, errMsg).
                   Field-name constants: FieldUsername/Password/Error/Selection.
+                  Admin screen builders: AdminMenuScreen(), and generic AdminListScreen/
+                  AdminFormScreen (paging, line commands, delete confirm).
 internal/bridge   The bespoke core. telnetProcessor parses one Telnet leg (forward 3270
                   data + IAC IAC / IAC EOR framing; answer negotiation locally; detect PA3
                   escape). Bridge(client, addr, termType, escapeAID, *tls.Config) dials
@@ -56,6 +59,8 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   Presenter/Bridger/Authenticator seams; go3270Presenter + realBridger are
                   the real impls; Server is the TCP accept loop (recovers per-conn panics);
                   ServeAll runs one Server per listener sharing a handler.
+                  adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go)
+                  behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
 ```
 
 Data flow: `main → Server.Serve` (accept) → `Session.Run` → `Presenter` (go3270 screens) /
@@ -70,8 +75,14 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   the network.
 - **Interfaces for testability:** `auth.UserStore`, `server.Presenter/Bridger/Authenticator`.
   `*store.Store` satisfies `auth.UserStore`.
+- **Reserved groups:** `ZZ*` (case-insensitive, `store.ReservedGroupPrefix`) group names are
+  app-dictated; `store.AdminGroup` (`ZZADMIN`) is auto-created by `migrate()`. The admin UI
+  can't create/delete `ZZ*` groups, only manage membership. Guardrails: no self-delete, never
+  empty ZZADMIN. Admin changes apply at the next menu render/login — live sessions are not
+  re-evaluated.
 - **No credential logging, ever.** Lifecycle logging uses stdlib `log`; usernames are OK to
-  log, passwords/Login() contents are not.
+  log, passwords/Login() contents are not; `auth.HashPassword` is the single bcrypt path
+  (seed + admin UI).
 - **Commits:** conventional-ish prefixes (`feat:`/`test:`/`chore:`/`docs:`), small and focused.
 - **Backend TLS:** implemented. A service dials over TLS when `services.tls` is set; the
   per-service `services.tls_verify` column (default on) controls certificate verification
