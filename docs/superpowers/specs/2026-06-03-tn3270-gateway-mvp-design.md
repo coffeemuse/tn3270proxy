@@ -154,10 +154,10 @@ After a menu selection:
    matches end-to-end.
 3. **Relay**: two goroutines copy bytes in each direction (client↔backend) until either
    side closes or the escape condition fires.
-4. **Escape**: the client→backend direction is watched for a designated **escape AID**
-   (a chosen PF key, e.g. PF12 — exact key fixed during implementation). On detection,
-   the bridge stops relaying, closes the backend connection, and returns control to the
-   server with a "user escaped" cause.
+4. **Escape**: the client→backend direction is watched for the **escape AID — PA3**
+   (chosen as the least commonly used AID, minimizing collision with backend
+   applications). On detection, the bridge stops relaying, closes the backend
+   connection, and returns control to the server with a "user escaped" cause.
 
 During bridging the proxy performs **pure byte relay** — it does **not** parse or
 rewrite the 3270 datastream (apart from the minimal inspection needed to detect the
@@ -173,7 +173,7 @@ Minimal for the MVP, sourced from flags and/or a small config file:
 
 - Listen address (e.g. `:2323`).
 - Database file path.
-- Escape AID key (default fixed in code; configurable later).
+- Escape AID key (defaults to PA3 in code; configurable later).
 
 ## 7. Error Handling
 
