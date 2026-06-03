@@ -34,3 +34,6 @@ go.work.sum
 # Build output
 /tn3270proxy
 /bin/
+
+# Runtime SQLite databases
+*.db
