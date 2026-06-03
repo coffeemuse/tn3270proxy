@@ -11,8 +11,8 @@ implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`
 
 **Progress:** Milestones **1, 2, 3, 3.5, and 7 are complete** (3 merged to `main`; live smoke
 test passed 2026-06-03; 3.5 merged to `main`; live smoke test pending; 7 merged to `main`;
-live smoke test pending). Remaining order: **5 → 4 → 6** — audit logging first (still
-wanted before going public), then protocol breadth, scale.
+live smoke test passed 2026-06-03). Remaining order: **5 → 4 → 6** — audit logging first
+(still wanted before going public), then protocol breadth, scale.
 **Next up: #5 (audit logging).**
 
 **Carried-over debt:** #2's manual live smoke test (real emulator + TLS TN3270 backend; see
@@ -277,7 +277,7 @@ endpoint selection/failover (schema + selection policy in the session) before tr
 
 ---
 
-## 7. Support larger terminal models (MOD 3 / MOD 4 / MOD 5)  ✅ **DONE** *(merged; live smoke test pending)*
+## 7. Support larger terminal models (MOD 3 / MOD 4 / MOD 5)  ✅ **DONE** *(merged; smoke test passed)*
 
 > **Completed.** Spec: `docs/superpowers/specs/2026-06-03-larger-terminals-design.md`;
 > plan: `docs/superpowers/plans/2026-06-03-larger-terminals.md`. Delivered: `screens.Geometry`
@@ -287,9 +287,8 @@ endpoint selection/failover (schema + selection policy in the session) before tr
 > `HandleScreenAlt` everywhere (nil dev = 24×80 fallback for sub-MOD 2/unknown sizes),
 > rows-only adaptation (content stays in columns 0–79 on MOD 5), explicit menu truncation
 > (admin `A` entry always gets its own row), and admin list paging that follows the
-> terminal's row count. Run the manual smoke checklist in the plan (Task 7 Step 6) in a
-> real emulator (`c3270 -model 3279-4` etc.), then drop the "smoke test pending"
-> qualifier. The historical notes below are retained for reference.
+> terminal's row count. Live smoke test passed 2026-06-03 (manual checklist in the plan,
+> Task 7 Step 6). The historical notes below are retained for reference.
 
 **Goal:** Render the login and menu screens correctly on terminals larger than the 24×80
 default (MOD 2). The bottom-anchored elements (error line, PF-key help) must move to the
