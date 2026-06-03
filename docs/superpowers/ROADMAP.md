@@ -10,10 +10,14 @@ implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`
 `docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
 
 **Progress:** Milestones **1 (TLS-terminated inbound listener) and 2 (backend-side TLS
-dialing) are complete.** Remaining suggested order: **5 → 7 → 3 → 4 → 6**, i.e. finish
-hardening the public edge (audit), make the screens adapt to larger terminals (7 —
-self-contained, improves the core UX), then build admin tooling, then protocol breadth, then
-scale. Audit logging (#5) is the natural next step — you want audit before going public.
+dialing) are complete.** Remaining order (deliberately pulled #3 forward, 2026-06-03):
+**3 → 5 → 7 → 4 → 6** — admin tooling next so operators can manage users and TLS services
+without hand-editing seed JSON, then audit (still wanted before going public), larger
+terminals (7), protocol breadth, scale. **Next up: #3 (admin management UI).**
+
+**Carried-over debt:** #2's manual live smoke test (real emulator + TLS TN3270 backend; see
+the checklist at the end of `docs/superpowers/plans/2026-06-03-backend-tls-dialing.md`) has
+NOT been run yet — no TLS backend was available. Run it when one exists.
 
 ---
 
@@ -102,9 +106,14 @@ Today the only path is `seed -file`.
 
 **Where it hooks in:**
 - `internal/store` already has all the CRUD primitives (`CreateUser`, `CreateGroup`,
-  `AddUserToGroup`, `CreateService`, `LinkGroupService`, plus the read queries). You'll likely
-  need **delete/update** methods (don't exist yet) and listing methods (e.g. `ListUsers`,
+  `AddUserToGroup`, `CreateService` — now 6-arg: `(ctx, name, host, port, tls, verify)` since
+  milestone #2 — `LinkGroupService`, plus the read queries). You'll likely need
+  **delete/update** methods (don't exist yet) and listing methods (e.g. `ListUsers`,
   `ListGroups`, `ListAllServices`).
+- Since #2, services carry **two TLS fields** (`tls`, `tls_verify`); any admin create/update
+  surface must expose both. Remember all `Create*` are INSERT OR IGNORE — they do **not**
+  update existing rows (that's exactly why update methods are needed; same root cause as the
+  password-update note below).
 - Decision: **what kind of UI?** Options, in rough effort order:
   1. A richer CLI (`tn3270proxy admin user add/list/rm`, etc.) — smallest step, reuses store.
   2. A 3270 admin screen set (consistent with the product; reuse `internal/screens` + go3270,
