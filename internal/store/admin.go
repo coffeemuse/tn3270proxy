@@ -105,3 +105,41 @@ func (s *Store) queryServices(ctx context.Context, query string, args ...any) ([
 	}
 	return out, rows.Err()
 }
+
+// SetPassword replaces the user's password hash. It exists because CreateUser
+// is INSERT OR IGNORE and never updates an existing row. Returns ErrNotFound
+// for an unknown user id.
+func (s *Store) SetPassword(ctx context.Context, userID int64, passwordHash string) error {
+	return s.execExpectingRow(ctx,
+		"UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, userID)
+}
+
+// UpdateService replaces every editable field of the service. Returns
+// ErrNotFound for an unknown service id.
+func (s *Store) UpdateService(ctx context.Context, id int64, name, host string, port int, tls, verify bool) error {
+	tlsInt, verifyInt := 0, 0
+	if tls {
+		tlsInt = 1
+	}
+	if verify {
+		verifyInt = 1
+	}
+	return s.execExpectingRow(ctx,
+		"UPDATE services SET name = ?, host = ?, port = ?, tls = ?, tls_verify = ? WHERE id = ?",
+		name, host, port, tlsInt, verifyInt, id)
+}
+
+// execExpectingRow runs a statement that must affect exactly one row, mapping
+// zero affected rows to ErrNotFound.
+func (s *Store) execExpectingRow(ctx context.Context, query string, args ...any) error {
+	res, err := s.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
