@@ -122,3 +122,22 @@ func TestUnknownConfigKeyIsError(t *testing.T) {
 		t.Fatal("want error for unknown config key, got nil")
 	}
 }
+
+func TestValidateNoListenerEnabled(t *testing.T) {
+	p := writeConfig(t, `{ "listeners": { "plain": { "enabled": false } } }`)
+	_, err := Load([]string{"-config", p})
+	if err == nil {
+		t.Fatal("want error when no listener is enabled, got nil")
+	}
+}
+
+func TestValidateTLSWithoutCert(t *testing.T) {
+	p := writeConfig(t, `{ "listeners": {
+		"plain": { "enabled": false },
+		"tls": { "enabled": true, "addr": ":3270" }
+	} }`)
+	_, err := Load([]string{"-config", p})
+	if err == nil {
+		t.Fatal("want error when tls enabled without cert/key, got nil")
+	}
+}
