@@ -42,14 +42,14 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 		}
 		var start, end int
 		var rowInfo string
-		page, start, end, rowInfo = pageBounds(page, len(svcs))
+		page, start, end, rowInfo = f.pageBounds(page, len(svcs))
 		pageSvcs := svcs[start:end]
 		rows := make([]string, len(pageSvcs))
 		for i, s := range pageSvcs {
 			rows[i] = fmt.Sprintf("%-16s %-28s %-4s %s",
 				s.Name, fmt.Sprintf("%s:%d", s.Host, s.Port), yn(s.TLS), yn(s.TLSVerify))
 		}
-		act, err := f.presenter.AdminList(conn, screens.AdminListView{
+		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
 			Title:   "TN3270 GATEWAY ADMIN: SERVICES",
 			RowInfo: rowInfo,
 			Header:  "CMD  NAME             HOST:PORT                    TLS  VERIFY",
@@ -126,7 +126,7 @@ func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *st
 	}
 	errMsg := ""
 	for {
-		act, err := f.presenter.AdminForm(conn, screens.AdminFormView{
+		act, err := f.presenter.AdminForm(conn, f.term, screens.AdminFormView{
 			Title: title,
 			Fields: []screens.AdminFormField{
 				{Name: screens.FieldName, Label: "Name . . . .", Value: name, Length: 32},
@@ -217,7 +217,7 @@ func (f *adminFlow) serviceGroups(ctx context.Context, conn net.Conn, svc store.
 		}
 		var start, end int
 		var rowInfo string
-		page, start, end, rowInfo = pageBounds(page, len(groups))
+		page, start, end, rowInfo = f.pageBounds(page, len(groups))
 		pageGroups := groups[start:end]
 		rows := make([]string, len(pageGroups))
 		for i, g := range pageGroups {
@@ -227,7 +227,7 @@ func (f *adminFlow) serviceGroups(ctx context.Context, conn net.Conn, svc store.
 			}
 			rows[i] = fmt.Sprintf("%-20s %s", g.Name, marker)
 		}
-		act, err := f.presenter.AdminList(conn, screens.AdminListView{
+		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
 			Title:   "TN3270 GATEWAY ADMIN: ACCESS TO " + svc.Name,
 			RowInfo: rowInfo,
 			Header:  "CMD  GROUP                ACCESS",

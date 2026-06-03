@@ -32,7 +32,7 @@ type fakeAdminPresenter struct {
 	gotForms    []screens.AdminFormView
 }
 
-func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, errMsg string) (int, bool, error) {
+func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, _ Term, errMsg string) (int, bool, error) {
 	f.gotMenuErrs = append(f.gotMenuErrs, errMsg)
 	if len(f.menu) == 0 {
 		panic("unexpected AdminMenu call")
@@ -42,7 +42,7 @@ func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, errMsg string) (int, bool, er
 	return s.choice, s.back, nil
 }
 
-func (f *fakeAdminPresenter) AdminList(_ net.Conn, v screens.AdminListView) (AdminListAction, error) {
+func (f *fakeAdminPresenter) AdminList(_ net.Conn, _ Term, v screens.AdminListView) (AdminListAction, error) {
 	f.gotLists = append(f.gotLists, v)
 	if len(f.lists) == 0 {
 		panic("unexpected AdminList call")
@@ -52,7 +52,7 @@ func (f *fakeAdminPresenter) AdminList(_ net.Conn, v screens.AdminListView) (Adm
 	return a, nil
 }
 
-func (f *fakeAdminPresenter) AdminForm(_ net.Conn, v screens.AdminFormView) (AdminFormAction, error) {
+func (f *fakeAdminPresenter) AdminForm(_ net.Conn, _ Term, v screens.AdminFormView) (AdminFormAction, error) {
 	f.gotForms = append(f.gotForms, v)
 	if len(f.forms) == 0 {
 		panic("unexpected AdminForm call")
@@ -88,6 +88,7 @@ func newAdminFixture(t *testing.T, p *fakeAdminPresenter) (*adminFlow, map[strin
 		store:     st,
 		presenter: p,
 		identity:  auth.Identity{UserID: ids["root"], Username: "root", Groups: []string{store.AdminGroup}},
+		term:      Term{Type: "IBM-3278-2", Rows: 24, Cols: 80},
 	}
 	return f, ids
 }
@@ -124,12 +125,25 @@ func TestPageBounds(t *testing.T) {
 		{1, 20, 1, 14, 20, "ROW 15 TO 20 OF 20"},
 		{5, 20, 1, 14, 20, "ROW 15 TO 20 OF 20"}, // clamped after deletions
 	}
+	f := &adminFlow{term: Term{Rows: 24, Cols: 80}}
 	for _, c := range cases {
-		page, s, e, info := pageBounds(c.page, c.total)
+		page, s, e, info := f.pageBounds(c.page, c.total)
 		if page != c.wantPage || s != c.wantS || e != c.wantE || info != c.wantInfo {
 			t.Errorf("pageBounds(%d,%d) = %d,%d,%d,%q want %d,%d,%d,%q",
 				c.page, c.total, page, s, e, info, c.wantPage, c.wantS, c.wantE, c.wantInfo)
 		}
+	}
+}
+
+func TestPageBoundsGrowsWithTerminalRows(t *testing.T) {
+	f := &adminFlow{term: Term{Rows: 32, Cols: 80}} // page size 22
+	page, s, e, info := f.pageBounds(0, 30)
+	if page != 0 || s != 0 || e != 22 || info != "ROW 1 TO 22 OF 30" {
+		t.Errorf("MOD 3 pageBounds(0,30) = %d,%d,%d,%q", page, s, e, info)
+	}
+	page, s, e, info = f.pageBounds(1, 30)
+	if page != 1 || s != 22 || e != 30 || info != "ROW 23 TO 30 OF 30" {
+		t.Errorf("MOD 3 pageBounds(1,30) = %d,%d,%d,%q", page, s, e, info)
 	}
 }
 

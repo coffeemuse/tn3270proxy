@@ -29,7 +29,7 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 		}
 		var start, end int
 		var rowInfo string
-		page, start, end, rowInfo = pageBounds(page, len(groups))
+		page, start, end, rowInfo = f.pageBounds(page, len(groups))
 		pageGroups := groups[start:end]
 		rows := make([]string, len(pageGroups))
 		for i, g := range pageGroups {
@@ -40,7 +40,7 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 			}
 			rows[i] = fmt.Sprintf("%-20s %7d  %8d", g.Name, members, services)
 		}
-		act, err := f.presenter.AdminList(conn, screens.AdminListView{
+		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
 			Title:   "TN3270 GATEWAY ADMIN: GROUPS",
 			RowInfo: rowInfo,
 			Header:  "CMD  GROUP                MEMBERS  SERVICES",
@@ -127,7 +127,7 @@ func (f *adminFlow) groupMembers(ctx context.Context, conn net.Conn, g store.Gro
 		}
 		var start, end int
 		var rowInfo string
-		page, start, end, rowInfo = pageBounds(page, len(users))
+		page, start, end, rowInfo = f.pageBounds(page, len(users))
 		pageUsers := users[start:end]
 		rows := make([]string, len(pageUsers))
 		for i, u := range pageUsers {
@@ -137,7 +137,7 @@ func (f *adminFlow) groupMembers(ctx context.Context, conn net.Conn, g store.Gro
 			}
 			rows[i] = fmt.Sprintf("%-16s %s", u.Username, marker)
 		}
-		act, err := f.presenter.AdminList(conn, screens.AdminListView{
+		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
 			Title:   "TN3270 GATEWAY ADMIN: MEMBERS OF " + g.Name,
 			RowInfo: rowInfo,
 			Header:  "CMD  USERNAME         MEMBER",
@@ -189,7 +189,7 @@ func (f *adminFlow) groupMembers(ctx context.Context, conn net.Conn, g store.Gro
 func (f *adminFlow) groupAdd(ctx context.Context, conn net.Conn) error {
 	name, errMsg := "", ""
 	for {
-		act, err := f.presenter.AdminForm(conn, screens.AdminFormView{
+		act, err := f.presenter.AdminForm(conn, f.term, screens.AdminFormView{
 			Title: "TN3270 GATEWAY ADMIN: ADD GROUP",
 			Fields: []screens.AdminFormField{
 				{Name: screens.FieldName, Label: "Group name .", Value: name, Length: 32},

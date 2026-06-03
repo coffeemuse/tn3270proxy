@@ -94,7 +94,7 @@ func (s *Session) Run(conn net.Conn) {
 			}
 			errMsg = ""
 			if adminSel && isAdmin {
-				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter, identity: identity}
+				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter, identity: identity, term: term}
 				if aerr := flow.Run(ctx, conn); aerr != nil {
 					log.Printf("admin flow for %s ended: %v", identity.Username, aerr)
 					return

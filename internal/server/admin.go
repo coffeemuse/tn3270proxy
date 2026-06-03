@@ -7,7 +7,6 @@ import (
 	"net"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
-	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
@@ -45,10 +44,6 @@ var _ AdminStore = (*store.Store)(nil)
 // to the screen.
 const msgTempError = "TEMPORARY ERROR; TRY AGAIN"
 
-// adminPageSize is transitional: always 14 (DefaultGeometry's page size).
-// Task 6 deletes this and replaces pageBounds with a method on adminFlow.
-var adminPageSize = screens.DefaultGeometry.ListPageSize()
-
 // adminFlow drives the admin screen set for one authenticated admin. Policy
 // (guardrails, duplicate pre-checks, validation, hashing) lives here; the
 // store stays mechanical.
@@ -56,6 +51,7 @@ type adminFlow struct {
 	store     AdminStore
 	presenter AdminPresenter
 	identity  auth.Identity
+	term      Term // negotiated client terminal; drives page size + screen rendering
 }
 
 // Run loops on the admin menu until the user leaves via PF3 (back to the
@@ -64,7 +60,7 @@ type adminFlow struct {
 func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 	errMsg := ""
 	for {
-		choice, back, err := f.presenter.AdminMenu(conn, errMsg)
+		choice, back, err := f.presenter.AdminMenu(conn, f.term, errMsg)
 		if err != nil {
 			return err
 		}
@@ -87,20 +83,22 @@ func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 }
 
 // pageBounds clamps page to the data and returns the slice bounds plus the
-// row indicator. Clamping matters after deletions shrink the list.
-func pageBounds(page, total int) (clamped, start, end int, info string) {
+// row indicator. The page size follows the client terminal's row count.
+// Clamping matters after deletions shrink the list.
+func (f *adminFlow) pageBounds(page, total int) (clamped, start, end int, info string) {
+	size := f.term.Geometry().ListPageSize()
 	if total == 0 {
 		return 0, 0, 0, "ROW 0 OF 0"
 	}
-	maxPage := (total - 1) / adminPageSize
+	maxPage := (total - 1) / size
 	if page > maxPage {
 		page = maxPage
 	}
 	if page < 0 {
 		page = 0
 	}
-	start = page * adminPageSize
-	end = min(start+adminPageSize, total)
+	start = page * size
+	end = min(start+size, total)
 	return page, start, end, fmt.Sprintf("ROW %d TO %d OF %d", start+1, end, total)
 }
 
