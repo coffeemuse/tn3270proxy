@@ -211,14 +211,18 @@ type Service struct {
 }
 
 // CreateService inserts a service, or returns the existing service's id.
-func (s *Store) CreateService(ctx context.Context, name, host string, port int, tls bool) (int64, error) {
+func (s *Store) CreateService(ctx context.Context, name, host string, port int, tls, verify bool) (int64, error) {
 	tlsInt := 0
 	if tls {
 		tlsInt = 1
 	}
+	verifyInt := 0
+	if verify {
+		verifyInt = 1
+	}
 	return s.insertOrGet(ctx,
-		"INSERT OR IGNORE INTO services (name, host, port, tls) VALUES (?, ?, ?, ?)",
-		[]any{name, host, port, tlsInt},
+		"INSERT OR IGNORE INTO services (name, host, port, tls, tls_verify) VALUES (?, ?, ?, ?, ?)",
+		[]any{name, host, port, tlsInt, verifyInt},
 		"SELECT id FROM services WHERE name = ?",
 		[]any{name})
 }

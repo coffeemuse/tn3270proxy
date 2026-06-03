@@ -68,3 +68,41 @@ func TestApplyIsIdempotent(t *testing.T) {
 		t.Errorf("expected 1 service after double seed, got %d", len(svcs))
 	}
 }
+
+func TestApplyVerifyDefaultsOnWhenOmitted(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "verify.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	verifyOff := false
+	data := SeedData{
+		Groups: []string{"ops"},
+		Services: []SeedService{
+			// Verify omitted (nil) → must default to ON.
+			{Name: "DEFON", Host: "a", Port: 992, TLS: true, Groups: []string{"ops"}},
+			// Verify explicitly false → must stay OFF.
+			{Name: "OFF", Host: "b", Port: 992, TLS: true, Verify: &verifyOff, Groups: []string{"ops"}},
+		},
+	}
+	if err := Apply(ctx, st, data); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	svcs, err := st.ListServicesForGroups(ctx, []string{"ops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]store.Service{}
+	for _, s := range svcs {
+		byName[s.Name] = s
+	}
+	if !byName["DEFON"].TLSVerify {
+		t.Errorf("omitted verify should default ON, got %+v", byName["DEFON"])
+	}
+	if byName["OFF"].TLSVerify {
+		t.Errorf("explicit verify=false should stay OFF, got %+v", byName["OFF"])
+	}
+}

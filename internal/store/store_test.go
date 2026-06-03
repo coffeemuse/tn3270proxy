@@ -50,7 +50,7 @@ func TestMigrateAddsVerifyToLegacyDB(t *testing.T) {
 	defer st.Close()
 
 	ops, _ := st.CreateGroup(ctx, "ops")
-	sid, _ := st.CreateService(ctx, "SEC", "sec.example", 992, true)
+	sid, _ := st.CreateService(ctx, "SEC", "sec.example", 992, true, true)
 	st.LinkGroupService(ctx, ops, sid)
 
 	svcs, err := st.ListServicesForGroups(ctx, []string{"ops"})

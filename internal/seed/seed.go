@@ -23,6 +23,7 @@ type SeedService struct {
 	Host   string   `json:"host"`
 	Port   int      `json:"port"`
 	TLS    bool     `json:"tls"`
+	Verify *bool    `json:"verify"` // omitted → verify ON (secure default)
 	Groups []string `json:"groups"`
 }
 
@@ -77,7 +78,11 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 	}
 
 	for _, svc := range data.Services {
-		sid, err := st.CreateService(ctx, svc.Name, svc.Host, svc.Port, svc.TLS)
+		verify := true // secure default when "verify" is omitted
+		if svc.Verify != nil {
+			verify = *svc.Verify
+		}
+		sid, err := st.CreateService(ctx, svc.Name, svc.Host, svc.Port, svc.TLS, verify)
 		if err != nil {
 			return fmt.Errorf("create service %q: %w", svc.Name, err)
 		}
