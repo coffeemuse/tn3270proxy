@@ -170,6 +170,10 @@ func (s *Store) DeleteService(ctx context.Context, serviceID int64) error {
 	})
 }
 
+// deleteCascade runs each statement in a single transaction. Deleting an
+// absent id is a silent no-op (unlike SetPassword/UpdateService): admin callers
+// always delete rows they just listed, so a missing id means concurrent removal,
+// not a caller bug.
 func (s *Store) deleteCascade(ctx context.Context, stmts [][2]any) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

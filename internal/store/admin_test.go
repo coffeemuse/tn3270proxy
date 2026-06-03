@@ -167,7 +167,7 @@ func seedTriangle(t *testing.T, st *Store) (uid, gid, sid int64) {
 	return uid, gid, sid
 }
 
-func countRows(t *testing.T, st *Store, table, where string, arg int64) int {
+func countTableRows(t *testing.T, st *Store, table, where string, arg int64) int {
 	t.Helper()
 	var n int
 	if err := st.db.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM "+table+" WHERE "+where, arg).Scan(&n); err != nil {
@@ -186,11 +186,11 @@ func TestDeleteUserCascadesMemberships(t *testing.T) {
 	if _, err := st.GetUserByUsername(ctx, "alice"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("user still present: %v", err)
 	}
-	if n := countRows(t, st, "user_groups", "user_id = ?", uid); n != 0 {
+	if n := countTableRows(t, st, "user_groups", "user_id = ?", uid); n != 0 {
 		t.Errorf("memberships left = %d", n)
 	}
 	// the group survives
-	if n := countRows(t, st, "groups", "id = ?", gid); n != 1 {
+	if n := countTableRows(t, st, "groups", "id = ?", gid); n != 1 {
 		t.Errorf("group rows = %d, want 1", n)
 	}
 }
@@ -202,17 +202,17 @@ func TestDeleteGroupCascadesLinksAndMemberships(t *testing.T) {
 	if err := st.DeleteGroup(ctx, gid); err != nil {
 		t.Fatal(err)
 	}
-	if n := countRows(t, st, "user_groups", "group_id = ?", gid); n != 0 {
+	if n := countTableRows(t, st, "user_groups", "group_id = ?", gid); n != 0 {
 		t.Errorf("memberships left = %d", n)
 	}
-	if n := countRows(t, st, "group_services", "group_id = ?", gid); n != 0 {
+	if n := countTableRows(t, st, "group_services", "group_id = ?", gid); n != 0 {
 		t.Errorf("links left = %d", n)
 	}
 	// user and service survive
-	if n := countRows(t, st, "users", "id = ?", uid); n != 1 {
+	if n := countTableRows(t, st, "users", "id = ?", uid); n != 1 {
 		t.Errorf("user rows = %d", n)
 	}
-	if n := countRows(t, st, "services", "id = ?", sid); n != 1 {
+	if n := countTableRows(t, st, "services", "id = ?", sid); n != 1 {
 		t.Errorf("service rows = %d", n)
 	}
 }
@@ -220,17 +220,16 @@ func TestDeleteGroupCascadesLinksAndMemberships(t *testing.T) {
 func TestDeleteServiceCascadesLinks(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
-	_, gid, sid := seedTriangle(t, st)
+	_, _, sid := seedTriangle(t, st)
 	if err := st.DeleteService(ctx, sid); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.GetService(ctx, sid); !errors.Is(err, ErrNotFound) {
 		t.Errorf("service still present: %v", err)
 	}
-	if n := countRows(t, st, "group_services", "service_id = ?", sid); n != 0 {
+	if n := countTableRows(t, st, "group_services", "service_id = ?", sid); n != 0 {
 		t.Errorf("links left = %d", n)
 	}
-	_ = gid
 }
 
 func TestRemoveUserFromGroupAndUnlink(t *testing.T) {
@@ -240,13 +239,13 @@ func TestRemoveUserFromGroupAndUnlink(t *testing.T) {
 	if err := st.RemoveUserFromGroup(ctx, uid, gid); err != nil {
 		t.Fatal(err)
 	}
-	if n := countRows(t, st, "user_groups", "user_id = ?", uid); n != 0 {
+	if n := countTableRows(t, st, "user_groups", "user_id = ?", uid); n != 0 {
 		t.Errorf("membership left")
 	}
 	if err := st.UnlinkGroupService(ctx, gid, sid); err != nil {
 		t.Fatal(err)
 	}
-	if n := countRows(t, st, "group_services", "group_id = ?", gid); n != 0 {
+	if n := countTableRows(t, st, "group_services", "group_id = ?", gid); n != 0 {
 		t.Errorf("link left")
 	}
 	// removing again is a silent no-op (idempotent, mirrors Add/Link)
