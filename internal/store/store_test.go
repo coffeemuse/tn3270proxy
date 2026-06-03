@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 )
@@ -16,6 +17,49 @@ func newTestStore(t *testing.T) *Store {
 	}
 	t.Cleanup(func() { st.Close() })
 	return st
+}
+
+func TestMigrateAddsVerifyToLegacyDB(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy.db")
+
+	// Simulate a pre-tls_verify database: services table WITHOUT the column.
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = raw.Exec(`CREATE TABLE services (
+		id   INTEGER PRIMARY KEY,
+		name TEXT UNIQUE NOT NULL,
+		host TEXT NOT NULL,
+		port INTEGER NOT NULL,
+		tls  INTEGER NOT NULL DEFAULT 0
+	);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Open through the store: migrate() must ALTER in tls_verify (default 1).
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open legacy db: %v", err)
+	}
+	defer st.Close()
+
+	ops, _ := st.CreateGroup(ctx, "ops")
+	sid, _ := st.CreateService(ctx, "SEC", "sec.example", 992, true)
+	st.LinkGroupService(ctx, ops, sid)
+
+	svcs, err := st.ListServicesForGroups(ctx, []string{"ops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svcs) != 1 || !svcs[0].TLSVerify {
+		t.Fatalf("legacy migration: want TLSVerify true, got %+v", svcs)
+	}
 }
 
 func TestOpenCreatesTables(t *testing.T) {

@@ -42,6 +42,23 @@ func TestListServicesForGroups(t *testing.T) {
 	}
 }
 
+func TestServicesVerifyColumnDefaultsOn(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	ops, _ := st.CreateGroup(ctx, "ops")
+	sid, _ := st.CreateService(ctx, "SEC", "sec.example", 992, true)
+	st.LinkGroupService(ctx, ops, sid)
+
+	svcs, err := st.ListServicesForGroups(ctx, []string{"ops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svcs) != 1 || !svcs[0].TLSVerify {
+		t.Fatalf("want TLSVerify true by default, got %+v", svcs)
+	}
+}
+
 func TestListServicesForGroupsEmpty(t *testing.T) {
 	st := newTestStore(t)
 	svcs, err := st.ListServicesForGroups(context.Background(), nil)
