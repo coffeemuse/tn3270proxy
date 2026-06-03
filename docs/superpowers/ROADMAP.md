@@ -174,6 +174,11 @@ all small, all in the session/adminFlow/screens layer — no schema work.
    standard mainframe layering. Re-login re-evaluates groups (nice side effect: a demoted
    admin loses the `A` entry at logout, partially addressing the live-effect caveat).
 
+   **Decided (2026-06-03):** PF3 is uniformly "back to the previous level" across the whole
+   UI: admin sub-screen → admin menu → service menu → login screen → disconnect. PF3 from
+   the *admin menu* therefore goes to the service menu (unchanged from today); only the
+   service-menu and login-screen PF3 behaviors change.
+
 **Where it hooks in:** `internal/server/session.go` (Run loop), `internal/server/admin*.go`
 (exit-key handling, bail plumbing removal), `internal/server/presenter*.go` (exit keys),
 `internal/screens` (help-line texts, members screen via existing `AdminListScreen`).
