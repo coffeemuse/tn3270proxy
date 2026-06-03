@@ -79,6 +79,11 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   `(field.Row, field.Col + 1)` — a field's `Col` is the **attribute byte**, so input starts
   one column right. `(0,0)` or the field's own `Col` leaves the cursor in the wrong place.
   Unit tests do NOT catch this; only a real emulator does.
+- **Screen layout convention** (all screens are 0-based, 24 rows = 0..23): title on **row 0**,
+  the **error line just above** the action/help line, and the **PF-key help on the last row
+  (23)**. Cursor lands on the primary input field per the rule above. New screens (e.g. a
+  future admin UI) should follow this so the layout is consistent. Unit tests assert field
+  *names/content*, not row numbers — verify positioning in a real emulator.
 - **`go3270.NegotiateTelnet`** ends with a ~10ms read-drain loop that can discard early or
   fragmented client bytes (it runs before app data is expected). `HandleScreen` itself is
   safe (byte-by-byte, stops at IAC EOR). Watch for lost first keystrokes in emulator testing.

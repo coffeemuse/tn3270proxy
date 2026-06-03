@@ -46,7 +46,7 @@ func (go3270Presenter) Menu(conn net.Conn, svcs []store.Service, errMsg string) 
 			screen, nil, map[string]string{},
 			[]go3270.AID{go3270.AIDEnter},
 			[]go3270.AID{go3270.AIDPF3},
-			screens.FieldError, 20, 8, conn,
+			screens.FieldError, 19, 8, conn,
 		)
 		if err != nil {
 			return nil, false, err
