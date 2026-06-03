@@ -206,7 +206,78 @@ func (f *adminFlow) checkServiceNameFree(ctx context.Context, name string, exist
 	return ""
 }
 
-// serviceGroups is implemented in Task 15; temporary stub.
+// serviceGroups shows every group with an X access marker for svc; line
+// command A grants access, R revokes. No guardrails — revoking all access
+// only hides the service from menus.
 func (f *adminFlow) serviceGroups(ctx context.Context, conn net.Conn, svc store.Service) (bool, error) {
-	return false, nil
+	page, errMsg := 0, ""
+	for {
+		groups, err := f.store.ListGroups(ctx)
+		if err != nil {
+			errMsg = logStoreErr("list groups", err)
+			groups = nil
+		}
+		linked, err := f.store.ListGroupsForService(ctx, svc.ID)
+		if err != nil {
+			errMsg = logStoreErr("list service groups", err)
+		}
+		linkSet := make(map[int64]bool, len(linked))
+		for _, g := range linked {
+			linkSet[g.ID] = true
+		}
+		var start, end int
+		var rowInfo string
+		page, start, end, rowInfo = pageBounds(page, len(groups))
+		pageGroups := groups[start:end]
+		rows := make([]string, len(pageGroups))
+		for i, g := range pageGroups {
+			marker := ""
+			if linkSet[g.ID] {
+				marker = "X"
+			}
+			rows[i] = fmt.Sprintf("%-20s %s", g.Name, marker)
+		}
+		act, err := f.presenter.AdminList(conn, screens.AdminListView{
+			Title:   "TN3270 GATEWAY ADMIN: ACCESS TO " + svc.Name,
+			RowInfo: rowInfo,
+			Header:  "CMD  GROUP                ACCESS",
+			Rows:    rows,
+			Legend:  "A = grant access   R = revoke access",
+			ErrMsg:  errMsg,
+			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = back   PA3 = main menu",
+		})
+		if err != nil {
+			return false, err
+		}
+		errMsg = ""
+		switch {
+		case act.PA3:
+			return true, nil
+		case act.PF == 3:
+			return false, nil
+		case act.PF == 7:
+			page--
+		case act.PF == 8:
+			if end < len(groups) {
+				page++
+			}
+		case act.Cmd != 0:
+			if act.Row >= len(pageGroups) {
+				continue
+			}
+			g := pageGroups[act.Row]
+			switch act.Cmd {
+			case 'A':
+				if err := f.store.LinkGroupService(ctx, g.ID, svc.ID); err != nil {
+					errMsg = logStoreErr("grant access", err)
+				}
+			case 'R':
+				if err := f.store.UnlinkGroupService(ctx, g.ID, svc.ID); err != nil {
+					errMsg = logStoreErr("revoke access", err)
+				}
+			default:
+				errMsg = "INVALID COMMAND: " + string(act.Cmd)
+			}
+		}
+	}
 }

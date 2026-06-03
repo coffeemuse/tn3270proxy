@@ -631,3 +631,30 @@ func TestAdminServiceFormPreservesInputOnError(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminServiceGroupsToggle(t *testing.T) {
+	// Group rows sort ZZADMIN(0), ops(1). Grant ZZADMIN access to PROD, revoke ops.
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'G', Row: 0}, // services list: G on PROD
+			{Cmd: 'A', Row: 0}, // grant ZZADMIN
+			{Cmd: 'R', Row: 1}, // revoke ops
+			{PF: 3},            // back to services list
+			{PF: 3},            // back to admin menu
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	groups, _ := f.store.ListGroupsForService(ctx, ids["prod"])
+	if len(groups) != 1 || groups[0].Name != store.AdminGroup {
+		t.Errorf("PROD groups = %+v, want [%s]", groups, store.AdminGroup)
+	}
+	// access marker rendered: ops row carries X on the first toggle render
+	if rows := p.gotLists[1].Rows; len(rows) != 2 || !strings.Contains(rows[1], "X") {
+		t.Errorf("ops row should carry X marker: %q", rows)
+	}
+}
