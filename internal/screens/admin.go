@@ -68,6 +68,43 @@ func AdminListScreen(v AdminListView) go3270.Screen {
 	return screen
 }
 
+// AdminFormField is one labeled input on an admin form.
+type AdminFormField struct {
+	Name   string
+	Label  string
+	Value  string // pre-filled content (edit forms)
+	Hidden bool   // non-display (passwords)
+	Length int    // input length in columns
+}
+
+// AdminFormView is the view model for a labeled-input admin form screen.
+type AdminFormView struct {
+	Title  string
+	Fields []AdminFormField
+	ErrMsg string
+}
+
+// AdminFormScreen renders v. The first input is at row 3 col 16 (so the
+// caller's initial cursor is (3, 17)); inputs are two rows apart.
+func AdminFormScreen(v AdminFormView) go3270.Screen {
+	screen := go3270.Screen{
+		{Row: 0, Col: 2, Intense: true, Content: v.Title},
+	}
+	for i, f := range v.Fields {
+		row := 3 + 2*i
+		screen = append(screen,
+			go3270.Field{Row: row, Col: 2, Content: f.Label},
+			go3270.Field{Row: row, Col: 16, Name: f.Name, Write: true, Hidden: f.Hidden, Content: f.Value, Highlighting: go3270.Underscore},
+			go3270.Field{Row: row, Col: 17 + f.Length}, // stop field
+		)
+	}
+	screen = append(screen,
+		go3270.Field{Row: 21, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
+		go3270.Field{Row: 23, Col: 2, Content: "Enter = save    PF3 = cancel    PA3 = main menu"},
+	)
+	return screen
+}
+
 // AdminMenuScreen renders the top-level admin menu. The caller drives it with
 // HandleScreen: AIDEnter submits, PF3/PA3 exit (both return to the service
 // menu at this level).

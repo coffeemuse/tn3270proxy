@@ -96,3 +96,30 @@ func TestAdminListScreenTruncatesOverflow(t *testing.T) {
 		t.Errorf("overflow row should be truncated")
 	}
 }
+
+func TestAdminFormScreenFields(t *testing.T) {
+	v := AdminFormView{
+		Title: "TN3270 GATEWAY ADMIN: ADD USER",
+		Fields: []AdminFormField{
+			{Name: FieldUsername, Label: "Userid . . .", Value: "alice", Length: 16},
+			{Name: FieldPassword, Label: "Password . .", Hidden: true, Length: 16},
+		},
+		ErrMsg: "bad",
+	}
+	screen := AdminFormScreen(v)
+	u, ok := fieldByName(screen, FieldUsername)
+	if !ok || !u.Write || u.Content != "alice" || u.Hidden {
+		t.Errorf("username field = %+v, ok=%v", u, ok)
+	}
+	p, ok := fieldByName(screen, FieldPassword)
+	if !ok || !p.Write || !p.Hidden {
+		t.Errorf("password field = %+v, ok=%v", p, ok)
+	}
+	f, _ := fieldByName(screen, FieldError)
+	if f.Content != "bad" {
+		t.Errorf("error = %q", f.Content)
+	}
+	if !screenContains(screen, "PF3 = cancel") {
+		t.Errorf("missing cancel help")
+	}
+}
