@@ -9,10 +9,10 @@ existing code, design considerations, a suggested approach, and dependencies.
 implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
 
-**Progress:** Milestones **1, 2, 3, and 3.5 are complete** (3 merged to `main`; live smoke test
-passed 2026-06-03; 3.5 merged to `main`; live smoke test pending). Remaining
-order: **5 → 7 → 4 → 6** — audit logging first (still wanted before going public), larger
-terminals (7), protocol breadth, scale.
+**Progress:** Milestones **1, 2, 3, 3.5, and 7 are complete** (3 merged to `main`; live smoke
+test passed 2026-06-03; 3.5 merged to `main`; live smoke test pending; 7 merged to `main`;
+live smoke test pending). Remaining order: **5 → 4 → 6** — audit logging first (still
+wanted before going public), then protocol breadth, scale.
 **Next up: #5 (audit logging).**
 
 **Carried-over debt:** #2's manual live smoke test (real emulator + TLS TN3270 backend; see
@@ -277,7 +277,19 @@ endpoint selection/failover (schema + selection policy in the session) before tr
 
 ---
 
-## 7. Support larger terminal models (MOD 3 / MOD 4 / MOD 5)
+## 7. Support larger terminal models (MOD 3 / MOD 4 / MOD 5)  ✅ **DONE** *(merged; live smoke test pending)*
+
+> **Completed.** Spec: `docs/superpowers/specs/2026-06-03-larger-terminals-design.md`;
+> plan: `docs/superpowers/plans/2026-06-03-larger-terminals.md`. Delivered: `screens.Geometry`
+> (self-normalizing to 24×80; formula methods for the bottom-anchored rows, list page size,
+> form capacity, menu capacity), `server.Term` (negotiated type + alt dimensions + codepage,
+> threaded from `Negotiate` through both the `Presenter` and `AdminPresenter` seams),
+> `HandleScreenAlt` everywhere (nil dev = 24×80 fallback for sub-MOD 2/unknown sizes),
+> rows-only adaptation (content stays in columns 0–79 on MOD 5), explicit menu truncation
+> (admin `A` entry always gets its own row), and admin list paging that follows the
+> terminal's row count. Run the manual smoke checklist in the plan (Task 7 Step 6) in a
+> real emulator (`c3270 -model 3279-4` etc.), then drop the "smoke test pending"
+> qualifier. The historical notes below are retained for reference.
 
 **Goal:** Render the login and menu screens correctly on terminals larger than the 24×80
 default (MOD 2). The bottom-anchored elements (error line, PF-key help) must move to the
@@ -335,4 +347,4 @@ slotted after audit since it's UX polish rather than edge-hardening.
 | Admin via 3270 | ✅ done — `A` menu entry + adminFlow; see `internal/server/admin*.go` |
 | Audit | `Session.Run` sees Identity + service + bridge Cause; add an `Auditor` seam |
 | Pluggable identity source | `auth.UserStore` interface already abstracts the store (LDAP later = new impl) |
-| Larger terminals (MOD 3/4/5) | `go3270` `DevInfo.AltDimensions()` + `HandleScreenAlt`; screen builders need to take dimensions |
+| Larger terminals (MOD 3/4/5) | ✅ done — screens take Geometry; server.Term threads DevInfo+codepage; HandleScreenAlt |

@@ -48,6 +48,9 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
 internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,Username,Groups}.
                   bcrypt; uniform ErrInvalidCredentials (no username-enumeration leak).
 internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(svcs, errMsg).
+                  All builders take a Geometry (first param; self-normalizing to 24×80)
+                  with formula methods for the bottom-anchored rows (HelpRow, ErrorRow,
+                  etc.), list page size, form capacity, and menu capacity.
                   Field-name constants: FieldUsername/Password/Error/Selection.
                   Admin screen builders: AdminMenuScreen(), and generic AdminListScreen/
                   AdminFormScreen (paging, line commands, delete confirm).
@@ -62,6 +65,9 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   Presenter/Bridger/Authenticator seams; go3270Presenter + realBridger are
                   the real impls; Server is the TCP accept loop (recovers per-conn panics);
                   ServeAll runs one Server per listener sharing a handler.
+                  Term (negotiated terminal type + alt dimensions + codepage) is returned by
+                  Negotiate and threaded through the Presenter and AdminPresenter seams;
+                  rendering uses HandleScreenAlt (nil dev → 24×80 fallback).
                   adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go)
                   behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
 ```
@@ -103,9 +109,10 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   Unit tests do NOT catch this; only a real emulator does.
 - **Screen layout convention** (all screens are 0-based, 24 rows = 0..23): title on **row 0**,
   the **error line just above** the action/help line, and the **PF-key help on the last row
-  (23)**. Cursor lands on the primary input field per the rule above. New screens (e.g. a
-  future admin UI) should follow this so the layout is consistent. Unit tests assert field
-  *names/content*, not row numbers — verify positioning in a real emulator.
+  (`geom.HelpRow()`; 23 on a MOD 2)**. Cursor lands on the primary input field per the rule
+  above. New screens must take a `screens.Geometry` instead of hard-coding row numbers —
+  MOD 3/4/5 clients get taller layouts, content stays within columns 0–79. Unit tests assert
+  field *names/content*, not row numbers — verify positioning in a real emulator.
 - **`go3270.NegotiateTelnet`** ends with a ~10ms read-drain loop that can discard early or
   fragmented client bytes (it runs before app data is expected). `HandleScreen` itself is
   safe (byte-by-byte, stops at IAC EOR). Watch for lost first keystrokes in emulator testing.
