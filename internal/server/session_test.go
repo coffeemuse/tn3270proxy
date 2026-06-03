@@ -15,11 +15,13 @@ import (
 
 type fakePresenter struct {
 	termType     string
+	rows, cols   int // 0,0 → Negotiate reports 24×80
 	logins       []loginResult
 	menuPicks    []menuResult
 	menuErrors   []string
 	loginErrors  []string
 	gotAdminFlag []bool
+	gotTerms     []Term // every term passed to Login/Menu, in call order
 }
 
 type loginResult struct {
@@ -34,16 +36,24 @@ type menuResult struct {
 	err   error
 }
 
-func (f *fakePresenter) Negotiate(conn net.Conn) (string, error) { return f.termType, nil }
+func (f *fakePresenter) Negotiate(conn net.Conn) (Term, error) {
+	rows, cols := f.rows, f.cols
+	if rows == 0 {
+		rows, cols = 24, 80
+	}
+	return Term{Type: f.termType, Rows: rows, Cols: cols}, nil
+}
 
-func (f *fakePresenter) Login(conn net.Conn, errMsg string) (string, string, bool, error) {
+func (f *fakePresenter) Login(conn net.Conn, term Term, errMsg string) (string, string, bool, error) {
+	f.gotTerms = append(f.gotTerms, term)
 	f.loginErrors = append(f.loginErrors, errMsg)
 	r := f.logins[0]
 	f.logins = f.logins[1:]
 	return r.user, r.pass, r.quit, r.err
 }
 
-func (f *fakePresenter) Menu(conn net.Conn, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
+func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
+	f.gotTerms = append(f.gotTerms, term)
 	f.menuErrors = append(f.menuErrors, errMsg)
 	f.gotAdminFlag = append(f.gotAdminFlag, admin)
 	r := f.menuPicks[0]
@@ -351,5 +361,27 @@ func TestSessionReloginRecomputesAdmin(t *testing.T) {
 	s.Run(client)
 	if len(p.gotAdminFlag) != 2 || !p.gotAdminFlag[0] || p.gotAdminFlag[1] {
 		t.Errorf("admin flags = %v, want [true false]", p.gotAdminFlag)
+	}
+}
+
+func TestSessionThreadsTermToScreens(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-4",
+		rows:      43,
+		cols:      80,
+		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+	if len(p.gotTerms) == 0 {
+		t.Fatal("no terms captured")
+	}
+	for i, term := range p.gotTerms {
+		if term.Type != "IBM-3278-4" || term.Rows != 43 || term.Cols != 80 {
+			t.Errorf("call %d: term = %+v, want IBM-3278-4 43x80", i, term)
+		}
 	}
 }

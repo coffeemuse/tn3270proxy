@@ -16,11 +16,13 @@ import (
 )
 
 // Presenter renders the proxy's own 3270 screens to the client. The real
-// implementation (Task 14) wraps go3270; tests use a fake.
+// implementation wraps go3270; tests use a fake. The Term returned by
+// Negotiate must be passed back into every subsequent call so screens render
+// at the client's negotiated size and codepage.
 type Presenter interface {
-	Negotiate(conn net.Conn) (termType string, err error)
-	Login(conn net.Conn, errMsg string) (username, password string, quit bool, err error)
-	Menu(conn net.Conn, services []store.Service, admin bool, errMsg string) (selected *store.Service, adminSel bool, quit bool, err error)
+	Negotiate(conn net.Conn) (Term, error)
+	Login(conn net.Conn, term Term, errMsg string) (username, password string, quit bool, err error)
+	Menu(conn net.Conn, term Term, services []store.Service, admin bool, errMsg string) (selected *store.Service, adminSel bool, quit bool, err error)
 }
 
 // BackendTLS expresses a service's backend-TLS intent. The server layer keeps
@@ -57,7 +59,7 @@ type Session struct {
 func (s *Session) Run(conn net.Conn) {
 	ctx := context.Background()
 
-	termType, err := s.Presenter.Negotiate(conn)
+	term, err := s.Presenter.Negotiate(conn)
 	if err != nil {
 		log.Printf("telnet negotiation failed: %v", err)
 		return
@@ -68,7 +70,7 @@ func (s *Session) Run(conn net.Conn) {
 	// Re-login re-evaluates groups, so a demoted admin loses the A entry at
 	// logoff.
 	for {
-		identity, ok := s.doLogin(ctx, conn)
+		identity, ok := s.doLogin(ctx, conn, term)
 		if !ok {
 			return
 		}
@@ -83,7 +85,7 @@ func (s *Session) Run(conn net.Conn) {
 				services = nil
 				errMsg = "Temporary error retrieving services; try again"
 			}
-			selected, adminSel, quit, err := s.Presenter.Menu(conn, services, isAdmin, errMsg)
+			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, errMsg)
 			if err != nil {
 				return
 			}
@@ -105,7 +107,7 @@ func (s *Session) Run(conn net.Conn) {
 
 			addr := net.JoinHostPort(selected.Host, strconv.Itoa(selected.Port))
 			btls := BackendTLS{Enabled: selected.TLS, Verify: selected.TLSVerify}
-			cause, berr := s.Bridger.Bridge(conn, addr, termType, s.EscapeAID, btls)
+			cause, berr := s.Bridger.Bridge(conn, addr, term.Type, s.EscapeAID, btls)
 			switch cause {
 			case bridge.CauseClientClosed:
 				return
@@ -124,10 +126,10 @@ func (s *Session) Run(conn net.Conn) {
 
 // doLogin loops the login screen until success, or returns ok=false if the
 // user quits.
-func (s *Session) doLogin(ctx context.Context, conn net.Conn) (auth.Identity, bool) {
+func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term) (auth.Identity, bool) {
 	errMsg := ""
 	for {
-		user, pass, quit, err := s.Presenter.Login(conn, errMsg)
+		user, pass, quit, err := s.Presenter.Login(conn, term, errMsg)
 		if err != nil || quit {
 			return auth.Identity{}, false
 		}
