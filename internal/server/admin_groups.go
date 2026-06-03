@@ -45,7 +45,7 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 			RowInfo: rowInfo,
 			Header:  "CMD  GROUP                MEMBERS  SERVICES",
 			Rows:    rows,
-			Legend:  "D = delete   PF4 = add group",
+			Legend:  "M = members   D = delete   PF4 = add group",
 			ErrMsg:  errMsg,
 			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = admin menu",
 		})
@@ -87,6 +87,10 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 			}
 			g := pageGroups[act.Row]
 			switch act.Cmd {
+			case 'M':
+				if err := f.groupMembers(ctx, conn, g); err != nil {
+					return err
+				}
 			case 'D':
 				if isReservedGroup(g.Name) {
 					errMsg = "ZZ* GROUP NAMES ARE RESERVED"
@@ -94,6 +98,87 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 				}
 				pendingDelete = &g
 				errMsg = fmt.Sprintf("ENTER = CONFIRM DELETE OF '%s', PF3 = CANCEL", g.Name)
+			default:
+				errMsg = "INVALID COMMAND: " + string(act.Cmd)
+			}
+		}
+	}
+}
+
+// groupMembers shows every user with an X membership marker for g; line
+// command A adds the user to the group, R removes (guarded for the last
+// ZZADMIN member). Membership is manageable from either side: this is the
+// group-side mirror of userGroups.
+func (f *adminFlow) groupMembers(ctx context.Context, conn net.Conn, g store.Group) error {
+	page, errMsg := 0, ""
+	for {
+		users, err := f.store.ListUsers(ctx)
+		if err != nil {
+			errMsg = logStoreErr("list users", err)
+			users = nil
+		}
+		members, err := f.store.ListUsersInGroup(ctx, g.ID)
+		if err != nil {
+			errMsg = logStoreErr("list group members", err)
+		}
+		memberSet := make(map[int64]bool, len(members))
+		for _, m := range members {
+			memberSet[m.ID] = true
+		}
+		var start, end int
+		var rowInfo string
+		page, start, end, rowInfo = pageBounds(page, len(users))
+		pageUsers := users[start:end]
+		rows := make([]string, len(pageUsers))
+		for i, u := range pageUsers {
+			marker := ""
+			if memberSet[u.ID] {
+				marker = "X"
+			}
+			rows[i] = fmt.Sprintf("%-16s %s", u.Username, marker)
+		}
+		act, err := f.presenter.AdminList(conn, screens.AdminListView{
+			Title:   "TN3270 GATEWAY ADMIN: MEMBERS OF " + g.Name,
+			RowInfo: rowInfo,
+			Header:  "CMD  USERNAME         MEMBER",
+			Rows:    rows,
+			Legend:  "A = add to group   R = remove from group",
+			ErrMsg:  errMsg,
+			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = back",
+		})
+		if err != nil {
+			return err
+		}
+		errMsg = ""
+		switch {
+		case act.PF == 3:
+			return nil
+		case act.PF == 7:
+			page--
+		case act.PF == 8:
+			if end < len(users) {
+				page++
+			}
+		case act.Cmd != 0:
+			if act.Row >= len(pageUsers) {
+				continue
+			}
+			u := pageUsers[act.Row]
+			switch act.Cmd {
+			case 'A':
+				if err := f.store.AddUserToGroup(ctx, u.ID, g.ID); err != nil {
+					errMsg = logStoreErr("add membership", err)
+				}
+			case 'R':
+				if g.Name == store.AdminGroup && memberSet[u.ID] {
+					if msg := f.guardLastAdmin(ctx); msg != "" {
+						errMsg = msg
+						continue
+					}
+				}
+				if err := f.store.RemoveUserFromGroup(ctx, u.ID, g.ID); err != nil {
+					errMsg = logStoreErr("remove membership", err)
+				}
 			default:
 				errMsg = "INVALID COMMAND: " + string(act.Cmd)
 			}

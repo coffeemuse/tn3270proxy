@@ -27,6 +27,7 @@ type AdminStore interface {
 	DeleteGroup(ctx context.Context, groupID int64) error
 	CountGroupMembers(ctx context.Context, groupID int64) (int, error)
 	CountGroupServices(ctx context.Context, groupID int64) (int, error)
+	ListUsersInGroup(ctx context.Context, groupID int64) ([]store.User, error)
 
 	ListAllServices(ctx context.Context) ([]store.Service, error)
 	GetService(ctx context.Context, id int64) (store.Service, error)
