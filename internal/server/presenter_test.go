@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"testing"
 )
 
@@ -18,6 +19,9 @@ func TestBackendTLSConfig(t *testing.T) {
 	}
 	if on.ServerName != "cics.corp" {
 		t.Errorf("ServerName = %q, want host %q", on.ServerName, "cics.corp")
+	}
+	if on.MinVersion != tls.VersionTLS12 {
+		t.Errorf("MinVersion = %d, want TLS 1.2 (%d)", on.MinVersion, tls.VersionTLS12)
 	}
 
 	off := backendTLSConfig("10.0.0.5:992", BackendTLS{Enabled: true, Verify: false})

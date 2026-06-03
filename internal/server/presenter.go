@@ -78,6 +78,9 @@ func backendTLSConfig(addr string, btls BackendTLS) *tls.Config {
 	if !btls.Enabled {
 		return nil
 	}
+	// addr is always net.JoinHostPort output, so SplitHostPort cannot fail;
+	// the fallback sets an invalid ServerName that TLS will reject at
+	// handshake (loud failure, never a silent verification skip).
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		host = addr
