@@ -37,3 +37,6 @@ go.work.sum
 
 # Runtime SQLite databases
 *.db
+
+# Git worktrees
+.worktrees/
