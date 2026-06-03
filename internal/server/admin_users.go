@@ -23,6 +23,7 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) (bool, error) {
 		if err != nil {
 			errMsg = logStoreErr("list users", err)
 			users = nil
+			pendingDelete = nil // confirm lost; user must re-initiate D
 		}
 		var start, end int
 		var rowInfo string

@@ -304,3 +304,18 @@ func TestAdminUserListPaging(t *testing.T) {
 	}
 }
 
+func TestAdminDeleteUserOtherActionCancelsConfirm(t *testing.T) {
+	// D on alice, then PF8 (page): confirm silently cancelled, no delete.
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 8}, {PF: 3}},
+	}
+	f, _ := newAdminFixture(t, p)
+	if err := f.Run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GetUserByUsername(context.Background(), "alice"); err != nil {
+		t.Errorf("alice should survive a non-Enter action after D: %v", err)
+	}
+}
+
