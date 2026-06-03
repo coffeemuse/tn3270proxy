@@ -1,0 +1,90 @@
+package bridge
+
+import (
+	"net"
+	"time"
+)
+
+// Cause explains why a bridged session ended.
+type Cause int
+
+const (
+	CauseError         Cause = iota // dial or I/O error
+	CauseBackendClosed              // backend host closed the connection
+	CauseClientClosed               // end user disconnected
+	CauseUserEscaped                // user pressed the escape AID (PA3)
+)
+
+// dialTimeout bounds how long we wait to connect to a backend.
+const dialTimeout = 10 * time.Second
+
+// pastDeadline is any time in the past; setting it as a deadline forces a
+// blocked Read/Write to return immediately. We use a fixed constant so the
+// code has no dependency on the wall clock for teardown.
+var pastDeadline = time.Unix(1, 0)
+
+// Bridge dials the backend at addr, negotiates the client leg of Telnet
+// (offering termType), and relays the 3270 datastream between client and
+// backend until one side closes or the user presses escapeAID. The client
+// connection is NOT closed (the caller reuses it for the menu); its deadlines
+// are reset before returning.
+func Bridge(client net.Conn, addr, termType string, escapeAID byte) (Cause, error) {
+	backend, err := net.DialTimeout("tcp", addr, dialTimeout)
+	if err != nil {
+		return CauseError, err
+	}
+	defer backend.Close()
+
+	results := make(chan Cause, 2)
+
+	// backend → client: proxy answers Telnet as a client toward the backend.
+	go func() {
+		p := newProcessor(roleClient, termType, 0)
+		results <- relay(backend, client, p, CauseBackendClosed)
+	}()
+	// client → backend: proxy answers Telnet as a server; watches for escape.
+	go func() {
+		p := newProcessor(roleServer, "", escapeAID)
+		results <- relay(client, backend, p, CauseClientClosed)
+	}()
+
+	first := <-results
+	// Interrupt the still-running direction so its Read returns.
+	backend.SetDeadline(pastDeadline)
+	client.SetDeadline(pastDeadline)
+	<-results
+
+	// Reset client deadlines so the connection is reusable for the menu.
+	client.SetDeadline(time.Time{})
+	return first, nil
+}
+
+// relay reads from src, processes Telnet, writes negotiation replies back to
+// src and forwardable data to dst. It returns CauseUserEscaped if the processor
+// detects the escape AID, closeCause when src reaches EOF/closes, or
+// CauseError on a write failure.
+func relay(src, dst net.Conn, p *telnetProcessor, closeCause Cause) Cause {
+	buf := make([]byte, 4096)
+	for {
+		n, err := src.Read(buf)
+		if n > 0 {
+			fwd, reply, escaped := p.process(buf[:n])
+			if len(reply) > 0 {
+				if _, werr := src.Write(reply); werr != nil {
+					return CauseError
+				}
+			}
+			if len(fwd) > 0 {
+				if _, werr := dst.Write(fwd); werr != nil {
+					return CauseError
+				}
+			}
+			if escaped {
+				return CauseUserEscaped
+			}
+		}
+		if err != nil {
+			return closeCause
+		}
+	}
+}
