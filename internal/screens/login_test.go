@@ -56,7 +56,13 @@ func TestLoginScreenShowsError(t *testing.T) {
 }
 
 func TestLoginScreenBottomAnchored(t *testing.T) {
-	for _, g := range []Geometry{{Rows: 24, Cols: 80}, {Rows: 32, Cols: 80}, {Rows: 43, Cols: 80}, {Rows: 27, Cols: 132}} {
+	for _, g := range []Geometry{
+		{Rows: 24, Cols: 80},
+		{Rows: 32, Cols: 80},
+		{Rows: 43, Cols: 80},
+		{Rows: 27, Cols: 132},
+		{}, // zero value: must normalize to 24×80 (ErrorRow=21, HelpRow=23)
+	} {
 		screen, _ := LoginScreen(g, "err")
 		f, ok := fieldByName(screen, FieldError)
 		if !ok || f.Row != g.ErrorRow() {
