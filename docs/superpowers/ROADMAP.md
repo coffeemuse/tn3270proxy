@@ -9,8 +9,9 @@ existing code, design considerations, a suggested approach, and dependencies.
 implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
 
-Suggested order (rationale in each section): **1 → 2 → 5 → 3 → 4 → 6**, i.e. harden the
-public edge first (TLS in, then TLS out, then audit), then build admin tooling, then protocol
+Suggested order (rationale in each section): **1 → 2 → 5 → 7 → 3 → 4 → 6**, i.e. harden the
+public edge first (TLS in, then TLS out, then audit), make the screens adapt to larger
+terminals (7 — self-contained, improves the core UX), then build admin tooling, then protocol
 breadth, then scale.
 
 ---
@@ -189,6 +190,54 @@ endpoint selection/failover (schema + selection policy in the session) before tr
 
 ---
 
+## 7. Support larger terminal models (MOD 3 / MOD 4 / MOD 5)
+
+**Goal:** Render the login and menu screens correctly on terminals larger than the 24×80
+default (MOD 2). The bottom-anchored elements (error line, PF-key help) must move to the
+actual last rows, and the menu should use the extra rows to list more services.
+
+3270 model geometries (rows × cols): **MOD 2 = 24×80** (current hard-coded assumption),
+**MOD 3 = 32×80**, **MOD 4 = 43×80**, **MOD 5 = 27×132**. Today the screens place the error
+line at row 21 and the PF help at row 23 — correct only for a 24-row screen. On a MOD 3/4 the
+help line would float in the middle with empty rows below it.
+
+**Where it hooks in:**
+- `internal/screens/login.go` and `menu.go` hard-code row numbers (title 0; error 21; PF 23;
+  menu selection line 19; list rows 4..). These builders must take the screen **dimensions**
+  (at least row count) and compute bottom-anchored positions: PF help = `rows-1`, error =
+  `rows-3` (preserving the "error just above the help line" convention from `CLAUDE.md`),
+  selection line below the list, etc. The menu's list capacity grows with `rows`.
+- `internal/server/presenter.go`: `Negotiate` currently calls `go3270.NegotiateTelnet(conn)`
+  and **discards everything but `TerminalType()`**. go3270's `DevInfo` also exposes
+  `AltDimensions() (rows, cols int)` and there is a `go3270.HandleScreenAlt(..., dev DevInfo)`
+  variant for non-24×80 screens. Switch Login/Menu to `HandleScreenAlt` and feed the alternate
+  dimensions into the screen builders.
+- `internal/server/session.go`: the `Presenter` interface and the presenter's per-connection
+  state need the dimensions. Options: (a) have `Negotiate` return the `DevInfo` (or a small
+  `Dimensions` struct) and thread it through `Login`/`Menu`; or (b) make the presenter
+  per-connection stateful (hold `DevInfo`). (a) keeps the seam testable — prefer it. This
+  **changes the `Presenter` interface**, so update `fakePresenter` in `session_test.go`.
+
+**Design considerations:**
+- The cursor rule (`field.Row, field.Col+1`) and the layout convention (title row 0, error
+  just above help, help on last row) are unchanged — only the *last-row number* becomes dynamic.
+- Decide a sane fallback when dimensions are unknown/زero → default to 24×80 (MOD 2).
+- The bridge already echoes the negotiated terminal type to the backend, so the *bridged*
+  session geometry is handled; this item is only about the proxy's **own** screens.
+- MOD 5 also changes **columns** (132 wide) — decide whether to just widen/center or leave
+  column layout fixed at 80 for v1 (rows are the primary pain point the user flagged).
+- Tests: the screen builders become unit-testable for geometry (assert error/PF rows track the
+  passed row count); the actual rendering still needs an emulator that advertises MOD 3/4.
+
+**Suggested approach:** Parameterize the screen builders by dimensions, switch the presenter to
+`HandleScreenAlt` with the negotiated `DevInfo`, and add table tests over a couple of model
+sizes asserting bottom-anchored rows are computed correctly.
+
+**Dependencies:** self-contained (touches screens + presenter only); can be done any time, but
+slotted after audit since it's UX polish rather than edge-hardening.
+
+---
+
 ## Quick reference: what's already wired for the future
 
 | Future need | Existing hook |
@@ -199,3 +248,4 @@ endpoint selection/failover (schema + selection policy in the session) before tr
 | Admin via 3270 | group model + session machine; an "admin" group + admin menu branch |
 | Audit | `Session.Run` sees Identity + service + bridge Cause; add an `Auditor` seam |
 | Pluggable identity source | `auth.UserStore` interface already abstracts the store (LDAP later = new impl) |
+| Larger terminals (MOD 3/4/5) | `go3270` `DevInfo.AltDimensions()` + `HandleScreenAlt`; screen builders need to take dimensions |
