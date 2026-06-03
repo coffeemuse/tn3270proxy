@@ -23,7 +23,7 @@ func (go3270Presenter) Negotiate(conn net.Conn) (string, error) {
 }
 
 func (go3270Presenter) Login(conn net.Conn, errMsg string) (string, string, bool, error) {
-	screen, rules := screens.LoginScreen(errMsg)
+	screen, rules := screens.LoginScreen(screens.DefaultGeometry, errMsg)
 	resp, err := go3270.HandleScreen(
 		screen, rules, map[string]string{},
 		[]go3270.AID{go3270.AIDEnter},
