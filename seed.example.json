@@ -1,0 +1,10 @@
+{
+  "groups": ["ops", "dev"],
+  "users": [
+    { "username": "alice", "password": "changeme", "groups": ["ops"] },
+    { "username": "bob",   "password": "changeme", "groups": ["dev"] }
+  ],
+  "services": [
+    { "name": "PUB TSO", "host": "localhost", "port": 3270, "groups": ["ops"] }
+  ]
+}
