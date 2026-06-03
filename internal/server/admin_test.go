@@ -456,3 +456,33 @@ func TestAdminGroupDeleteCascades(t *testing.T) {
 	}
 }
 
+func TestAdminGroupDeleteOtherActionCancelsConfirm(t *testing.T) {
+	// D on ops, then PF8 (page): confirm silently cancelled, no delete.
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {PF: 8}, {PF: 3}},
+	}
+	f, _ := newAdminFixture(t, p)
+	if err := f.Run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if groups, _ := f.store.ListGroups(context.Background()); len(groups) != 2 {
+		t.Errorf("ops should survive a non-Enter action after D: %+v", groups)
+	}
+}
+
+func TestAdminGroupDeleteCancel(t *testing.T) {
+	// D on ops, then PF3: confirm cancelled, stays on list, no delete.
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {PF: 3}, {PF: 3}},
+	}
+	f, _ := newAdminFixture(t, p)
+	if err := f.Run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if groups, _ := f.store.ListGroups(context.Background()); len(groups) != 2 {
+		t.Errorf("ops should survive PF3 cancel: %+v", groups)
+	}
+}
+
