@@ -23,6 +23,9 @@ const (
 // aidPA3 is the 3270 AID byte for the PA3 key — the gateway's escape key.
 const aidPA3 = 0x6B
 
+// EscapeAIDPA3 is the exported escape AID (PA3) for callers wiring the server.
+const EscapeAIDPA3 = aidPA3
+
 // role identifies which side of a connection a processor models.
 type role int
 
