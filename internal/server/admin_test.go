@@ -305,7 +305,7 @@ func TestAdminUserListPaging(t *testing.T) {
 		f.store.CreateUser(ctx, fmt.Sprintf("user%02d", i), "h")
 	}
 	f.Run(ctx, nil)
-	ps := screens.DefaultGeometry.ListPageSize() // 14
+	ps := f.term.Geometry().ListPageSize() // 14 for the fixture's 24×80 term
 	wants := []string{
 		fmt.Sprintf("ROW 1 TO %d OF 22", ps),
 		fmt.Sprintf("ROW %d TO 22 OF 22", ps+1),

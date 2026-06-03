@@ -86,10 +86,10 @@ func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 // row indicator. The page size follows the client terminal's row count.
 // Clamping matters after deletions shrink the list.
 func (f *adminFlow) pageBounds(page, total int) (clamped, start, end int, info string) {
-	size := f.term.Geometry().ListPageSize()
 	if total == 0 {
 		return 0, 0, 0, "ROW 0 OF 0"
 	}
+	size := f.term.Geometry().ListPageSize()
 	maxPage := (total - 1) / size
 	if page > maxPage {
 		page = maxPage
