@@ -23,27 +23,29 @@ type AdminFormAction struct {
 }
 
 // AdminPresenter renders the admin screens. The real implementation wraps
-// go3270; adminFlow tests use a fake.
+// go3270; adminFlow tests use a fake. term carries the client's negotiated
+// screen size (and codepage) from Presenter.Negotiate.
 type AdminPresenter interface {
 	// AdminMenu returns choice 1/2/3 (users/groups/services) or back (PF3,
 	// to the service menu). It loops internally on invalid input.
-	AdminMenu(conn net.Conn, errMsg string) (choice int, back bool, err error)
-	AdminList(conn net.Conn, v screens.AdminListView) (AdminListAction, error)
-	AdminForm(conn net.Conn, v screens.AdminFormView) (AdminFormAction, error)
+	AdminMenu(conn net.Conn, term Term, errMsg string) (choice int, back bool, err error)
+	AdminList(conn net.Conn, term Term, v screens.AdminListView) (AdminListAction, error)
+	AdminForm(conn net.Conn, term Term, v screens.AdminFormView) (AdminFormAction, error)
 }
 
 var adminListExitKeys = []go3270.AID{
 	go3270.AIDPF3, go3270.AIDPF4, go3270.AIDPF7, go3270.AIDPF8,
 }
 
-func (go3270Presenter) AdminMenu(conn net.Conn, errMsg string) (int, bool, error) {
+func (go3270Presenter) AdminMenu(conn net.Conn, term Term, errMsg string) (int, bool, error) {
+	geom := term.Geometry()
 	for {
-		screen := screens.AdminMenuScreen(errMsg)
-		resp, err := go3270.HandleScreen(
+		screen := screens.AdminMenuScreen(geom, errMsg)
+		resp, err := go3270.HandleScreenAlt(
 			screen, nil, map[string]string{},
 			[]go3270.AID{go3270.AIDEnter},
 			[]go3270.AID{go3270.AIDPF3},
-			screens.FieldError, 19, 8, conn,
+			screens.FieldError, geom.InputRow(), 8, conn, term.dev, term.codepage(),
 		)
 		if err != nil {
 			return 0, false, err
@@ -63,19 +65,19 @@ func (go3270Presenter) AdminMenu(conn net.Conn, errMsg string) (int, bool, error
 	}
 }
 
-func (go3270Presenter) AdminList(conn net.Conn, v screens.AdminListView) (AdminListAction, error) {
-	screen := screens.AdminListScreen(v)
+func (go3270Presenter) AdminList(conn net.Conn, term Term, v screens.AdminListView) (AdminListAction, error) {
+	screen := screens.AdminListScreen(term.Geometry(), v)
 	// cursor on the first CMD field (attribute col 2 → input col 3); no input
 	// fields exist on an empty list, so home the cursor there.
 	crow, ccol := 4, 3
 	if len(v.Rows) == 0 {
 		crow, ccol = 0, 0
 	}
-	resp, err := go3270.HandleScreen(
+	resp, err := go3270.HandleScreenAlt(
 		screen, nil, map[string]string{},
 		[]go3270.AID{go3270.AIDEnter},
 		adminListExitKeys,
-		screens.FieldError, crow, ccol, conn,
+		screens.FieldError, crow, ccol, conn, term.dev, term.codepage(),
 	)
 	if err != nil {
 		return AdminListAction{}, err
@@ -83,13 +85,13 @@ func (go3270Presenter) AdminList(conn net.Conn, v screens.AdminListView) (AdminL
 	return listActionFromResponse(resp, len(v.Rows)), nil
 }
 
-func (go3270Presenter) AdminForm(conn net.Conn, v screens.AdminFormView) (AdminFormAction, error) {
-	screen := screens.AdminFormScreen(v)
-	resp, err := go3270.HandleScreen(
+func (go3270Presenter) AdminForm(conn net.Conn, term Term, v screens.AdminFormView) (AdminFormAction, error) {
+	screen := screens.AdminFormScreen(term.Geometry(), v)
+	resp, err := go3270.HandleScreenAlt(
 		screen, nil, map[string]string{},
 		[]go3270.AID{go3270.AIDEnter},
 		[]go3270.AID{go3270.AIDPF3},
-		screens.FieldError, 3, 17, conn,
+		screens.FieldError, 3, 17, conn, term.dev, term.codepage(),
 	)
 	if err != nil {
 		return AdminFormAction{}, err

@@ -14,21 +14,22 @@ import (
 // go3270Presenter renders screens using the go3270 library over a raw conn.
 type go3270Presenter struct{}
 
-func (go3270Presenter) Negotiate(conn net.Conn) (string, error) {
+func (go3270Presenter) Negotiate(conn net.Conn) (Term, error) {
 	dev, err := go3270.NegotiateTelnet(conn)
 	if err != nil {
-		return "", err
+		return Term{}, err
 	}
-	return dev.TerminalType(), nil
+	rows, cols := dev.AltDimensions()
+	return normalizeTerm(Term{Type: dev.TerminalType(), Rows: rows, Cols: cols, dev: dev}), nil
 }
 
-func (go3270Presenter) Login(conn net.Conn, errMsg string) (string, string, bool, error) {
-	screen, rules := screens.LoginScreen(errMsg)
-	resp, err := go3270.HandleScreen(
+func (go3270Presenter) Login(conn net.Conn, term Term, errMsg string) (string, string, bool, error) {
+	screen, rules := screens.LoginScreen(term.Geometry(), errMsg)
+	resp, err := go3270.HandleScreenAlt(
 		screen, rules, map[string]string{},
 		[]go3270.AID{go3270.AIDEnter},
 		[]go3270.AID{go3270.AIDPF3},
-		screens.FieldError, 3, 17, conn,
+		screens.FieldError, 3, 17, conn, term.dev, term.codepage(),
 	)
 	if err != nil {
 		return "", "", false, err
@@ -40,14 +41,15 @@ func (go3270Presenter) Login(conn net.Conn, errMsg string) (string, string, bool
 		resp.Values[screens.FieldPassword], false, nil
 }
 
-func (go3270Presenter) Menu(conn net.Conn, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
+func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
+	geom := term.Geometry()
 	for {
-		screen, mapping := screens.MenuScreen(svcs, admin, errMsg)
-		resp, err := go3270.HandleScreen(
+		screen, mapping := screens.MenuScreen(geom, svcs, admin, errMsg)
+		resp, err := go3270.HandleScreenAlt(
 			screen, nil, map[string]string{},
 			[]go3270.AID{go3270.AIDEnter},
 			[]go3270.AID{go3270.AIDPF3},
-			screens.FieldError, 19, 8, conn,
+			screens.FieldError, geom.InputRow(), 8, conn, term.dev, term.codepage(),
 		)
 		if err != nil {
 			return nil, false, false, err

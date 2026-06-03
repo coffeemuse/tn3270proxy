@@ -18,14 +18,6 @@ const (
 	FieldVerify    = "verify" // service form inputs
 )
 
-// AdminListPageSize is how many data rows fit on an admin list screen
-// (rows 4..17 of the fixed 24x80 layout).
-const AdminListPageSize = 14
-
-// AdminFormMaxFields is how many labeled inputs fit above the error line
-// (rows 3, 5, ..., 19 of the fixed 24x80 layout).
-const AdminFormMaxFields = 9
-
 // AdminListView is the view model for an ISPF-style admin list screen: one
 // 1-character CMD input per data row plus bottom-anchored legend, error, and
 // help lines. The flow layer composes these for users/groups/services.
@@ -39,19 +31,19 @@ type AdminListView struct {
 	PFHelp  string   // bottom help line
 }
 
-// AdminListScreen renders v. Data rows start at row 4; the CMD input for row i
-// is named FieldCmdPrefix+i ("cmd0", "cmd1", ...). At most AdminListPageSize
-// rows fit; rows beyond AdminListPageSize are truncated — callers paginate via
-// AdminListPageSize.
-func AdminListScreen(v AdminListView) go3270.Screen {
+// AdminListScreen renders v sized for geom. Data rows start at row 4; the CMD
+// input for row i is named FieldCmdPrefix+i ("cmd0", "cmd1", ...). At most
+// geom.ListPageSize() rows fit; rows beyond that are truncated — callers
+// paginate via the same method.
+func AdminListScreen(geom Geometry, v AdminListView) go3270.Screen {
 	screen := go3270.Screen{
 		{Row: 0, Col: 2, Intense: true, Content: v.Title},
 		{Row: 0, Col: 60, Content: v.RowInfo},
 		{Row: 2, Col: 2, Content: v.Header},
 	}
 	rows := v.Rows
-	if len(rows) > AdminListPageSize {
-		rows = rows[:AdminListPageSize]
+	if size := geom.ListPageSize(); len(rows) > size {
+		rows = rows[:size]
 	}
 	for i, r := range rows {
 		row := 4 + i
@@ -65,9 +57,9 @@ func AdminListScreen(v AdminListView) go3270.Screen {
 		screen = append(screen, go3270.Field{Row: 4, Col: 7, Content: "(none)"})
 	}
 	screen = append(screen,
-		go3270.Field{Row: 20, Col: 2, Content: v.Legend},
-		go3270.Field{Row: 21, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: 23, Col: 2, Content: v.PFHelp},
+		go3270.Field{Row: geom.LegendRow(), Col: 2, Content: v.Legend},
+		go3270.Field{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
+		go3270.Field{Row: geom.HelpRow(), Col: 2, Content: v.PFHelp},
 	)
 	return screen
 }
@@ -88,16 +80,16 @@ type AdminFormView struct {
 	ErrMsg string
 }
 
-// AdminFormScreen renders v. The first input is at row 3 col 16 (so the
-// caller's initial cursor is (3, 17)); inputs are two rows apart. Fields
-// beyond AdminFormMaxFields are truncated.
-func AdminFormScreen(v AdminFormView) go3270.Screen {
+// AdminFormScreen renders v sized for geom. The first input is at row 3
+// col 16 (so the caller's initial cursor is (3, 17)); inputs are two rows
+// apart. Fields beyond geom.FormMaxFields() are truncated.
+func AdminFormScreen(geom Geometry, v AdminFormView) go3270.Screen {
 	screen := go3270.Screen{
 		{Row: 0, Col: 2, Intense: true, Content: v.Title},
 	}
 	fields := v.Fields
-	if len(fields) > AdminFormMaxFields {
-		fields = fields[:AdminFormMaxFields]
+	if max := geom.FormMaxFields(); len(fields) > max {
+		fields = fields[:max]
 	}
 	for i, f := range fields {
 		row := 3 + 2*i
@@ -112,24 +104,25 @@ func AdminFormScreen(v AdminFormView) go3270.Screen {
 		)
 	}
 	screen = append(screen,
-		go3270.Field{Row: 21, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: 23, Col: 2, Content: "Enter = save    PF3 = cancel"},
+		go3270.Field{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
+		go3270.Field{Row: geom.HelpRow(), Col: 2, Content: "Enter = save    PF3 = cancel"},
 	)
 	return screen
 }
 
-// AdminMenuScreen renders the top-level admin menu. The caller drives it with
-// HandleScreen: AIDEnter submits, PF3 returns to the service menu.
-func AdminMenuScreen(errMsg string) go3270.Screen {
+// AdminMenuScreen renders the top-level admin menu sized for geom. The caller
+// drives it with HandleScreenAlt: AIDEnter submits, PF3 returns to the
+// service menu.
+func AdminMenuScreen(geom Geometry, errMsg string) go3270.Screen {
 	return go3270.Screen{
 		{Row: 0, Col: 27, Intense: true, Content: "TN3270 GATEWAY ADMIN"},
 		{Row: 3, Col: 4, Content: "1.  Users"},
 		{Row: 4, Col: 4, Content: "2.  Groups"},
 		{Row: 5, Col: 4, Content: "3.  Services"},
-		{Row: 19, Col: 2, Content: "===>"},
-		{Row: 19, Col: 7, Name: FieldOption, Write: true, Highlighting: go3270.Underscore},
-		{Row: 19, Col: 11}, // stop field
-		{Row: 21, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		{Row: 23, Col: 2, Content: "Enter = select    PF3 = main menu"},
+		{Row: geom.InputRow(), Col: 2, Content: "===>"},
+		{Row: geom.InputRow(), Col: 7, Name: FieldOption, Write: true, Highlighting: go3270.Underscore},
+		{Row: geom.InputRow(), Col: 11}, // stop field
+		{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
+		{Row: geom.HelpRow(), Col: 2, Content: "Enter = select    PF3 = main menu"},
 	}
 }

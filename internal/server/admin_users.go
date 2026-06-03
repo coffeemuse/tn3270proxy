@@ -26,7 +26,7 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) error {
 		}
 		var start, end int
 		var rowInfo string
-		page, start, end, rowInfo = pageBounds(page, len(users))
+		page, start, end, rowInfo = f.pageBounds(page, len(users))
 		pageUsers := users[start:end]
 		rows := make([]string, len(pageUsers))
 		for i, u := range pageUsers {
@@ -36,7 +36,7 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) error {
 			}
 			rows[i] = fmt.Sprintf("%-16s %s", u.Username, strings.Join(groups, ","))
 		}
-		act, err := f.presenter.AdminList(conn, screens.AdminListView{
+		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
 			Title:   "TN3270 GATEWAY ADMIN: USERS",
 			RowInfo: rowInfo,
 			Header:  "CMD  USERNAME         GROUPS",
@@ -160,7 +160,7 @@ func passwordFromForm(values map[string]string) (string, string) {
 func (f *adminFlow) userAdd(ctx context.Context, conn net.Conn) error {
 	username, errMsg := "", ""
 	for {
-		act, err := f.presenter.AdminForm(conn, screens.AdminFormView{
+		act, err := f.presenter.AdminForm(conn, f.term, screens.AdminFormView{
 			Title: "TN3270 GATEWAY ADMIN: ADD USER",
 			Fields: []screens.AdminFormField{
 				{Name: screens.FieldUsername, Label: "Userid . . .", Value: username, Length: 32},
@@ -209,7 +209,7 @@ func (f *adminFlow) userAdd(ctx context.Context, conn net.Conn) error {
 func (f *adminFlow) setPassword(ctx context.Context, conn net.Conn, u store.User) error {
 	errMsg := ""
 	for {
-		act, err := f.presenter.AdminForm(conn, screens.AdminFormView{
+		act, err := f.presenter.AdminForm(conn, f.term, screens.AdminFormView{
 			Title: "TN3270 GATEWAY ADMIN: SET PASSWORD FOR " + u.Username,
 			Fields: []screens.AdminFormField{
 				{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
@@ -261,7 +261,7 @@ func (f *adminFlow) userGroups(ctx context.Context, conn net.Conn, u store.User)
 		}
 		var start, end int
 		var rowInfo string
-		page, start, end, rowInfo = pageBounds(page, len(groups))
+		page, start, end, rowInfo = f.pageBounds(page, len(groups))
 		pageGroups := groups[start:end]
 		rows := make([]string, len(pageGroups))
 		for i, g := range pageGroups {
@@ -271,7 +271,7 @@ func (f *adminFlow) userGroups(ctx context.Context, conn net.Conn, u store.User)
 			}
 			rows[i] = fmt.Sprintf("%-20s %s", g.Name, marker)
 		}
-		act, err := f.presenter.AdminList(conn, screens.AdminListView{
+		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
 			Title:   "TN3270 GATEWAY ADMIN: GROUPS FOR " + u.Username,
 			RowInfo: rowInfo,
 			Header:  "CMD  GROUP                MEMBER",
