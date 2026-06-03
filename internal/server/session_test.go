@@ -265,3 +265,22 @@ func TestSessionAdminSelectionRunsFlowAndReturnsToMenu(t *testing.T) {
 		t.Errorf("expected return to menu after admin flow; %d picks left", len(p.menuPicks))
 	}
 }
+
+func TestSessionNonAdminAdminSelIgnored(t *testing.T) {
+	// Even if a (buggy) presenter reports adminSel=true for a non-admin,
+	// the session's isAdmin double-guard must not run the admin flow.
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "alice", pass: "good"}}, // ops, not ZZADMIN
+		menuPicks: []menuResult{{admin: true}, {quit: true}},
+	}
+	ap := &fakeAdminPresenter{} // no scripted steps: any call would panic
+	s := newTestSession(t, p, &fakeBridger{})
+	s.AdminPresenter = ap
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+	if len(ap.gotMenuErrs) != 0 {
+		t.Errorf("admin flow ran for non-admin user")
+	}
+}
