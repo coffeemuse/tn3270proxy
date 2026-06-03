@@ -18,15 +18,15 @@ const (
 // errorField = FieldError.
 func LoginScreen(errMsg string) (go3270.Screen, go3270.Rules) {
 	screen := go3270.Screen{
-		{Row: 1, Col: 27, Intense: true, Content: "TN3270 GATEWAY LOGIN"},
-		{Row: 4, Col: 2, Content: "Userid . . ."},
-		{Row: 4, Col: 16, Name: FieldUsername, Write: true, Highlighting: go3270.Underscore},
-		{Row: 4, Col: 33}, // stop field: closes the username input
-		{Row: 6, Col: 2, Content: "Password . ."},
-		{Row: 6, Col: 16, Name: FieldPassword, Write: true, Hidden: true, Highlighting: go3270.Underscore},
-		{Row: 6, Col: 33}, // stop field
-		{Row: 22, Col: 2, Content: "Enter = sign on    PF3 = disconnect"},
-		{Row: 23, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
+		{Row: 0, Col: 27, Intense: true, Content: "TN3270 GATEWAY LOGIN"},
+		{Row: 3, Col: 2, Content: "Userid . . ."},
+		{Row: 3, Col: 16, Name: FieldUsername, Write: true, Highlighting: go3270.Underscore},
+		{Row: 3, Col: 33}, // stop field: closes the username input
+		{Row: 5, Col: 2, Content: "Password . ."},
+		{Row: 5, Col: 16, Name: FieldPassword, Write: true, Hidden: true, Highlighting: go3270.Underscore},
+		{Row: 5, Col: 33}, // stop field
+		{Row: 21, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
+		{Row: 23, Col: 2, Content: "Enter = sign on    PF3 = disconnect"},
 	}
 	rules := go3270.Rules{
 		FieldUsername: {Validator: go3270.NonBlank, ErrorText: "Userid is required"},
