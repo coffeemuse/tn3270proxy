@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"math/big"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -97,8 +98,8 @@ func TestBridgeNegotiatesAndRelays(t *testing.T) {
 	// The fake backend should learn our terminal type via negotiation.
 	select {
 	case tt := <-fb.termType:
-		if tt[:12] != "IBM-3278-2-E" {
-			t.Errorf("backend got termtype %q", tt[:12])
+		if !strings.HasPrefix(tt, "IBM-3278-2-E") {
+			t.Errorf("backend got termtype %q", tt)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("backend never received terminal type")
@@ -223,8 +224,8 @@ func TestBridgeTLSBackendVerified(t *testing.T) {
 
 	select {
 	case tt := <-fb.termType:
-		if tt[:12] != "IBM-3278-2-E" {
-			t.Errorf("backend got termtype %q", tt[:12])
+		if !strings.HasPrefix(tt, "IBM-3278-2-E") {
+			t.Errorf("backend got termtype %q", tt)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("backend never received terminal type over TLS")
