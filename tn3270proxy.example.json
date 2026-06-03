@@ -1,0 +1,12 @@
+{
+  "db": "tn3270proxy.db",
+  "listeners": {
+    "plain": { "enabled": true, "addr": ":2323" },
+    "tls": {
+      "enabled": false,
+      "addr": ":3270",
+      "cert": "server.crt",
+      "key": "server.key"
+    }
+  }
+}

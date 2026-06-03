@@ -38,5 +38,11 @@ go.work.sum
 # Runtime SQLite databases
 *.db
 
+# Local TLS certs/keys (self-signed for testing) and runtime config
+*.crt
+*.key
+*.pem
+tn3270proxy.json
+
 # Git worktrees
 .worktrees/

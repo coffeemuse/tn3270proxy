@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
 	"github.com/CoffeeMuse/tn3270proxy/internal/config"
+	"github.com/CoffeeMuse/tn3270proxy/internal/listen"
 	"github.com/CoffeeMuse/tn3270proxy/internal/seed"
 	"github.com/CoffeeMuse/tn3270proxy/internal/server"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -43,17 +43,20 @@ func runServe(args []string) error {
 	}
 	defer st.Close()
 
-	ln, err := net.Listen("tcp", cfg.ListenAddr)
+	listeners, err := listen.Build(cfg)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("tn3270proxy listening on %s (db=%s)\n", cfg.ListenAddr, cfg.DBPath)
 
-	srv := &server.Server{
-		Listener: ln,
-		Handler:  server.NewSessionHandler(st, bridge.EscapeAIDPA3),
+	if cfg.Plain.Enabled {
+		fmt.Printf("tn3270proxy listening (plain) on %s (db=%s)\n", cfg.Plain.Addr, cfg.DBPath)
 	}
-	return srv.Serve()
+	if cfg.TLS.Enabled {
+		fmt.Printf("tn3270proxy listening (tls) on %s (db=%s)\n", cfg.TLS.Addr, cfg.DBPath)
+	}
+
+	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3)
+	return server.ServeAll(listeners, handler)
 }
 
 func runSeed(args []string) error {

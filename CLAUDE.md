@@ -36,7 +36,9 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 
 ```
 cmd/tn3270proxy   main: subcommands `serve` (default) and `seed`; wires everything
-internal/config   Config{ListenAddr, DBPath}; Load(args)
+internal/config   Config{DBPath, Plain, TLS}; Load(args) merges defaults<file<flags.
+                  Optional JSON file (tn3270proxy.json) defines plain+tls listeners.
+internal/listen   Build(cfg) → []net.Listener (plaintext + tls.NewListener, immediate TLS).
 internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + group-gated
                   ListServicesForGroups. All Create* are idempotent (INSERT OR IGNORE).
 internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,Username,Groups}.
@@ -51,7 +53,8 @@ internal/bridge   The bespoke core. telnetProcessor parses one Telnet leg (forwa
 internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative, idempotent seeding.
 internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop) behind
                   Presenter/Bridger/Authenticator seams; go3270Presenter + realBridger are
-                  the real impls; Server is the TCP accept loop (recovers per-conn panics).
+                  the real impls; Server is the TCP accept loop (recovers per-conn panics);
+                  ServeAll runs one Server per listener sharing a handler.
 ```
 
 Data flow: `main → Server.Serve` (accept) → `Session.Run` → `Presenter` (go3270 screens) /
