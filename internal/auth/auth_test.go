@@ -18,11 +18,11 @@ func seedUser(t *testing.T) (*store.Store, string) {
 	}
 	t.Cleanup(func() { st.Close() })
 	ctx := context.Background()
-	hash, err := bcrypt.GenerateFromPassword([]byte("s3cret"), bcrypt.DefaultCost)
+	hash, err := HashPassword("s3cret")
 	if err != nil {
 		t.Fatal(err)
 	}
-	uid, err := st.CreateUser(ctx, "alice", string(hash))
+	uid, err := st.CreateUser(ctx, "alice", hash)
 	if err != nil {
 		t.Fatal(err)
 	}
