@@ -26,6 +26,17 @@ type UserStore interface {
 	GetUserGroups(ctx context.Context, userID int64) ([]string, error)
 }
 
+// HashPassword bcrypt-hashes a plaintext password for storage. It is the
+// single hashing path: seed and the admin UI both use it, so cost/algorithm
+// changes happen in one place.
+func HashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
 // Authenticate verifies the username/password against the store and returns
 // the user's Identity (including group memberships) on success.
 func Authenticate(ctx context.Context, st UserStore, username, password string) (Identity, error) {

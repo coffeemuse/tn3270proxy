@@ -57,3 +57,16 @@ func TestAuthenticateUnknownUserSameError(t *testing.T) {
 		t.Errorf("err = %v, want ErrInvalidCredentials (no user-existence leak)", err)
 	}
 }
+
+func TestHashPasswordRoundTrip(t *testing.T) {
+	hash, err := HashPassword("s3cret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash == "" || hash == "s3cret" {
+		t.Fatalf("hash = %q", hash)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte("s3cret")); err != nil {
+		t.Errorf("hash does not verify: %v", err)
+	}
+}
