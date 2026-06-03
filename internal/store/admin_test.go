@@ -42,3 +42,74 @@ func TestSessionUsesAdminGroupConstant(t *testing.T) {
 		t.Fatalf("CreateGroup(%s) = %d, %v", AdminGroup, gid, err)
 	}
 }
+
+func TestListUsersOrdered(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	st.CreateUser(ctx, "zoe", "h1")
+	st.CreateUser(ctx, "abe", "h2")
+	users, err := st.ListUsers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 2 || users[0].Username != "abe" || users[1].Username != "zoe" {
+		t.Fatalf("users = %+v", users)
+	}
+}
+
+func TestListGroupsOrderedIncludesAdmin(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	st.CreateGroup(ctx, "ops")
+	groups, err := st.ListGroups(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ORDER BY name is binary: uppercase sorts before lowercase, so
+	// ZZADMIN (auto-created by migrate) comes before ops.
+	if len(groups) != 2 || groups[0].Name != AdminGroup || groups[1].Name != "ops" {
+		t.Fatalf("groups = %+v", groups)
+	}
+	if groups[0].ID == 0 {
+		t.Errorf("group ID not populated")
+	}
+}
+
+func TestListAllServicesAndGetService(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	id, _ := st.CreateService(ctx, "PROD", "h1", 23, true, false)
+	st.CreateService(ctx, "DEV", "h2", 992, false, true)
+	svcs, err := st.ListAllServices(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svcs) != 2 || svcs[0].Name != "DEV" || svcs[1].Name != "PROD" {
+		t.Fatalf("services = %+v", svcs)
+	}
+	if !svcs[1].TLS || svcs[1].TLSVerify {
+		t.Errorf("PROD TLS flags = %v/%v, want true/false", svcs[1].TLS, svcs[1].TLSVerify)
+	}
+	got, err := st.GetService(ctx, id)
+	if err != nil || got.Name != "PROD" || got.Host != "h1" || got.Port != 23 {
+		t.Fatalf("GetService = %+v, %v", got, err)
+	}
+	if _, err := st.GetService(ctx, 99999); err != ErrNotFound {
+		t.Errorf("missing service err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestListGroupsForService(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	gid, _ := st.CreateGroup(ctx, "ops")
+	sid, _ := st.CreateService(ctx, "PROD", "h", 23, false, true)
+	st.LinkGroupService(ctx, gid, sid)
+	groups, err := st.ListGroupsForService(ctx, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 || groups[0].Name != "ops" || groups[0].ID != gid {
+		t.Fatalf("groups = %+v", groups)
+	}
+}
