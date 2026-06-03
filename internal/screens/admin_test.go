@@ -18,10 +18,13 @@ func screenContains(s go3270.Screen, sub string) bool {
 
 func TestAdminMenuScreenFields(t *testing.T) {
 	screen := AdminMenuScreen("boom")
-	if _, ok := fieldByName(screen, FieldOption); !ok {
+	f, ok := fieldByName(screen, FieldOption)
+	if !ok {
 		t.Errorf("missing %q field", FieldOption)
+	} else if !f.Write {
+		t.Errorf("FieldOption must be writable")
 	}
-	f, ok := fieldByName(screen, FieldError)
+	f, ok = fieldByName(screen, FieldError)
 	if !ok || f.Content != "boom" {
 		t.Errorf("error field = %+v, ok=%v", f, ok)
 	}

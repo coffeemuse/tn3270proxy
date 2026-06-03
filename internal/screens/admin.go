@@ -10,10 +10,10 @@ const (
 	FieldCmdPrefix = "cmd"    // per-row line-command inputs: cmd0, cmd1, ...
 	FieldRetype    = "retype" // password confirmation input
 	FieldName      = "name"   // entity name input (group/service forms)
-	FieldHost      = "host"
-	FieldPort      = "port"
-	FieldTLS       = "tls"
-	FieldVerify    = "verify"
+	FieldHost      = "host"   // service form inputs
+	FieldPort      = "port"   // service form inputs
+	FieldTLS       = "tls"    // service form inputs
+	FieldVerify    = "verify" // service form inputs
 )
 
 // AdminListPageSize is how many data rows fit on an admin list screen
