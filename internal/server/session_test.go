@@ -178,8 +178,8 @@ func TestSessionBackendErrorShownOnMenu(t *testing.T) {
 	defer client.Close()
 	s.Run(client)
 
-	if len(p.menuErrors) < 2 || p.menuErrors[1] == "" {
-		t.Errorf("expected error message on menu after backend failure; got %v", p.menuErrors)
+	if len(p.menuErrors) < 2 || p.menuErrors[1] != "Could not connect to PROD" {
+		t.Errorf("expected connect-failure message on menu after backend failure; got %v", p.menuErrors)
 	}
 }
 
