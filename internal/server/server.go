@@ -1,8 +1,10 @@
 package server
 
 import (
+	"errors"
 	"log"
 	"net"
+	"sync"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -62,4 +64,34 @@ func (h sessionHandler) Handle(conn net.Conn) {
 // NewSessionHandler returns a connHandler that runs a full proxy session.
 func NewSessionHandler(st *store.Store, escapeAID byte) connHandler {
 	return sessionHandler{store: st, escapeAID: escapeAID}
+}
+
+// ServeAll runs one accept loop per listener, all sharing handler. The first
+// listener error closes the remaining listeners (unblocking their Accept) and
+// is returned, so a single transport failure brings the process down cleanly
+// rather than silently losing a listener.
+func ServeAll(listeners []net.Listener, handler connHandler) error {
+	if len(listeners) == 0 {
+		return errors.New("server: no listeners")
+	}
+	errc := make(chan error, len(listeners))
+	var once sync.Once
+	closeAll := func() {
+		for _, ln := range listeners {
+			ln.Close()
+		}
+	}
+	for _, ln := range listeners {
+		srv := &Server{Listener: ln, Handler: handler}
+		go func() {
+			err := srv.Serve()
+			once.Do(closeAll)
+			errc <- err
+		}()
+	}
+	first := <-errc
+	for i := 1; i < len(listeners); i++ {
+		<-errc
+	}
+	return first
 }
