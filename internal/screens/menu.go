@@ -47,7 +47,7 @@ func MenuScreen(services []store.Service, admin bool, errMsg string) (go3270.Scr
 		go3270.Field{Row: 19, Col: 7, Name: FieldSelection, Write: true, NumericOnly: !admin, Highlighting: go3270.Underscore},
 		go3270.Field{Row: 19, Col: 15}, // stop field
 		go3270.Field{Row: 21, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		go3270.Field{Row: 23, Col: 2, Content: "Enter = connect    PF3 = disconnect    (PA3 returns here from a session)"},
+		go3270.Field{Row: 23, Col: 2, Content: "Enter = connect    PF3 = logoff    (PA3 returns here from a session)"},
 	)
 	return screen, mapping
 }

@@ -106,6 +106,7 @@ func TestSessionLoginRetryThenQuit(t *testing.T) {
 		logins: []loginResult{
 			{user: "alice", pass: "bad"},
 			{user: "alice", pass: "good"},
+			{quit: true}, // second login render after menu logoff
 		},
 		menuPicks: []menuResult{{quit: true}},
 	}
@@ -137,8 +138,11 @@ func TestSessionLoginRetryThenQuit(t *testing.T) {
 
 func TestSessionEscapeReturnsToMenu(t *testing.T) {
 	p := &fakePresenter{
-		termType:  "IBM-3278-2-E",
-		logins:    []loginResult{{user: "alice", pass: "good"}},
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true}, // second login render after menu logoff
+		},
 		menuPicks: []menuResult{
 			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
 			{quit: true},
@@ -161,8 +165,11 @@ func TestSessionEscapeReturnsToMenu(t *testing.T) {
 
 func TestSessionBackendErrorShownOnMenu(t *testing.T) {
 	p := &fakePresenter{
-		termType:  "IBM-3278-2-E",
-		logins:    []loginResult{{user: "alice", pass: "good"}},
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true}, // second login render after menu logoff
+		},
 		menuPicks: []menuResult{
 			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
 			{quit: true},
@@ -186,7 +193,10 @@ func TestSessionBackendErrorShownOnMenu(t *testing.T) {
 func TestSessionPassesTLSIntentToBridger(t *testing.T) {
 	p := &fakePresenter{
 		termType: "IBM-3278-2-E",
-		logins:   []loginResult{{user: "alice", pass: "good"}},
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true}, // second login render after menu logoff
+		},
 		menuPicks: []menuResult{
 			{sel: &store.Service{Name: "SEC", Host: "10.0.0.9", Port: 992, TLS: true, TLSVerify: true}},
 			{quit: true},
@@ -229,8 +239,11 @@ func TestSessionClientClosedEndsSession(t *testing.T) {
 
 func TestSessionAdminFlagFollowsGroup(t *testing.T) {
 	p := &fakePresenter{
-		termType:  "IBM-3278-2-E",
-		logins:    []loginResult{{user: "alice", pass: "good"}}, // groups: ops
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"}, // groups: ops
+			{quit: true},                  // second login render after menu logoff
+		},
 		menuPicks: []menuResult{{quit: true}},
 	}
 	s := newTestSession(t, p, &fakeBridger{})
@@ -245,8 +258,11 @@ func TestSessionAdminFlagFollowsGroup(t *testing.T) {
 
 func TestSessionAdminSelectionRunsFlowAndReturnsToMenu(t *testing.T) {
 	p := &fakePresenter{
-		termType:  "IBM-3278-2-E",
-		logins:    []loginResult{{user: "root", pass: "good"}}, // groups: ZZADMIN
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "root", pass: "good"}, // groups: ZZADMIN
+			{quit: true},                 // second login render after menu logoff
+		},
 		menuPicks: []menuResult{{admin: true}, {quit: true}},
 	}
 	ap := &fakeAdminPresenter{menu: []adminMenuStep{{back: true}}}
@@ -270,8 +286,11 @@ func TestSessionNonAdminAdminSelIgnored(t *testing.T) {
 	// Even if a (buggy) presenter reports adminSel=true for a non-admin,
 	// the session's isAdmin double-guard must not run the admin flow.
 	p := &fakePresenter{
-		termType:  "IBM-3278-2-E",
-		logins:    []loginResult{{user: "alice", pass: "good"}}, // ops, not ZZADMIN
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"}, // ops, not ZZADMIN
+			{quit: true},                  // second login render after menu logoff
+		},
 		menuPicks: []menuResult{{admin: true}, {quit: true}},
 	}
 	ap := &fakeAdminPresenter{} // no scripted steps: any call would panic
@@ -282,5 +301,55 @@ func TestSessionNonAdminAdminSelIgnored(t *testing.T) {
 	s.Run(client)
 	if len(ap.gotMenuErrs) != 0 {
 		t.Errorf("admin flow ran for non-admin user")
+	}
+}
+
+func TestSessionMenuQuitLogsOffToLogin(t *testing.T) {
+	// PF3 at the menu logs off (back to login); PF3 at login disconnects.
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true}, // second login render: user disconnects
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	b := &fakeBridger{}
+	s := newTestSession(t, p, b)
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(p.logins) != 0 {
+		t.Errorf("menu quit should re-render login; %d logins left", len(p.logins))
+	}
+	// both login renders are pristine (no logoff notice — spec decision)
+	if len(p.loginErrors) != 2 || p.loginErrors[0] != "" || p.loginErrors[1] != "" {
+		t.Errorf("login renders = %q, want two empty messages", p.loginErrors)
+	}
+	if b.calls != 0 {
+		t.Errorf("bridge calls = %d, want 0", b.calls)
+	}
+}
+
+func TestSessionReloginRecomputesAdmin(t *testing.T) {
+	// root (ZZADMIN) logs off; alice (ops) logs in: the A entry must vanish.
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "root", pass: "good"},
+			{user: "alice", pass: "good"},
+			{quit: true},
+		},
+		menuPicks: []menuResult{{quit: true}, {quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.AdminPresenter = &fakeAdminPresenter{}
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+	if len(p.gotAdminFlag) != 2 || !p.gotAdminFlag[0] || p.gotAdminFlag[1] {
+		t.Errorf("admin flags = %v, want [true false]", p.gotAdminFlag)
 	}
 }

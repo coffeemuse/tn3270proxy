@@ -15,7 +15,6 @@ func TestListActionFromResponse(t *testing.T) {
 		nRows  int
 		want   AdminListAction
 	}{
-		{"pa3", go3270.AIDPA3, nil, 2, AdminListAction{PA3: true}},
 		{"pf3", go3270.AIDPF3, nil, 2, AdminListAction{PF: 3}},
 		{"pf4", go3270.AIDPF4, nil, 2, AdminListAction{PF: 4}},
 		{"pf7", go3270.AIDPF7, nil, 2, AdminListAction{PF: 7}},
@@ -40,10 +39,6 @@ func TestFormActionFromResponse(t *testing.T) {
 	got := formActionFromResponse(go3270.Response{AID: go3270.AIDPF3}, fields)
 	if !got.Cancel {
 		t.Errorf("PF3 should cancel: %+v", got)
-	}
-	got = formActionFromResponse(go3270.Response{AID: go3270.AIDPA3}, fields)
-	if !got.PA3 {
-		t.Errorf("PA3 should bail: %+v", got)
 	}
 	got = formActionFromResponse(go3270.Response{
 		AID:    go3270.AIDEnter,

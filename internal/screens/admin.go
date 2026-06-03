@@ -113,14 +113,13 @@ func AdminFormScreen(v AdminFormView) go3270.Screen {
 	}
 	screen = append(screen,
 		go3270.Field{Row: 21, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: 23, Col: 2, Content: "Enter = save    PF3 = cancel    PA3 = main menu"},
+		go3270.Field{Row: 23, Col: 2, Content: "Enter = save    PF3 = cancel"},
 	)
 	return screen
 }
 
 // AdminMenuScreen renders the top-level admin menu. The caller drives it with
-// HandleScreen: AIDEnter submits, PF3/PA3 exit (both return to the service
-// menu at this level).
+// HandleScreen: AIDEnter submits, PF3 returns to the service menu.
 func AdminMenuScreen(errMsg string) go3270.Screen {
 	return go3270.Screen{
 		{Row: 0, Col: 27, Intense: true, Content: "TN3270 GATEWAY ADMIN"},
@@ -131,6 +130,6 @@ func AdminMenuScreen(errMsg string) go3270.Screen {
 		{Row: 19, Col: 7, Name: FieldOption, Write: true, Highlighting: go3270.Underscore},
 		{Row: 19, Col: 11}, // stop field
 		{Row: 21, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		{Row: 23, Col: 2, Content: "Enter = select    PF3 / PA3 = main menu"},
+		{Row: 23, Col: 2, Content: "Enter = select    PF3 = main menu"},
 	}
 }

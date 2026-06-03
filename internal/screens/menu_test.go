@@ -86,3 +86,10 @@ func TestMenuScreenAdminEntryClampedWithManyServices(t *testing.T) {
 		}
 	}
 }
+
+func TestMenuScreenHelpSaysLogoff(t *testing.T) {
+	screen, _ := MenuScreen(nil, false, "")
+	if !screenContains(screen, "PF3 = logoff") {
+		t.Errorf("menu help should say PF3 = logoff")
+	}
+}

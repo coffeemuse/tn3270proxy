@@ -16,8 +16,8 @@ import (
 // --- fakes ---
 
 type adminMenuStep struct {
-	choice     int
-	back, exit bool
+	choice int
+	back   bool
 }
 
 // fakeAdminPresenter pops scripted results and captures every view it is asked
@@ -32,14 +32,14 @@ type fakeAdminPresenter struct {
 	gotForms    []screens.AdminFormView
 }
 
-func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, errMsg string) (int, bool, bool, error) {
+func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, errMsg string) (int, bool, error) {
 	f.gotMenuErrs = append(f.gotMenuErrs, errMsg)
 	if len(f.menu) == 0 {
 		panic("unexpected AdminMenu call")
 	}
 	s := f.menu[0]
 	f.menu = f.menu[1:]
-	return s.choice, s.back, s.exit, nil
+	return s.choice, s.back, nil
 }
 
 func (f *fakeAdminPresenter) AdminList(_ net.Conn, v screens.AdminListView) (AdminListAction, error) {
@@ -103,14 +103,9 @@ func lastList(t *testing.T, p *fakeAdminPresenter) screens.AdminListView {
 
 // --- tests ---
 
-func TestAdminFlowMenuBackAndExit(t *testing.T) {
+func TestAdminFlowMenuBack(t *testing.T) {
 	p := &fakeAdminPresenter{menu: []adminMenuStep{{back: true}}}
 	f, _ := newAdminFixture(t, p)
-	if err := f.Run(context.Background(), nil); err != nil {
-		t.Fatal(err)
-	}
-	p = &fakeAdminPresenter{menu: []adminMenuStep{{exit: true}}}
-	f, _ = newAdminFixture(t, p)
 	if err := f.Run(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -656,5 +651,62 @@ func TestAdminServiceGroupsToggle(t *testing.T) {
 	// access marker rendered: ops row carries X on the first toggle render
 	if rows := p.gotLists[1].Rows; len(rows) != 2 || !strings.Contains(rows[1], "X") {
 		t.Errorf("ops row should carry X marker: %q", rows)
+	}
+}
+
+func TestAdminGroupMembersToggle(t *testing.T) {
+	// Group rows sort ZZADMIN(0), ops(1); user rows sort alice(0), root(1).
+	// M on ops, add root, remove alice.
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'M', Row: 1}, // groups list: M on ops
+			{Cmd: 'A', Row: 1}, // add root
+			{Cmd: 'R', Row: 0}, // remove alice
+			{PF: 3},            // back to groups list
+			{PF: 3},            // back to admin menu
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	members, _ := f.store.ListUsersInGroup(ctx, ids["ops"])
+	if len(members) != 1 || members[0].Username != "root" {
+		t.Errorf("ops members = %+v, want [root]", members)
+	}
+	// groups list advertises the new command
+	if legend := p.gotLists[0].Legend; !strings.Contains(legend, "M = members") {
+		t.Errorf("groups legend = %q", legend)
+	}
+	// first members render: alice carries the X marker, root does not
+	if rows := p.gotLists[1].Rows; len(rows) != 2 ||
+		!strings.Contains(rows[0], "X") || strings.Contains(rows[1], "X") {
+		t.Errorf("member markers wrong: %q", rows)
+	}
+	if title := p.gotLists[1].Title; !strings.Contains(title, "MEMBERS OF ops") {
+		t.Errorf("title = %q", title)
+	}
+}
+
+func TestAdminGroupMembersLastAdminGuard(t *testing.T) {
+	// root is ZZADMIN's only member; R from the members side must be blocked.
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'M', Row: 0}, // groups list: M on ZZADMIN
+			{Cmd: 'R', Row: 1}, // user rows alice(0), root(1): remove root — blocked
+			{PF: 3}, {PF: 3},
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	f.Run(ctx, nil)
+	if msg := p.gotLists[2].ErrMsg; !strings.Contains(msg, "CANNOT REMOVE LAST") {
+		t.Errorf("errMsg = %q", msg)
+	}
+	if members, _ := f.store.ListUsersInGroup(ctx, ids["zzadmin"]); len(members) != 1 {
+		t.Errorf("ZZADMIN members = %+v, want just root", members)
 	}
 }
