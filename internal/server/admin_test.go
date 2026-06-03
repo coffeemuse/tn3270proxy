@@ -582,3 +582,52 @@ func TestAdminServiceDeleteCascades(t *testing.T) {
 		t.Errorf("PROD should be deleted: %v", err)
 	}
 }
+
+func TestAdminServiceDeleteCancel(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 3}, {PF: 3}},
+	}
+	f, ids := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if _, err := f.store.GetService(context.Background(), ids["prod"]); err != nil {
+		t.Errorf("PROD should survive PF3 cancel: %v", err)
+	}
+}
+
+func TestAdminServiceDeleteOtherActionCancelsConfirm(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 8}, {PF: 3}},
+	}
+	f, ids := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if _, err := f.store.GetService(context.Background(), ids["prod"]); err != nil {
+		t.Errorf("PROD should survive a non-Enter action after D: %v", err)
+	}
+}
+
+func TestAdminServiceFormPreservesInputOnError(t *testing.T) {
+	// Bad port: every other typed value must come back pre-filled.
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{
+			{Values: map[string]string{screens.FieldName: "DEV", screens.FieldHost: "dev.example",
+				screens.FieldPort: "junk", screens.FieldTLS: "y", screens.FieldVerify: "n"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	last := p.gotForms[len(p.gotForms)-1]
+	if last.ErrMsg != "PORT MUST BE 1-65535" {
+		t.Errorf("errMsg = %q", last.ErrMsg)
+	}
+	wants := []string{"DEV", "dev.example", "junk", "Y", "N"} // Y/N canonicalized upper
+	for i, want := range wants {
+		if last.Fields[i].Value != want {
+			t.Errorf("field %d preserved = %q, want %q", i, last.Fields[i].Value, want)
+		}
+	}
+}
