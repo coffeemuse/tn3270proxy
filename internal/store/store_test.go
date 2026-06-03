@@ -19,6 +19,20 @@ func newTestStore(t *testing.T) *Store {
 	return st
 }
 
+func TestMigrateIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "idem.db")
+	st1, err := Open(path)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	st1.Close()
+	st2, err := Open(path)
+	if err != nil {
+		t.Fatalf("second Open (re-migrate) failed: %v", err)
+	}
+	st2.Close()
+}
+
 func TestMigrateAddsVerifyToLegacyDB(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "legacy.db")

@@ -78,6 +78,7 @@ func TestApplyVerifyDefaultsOnWhenOmitted(t *testing.T) {
 	defer st.Close()
 
 	verifyOff := false
+	verifyOn := true
 	data := SeedData{
 		Groups: []string{"ops"},
 		Services: []SeedService{
@@ -85,6 +86,7 @@ func TestApplyVerifyDefaultsOnWhenOmitted(t *testing.T) {
 			{Name: "DEFON", Host: "a", Port: 992, TLS: true, Groups: []string{"ops"}},
 			// Verify explicitly false → must stay OFF.
 			{Name: "OFF", Host: "b", Port: 992, TLS: true, Verify: &verifyOff, Groups: []string{"ops"}},
+			{Name: "ON", Host: "c", Port: 992, TLS: true, Verify: &verifyOn, Groups: []string{"ops"}},
 		},
 	}
 	if err := Apply(ctx, st, data); err != nil {
@@ -104,5 +106,8 @@ func TestApplyVerifyDefaultsOnWhenOmitted(t *testing.T) {
 	}
 	if byName["OFF"].TLSVerify {
 		t.Errorf("explicit verify=false should stay OFF, got %+v", byName["OFF"])
+	}
+	if !byName["ON"].TLSVerify {
+		t.Errorf("explicit verify=true should stay ON, got %+v", byName["ON"])
 	}
 }
