@@ -63,51 +63,61 @@ func (s *Session) Run(conn net.Conn) {
 		return
 	}
 
-	identity, ok := s.doLogin(ctx, conn)
-	if !ok {
-		return
-	}
-
-	isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
-	errMsg := ""
+	// Each outer iteration is one login → menu lifetime: PF3 at the menu logs
+	// off (back to the login screen); PF3 at the login screen disconnects.
+	// Re-login re-evaluates groups, so a demoted admin loses the A entry at
+	// logoff.
 	for {
-		services, err := s.Store.ListServicesForGroups(ctx, identity.Groups)
-		if err != nil {
-			log.Printf("listing services for user %s failed: %v", identity.Username, err)
-			services = nil
-			errMsg = "Temporary error retrieving services; try again"
-		}
-		selected, adminSel, quit, err := s.Presenter.Menu(conn, services, isAdmin, errMsg)
-		if err != nil || quit {
+		identity, ok := s.doLogin(ctx, conn)
+		if !ok {
 			return
 		}
-		errMsg = ""
-		if adminSel && isAdmin {
-			flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter, identity: identity}
-			if aerr := flow.Run(ctx, conn); aerr != nil {
-				log.Printf("admin flow for %s ended: %v", identity.Username, aerr)
+
+		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
+		errMsg := ""
+	menu:
+		for {
+			services, err := s.Store.ListServicesForGroups(ctx, identity.Groups)
+			if err != nil {
+				log.Printf("listing services for user %s failed: %v", identity.Username, err)
+				services = nil
+				errMsg = "Temporary error retrieving services; try again"
+			}
+			selected, adminSel, quit, err := s.Presenter.Menu(conn, services, isAdmin, errMsg)
+			if err != nil {
 				return
 			}
-			continue // re-render the menu: fresh service list shows admin edits
-		}
-		if selected == nil {
-			continue
-		}
-
-		addr := net.JoinHostPort(selected.Host, strconv.Itoa(selected.Port))
-		btls := BackendTLS{Enabled: selected.TLS, Verify: selected.TLSVerify}
-		cause, berr := s.Bridger.Bridge(conn, addr, termType, s.EscapeAID, btls)
-		switch cause {
-		case bridge.CauseClientClosed:
-			return
-		case bridge.CauseError:
-			log.Printf("bridge error to %s (%s): %v", selected.Name, addr, berr)
-			errMsg = "Could not connect to " + selected.Name
-			if berr == nil {
-				errMsg = "Session error on " + selected.Name
+			if quit {
+				break menu // logoff: back to the login screen
 			}
-		default:
-			// CauseBackendClosed or CauseUserEscaped → back to the menu.
+			errMsg = ""
+			if adminSel && isAdmin {
+				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter, identity: identity}
+				if aerr := flow.Run(ctx, conn); aerr != nil {
+					log.Printf("admin flow for %s ended: %v", identity.Username, aerr)
+					return
+				}
+				continue // re-render the menu: fresh service list shows admin edits
+			}
+			if selected == nil {
+				continue
+			}
+
+			addr := net.JoinHostPort(selected.Host, strconv.Itoa(selected.Port))
+			btls := BackendTLS{Enabled: selected.TLS, Verify: selected.TLSVerify}
+			cause, berr := s.Bridger.Bridge(conn, addr, termType, s.EscapeAID, btls)
+			switch cause {
+			case bridge.CauseClientClosed:
+				return
+			case bridge.CauseError:
+				log.Printf("bridge error to %s (%s): %v", selected.Name, addr, berr)
+				errMsg = "Could not connect to " + selected.Name
+				if berr == nil {
+					errMsg = "Session error on " + selected.Name
+				}
+			default:
+				// CauseBackendClosed or CauseUserEscaped → back to the menu.
+			}
 		}
 	}
 }
