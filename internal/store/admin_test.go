@@ -268,3 +268,27 @@ func TestGroupCounts(t *testing.T) {
 		t.Errorf("missing group members = %d, %v; want 0", n, err)
 	}
 }
+
+func TestListUsersInGroup(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	uid, gid, _ := seedTriangle(t, st) // alice in ops
+	zoe, _ := st.CreateUser(ctx, "zoe", "h")
+	st.CreateUser(ctx, "bob", "h") // NOT in ops — must not appear
+	st.AddUserToGroup(ctx, zoe, gid)
+
+	users, err := st.ListUsersInGroup(ctx, gid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 2 || users[0].Username != "alice" || users[1].Username != "zoe" {
+		t.Fatalf("users = %+v, want [alice zoe] (ordered by username)", users)
+	}
+	if users[0].ID != uid {
+		t.Errorf("alice ID = %d, want %d", users[0].ID, uid)
+	}
+	// missing/empty group → empty result, no error
+	if empty, err := st.ListUsersInGroup(ctx, 99999); err != nil || len(empty) != 0 {
+		t.Errorf("missing group = %+v, %v; want empty, nil", empty, err)
+	}
+}

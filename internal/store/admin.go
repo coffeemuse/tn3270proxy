@@ -20,8 +20,20 @@ type Group struct {
 
 // ListUsers returns all users ordered by username.
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := s.db.QueryContext(ctx,
+	return s.queryUsers(ctx,
 		"SELECT id, username, password_hash FROM users ORDER BY username")
+}
+
+// ListUsersInGroup returns the group's members ordered by username.
+func (s *Store) ListUsersInGroup(ctx context.Context, groupID int64) ([]User, error) {
+	return s.queryUsers(ctx,
+		`SELECT u.id, u.username, u.password_hash FROM users u
+		 JOIN user_groups ug ON ug.user_id = u.id
+		 WHERE ug.group_id = ? ORDER BY u.username`, groupID)
+}
+
+func (s *Store) queryUsers(ctx context.Context, query string, args ...any) ([]User, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
