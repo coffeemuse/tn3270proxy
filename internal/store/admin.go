@@ -143,3 +143,74 @@ func (s *Store) execExpectingRow(ctx context.Context, query string, args ...any)
 	}
 	return nil
 }
+
+// DeleteUser removes the user and its group memberships in one transaction.
+func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
+	return s.deleteCascade(ctx, [][2]any{
+		{"DELETE FROM user_groups WHERE user_id = ?", userID},
+		{"DELETE FROM users WHERE id = ?", userID},
+	})
+}
+
+// DeleteGroup removes the group, its memberships, and its service links in one
+// transaction. Callers enforce the ZZ* reservation; the store stays mechanical.
+func (s *Store) DeleteGroup(ctx context.Context, groupID int64) error {
+	return s.deleteCascade(ctx, [][2]any{
+		{"DELETE FROM user_groups WHERE group_id = ?", groupID},
+		{"DELETE FROM group_services WHERE group_id = ?", groupID},
+		{"DELETE FROM groups WHERE id = ?", groupID},
+	})
+}
+
+// DeleteService removes the service and its group links in one transaction.
+func (s *Store) DeleteService(ctx context.Context, serviceID int64) error {
+	return s.deleteCascade(ctx, [][2]any{
+		{"DELETE FROM group_services WHERE service_id = ?", serviceID},
+		{"DELETE FROM services WHERE id = ?", serviceID},
+	})
+}
+
+func (s *Store) deleteCascade(ctx context.Context, stmts [][2]any) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, st := range stmts {
+		if _, err := tx.ExecContext(ctx, st[0].(string), st[1]); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// RemoveUserFromGroup removes a membership (no-op if absent, mirroring
+// AddUserToGroup's idempotency).
+func (s *Store) RemoveUserFromGroup(ctx context.Context, userID, groupID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM user_groups WHERE user_id = ? AND group_id = ?", userID, groupID)
+	return err
+}
+
+// UnlinkGroupService revokes a group's access to a service (no-op if absent).
+func (s *Store) UnlinkGroupService(ctx context.Context, groupID, serviceID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		"DELETE FROM group_services WHERE group_id = ? AND service_id = ?", groupID, serviceID)
+	return err
+}
+
+// CountGroupMembers returns how many users belong to the group.
+func (s *Store) CountGroupMembers(ctx context.Context, groupID int64) (int, error) {
+	return s.countRows(ctx, "SELECT COUNT(*) FROM user_groups WHERE group_id = ?", groupID)
+}
+
+// CountGroupServices returns how many services the group can access.
+func (s *Store) CountGroupServices(ctx context.Context, groupID int64) (int, error) {
+	return s.countRows(ctx, "SELECT COUNT(*) FROM group_services WHERE group_id = ?", groupID)
+}
+
+func (s *Store) countRows(ctx context.Context, query string, arg int64) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, query, arg).Scan(&n)
+	return n, err
+}
