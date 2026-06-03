@@ -9,11 +9,10 @@ existing code, design considerations, a suggested approach, and dependencies.
 implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
 
-**Progress:** Milestones **1 (TLS-terminated inbound listener) and 2 (backend-side TLS
-dialing) are complete.** Remaining order (deliberately pulled #3 forward, 2026-06-03):
-**3 → 5 → 7 → 4 → 6** — admin tooling next so operators can manage users and TLS services
-without hand-editing seed JSON, then audit (still wanted before going public), larger
-terminals (7), protocol breadth, scale. **Next up: #3 (admin management UI).**
+**Progress:** Milestones **1, 2, and 3 are complete** (3 implemented on `worktree-admin-ui`;
+pending merge to `main` + manual smoke test). Remaining order: **5 → 7 → 4 → 6** — audit
+logging next (still wanted before going public), then larger terminals (7), protocol breadth,
+scale. **Next up: #5 (audit logging).**
 
 **Carried-over debt:** #2's manual live smoke test (real emulator + TLS TN3270 backend; see
 the checklist at the end of `docs/superpowers/plans/2026-06-03-backend-tls-dialing.md`) has
@@ -99,7 +98,18 @@ existing `TestBridgeNegotiatesAndRelays`.
 
 ---
 
-## 3. Admin management UI for users / groups / services
+## 3. Admin management UI for users / groups / services  ✅ **DONE** *(implemented on `worktree-admin-ui`; pending merge + live smoke test)*
+
+> **Completed.** Spec: `docs/superpowers/specs/2026-06-03-admin-ui-design.md`;
+> plan: `docs/superpowers/plans/2026-06-03-admin-ui.md`. Delivered: ZZADMIN reserved group
+> (ZZ* namespace, case-insensitive `store.ReservedGroupPrefix`; ZZADMIN auto-created in
+> `migrate()`), `A` menu entry visible only to ZZADMIN members, full CRUD via ISPF-style
+> screens (paging PF7/PF8, line commands, delete confirm round-trip) for users, groups,
+> services, and memberships/access links; guardrails (no self-delete, last-admin guard,
+> ZZ* create/delete blocked); store list/update/cascade-delete/count methods;
+> `auth.HashPassword` as the single bcrypt path (seed + admin UI); generic
+> `AdminListScreen`/`AdminFormScreen` builders in `internal/screens`. The historical notes
+> below are retained for reference.
 
 **Goal:** Manage users, groups, services, and their links without hand-editing JSON + re-seed.
 Today the only path is `seed -file`.
@@ -272,7 +282,7 @@ slotted after audit since it's UX polish rather than edge-hardening.
 | Backend TLS | ✅ done — per-service `tls_verify`; `bridge.Bridge` takes a `*tls.Config` |
 | Configurable escape key | `Session.EscapeAID` / `bridge.EscapeAIDPA3` (hard-coded to PA3 at wiring) |
 | Alternate transport (TLS in) | ✅ done — `internal/listen.Build` + `server.ServeAll`; `Server` stayed `net.Listener`-based |
-| Admin via 3270 | group model + session machine; an "admin" group + admin menu branch |
+| Admin via 3270 | ✅ done — `A` menu entry + adminFlow; see `internal/server/admin*.go` |
 | Audit | `Session.Run` sees Identity + service + bridge Cause; add an `Auditor` seam |
 | Pluggable identity source | `auth.UserStore` interface already abstracts the store (LDAP later = new impl) |
 | Larger terminals (MOD 3/4/5) | `go3270` `DevInfo.AltDimensions()` + `HandleScreenAlt`; screen builders need to take dimensions |
