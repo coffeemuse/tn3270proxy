@@ -319,3 +319,52 @@ func TestAdminDeleteUserOtherActionCancelsConfirm(t *testing.T) {
 	}
 }
 
+func TestAdminUserGroupsToggle(t *testing.T) {
+	// Group rows sort ZZADMIN(0), ops(1). Add alice to ZZADMIN, remove from ops.
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'G', Row: 0}, // users list: G on alice
+			{Cmd: 'A', Row: 0}, // add ZZADMIN
+			{Cmd: 'R', Row: 1}, // remove ops
+			{PF: 3},            // back to users list
+			{PF: 3},            // back to admin menu
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := f.store.GetUserGroups(ctx, ids["alice"])
+	if len(got) != 1 || got[0] != store.AdminGroup {
+		t.Errorf("alice groups = %v, want [%s]", got, store.AdminGroup)
+	}
+	// membership marker rendered: second list render shows ops marked X for alice
+	if rows := p.gotLists[1].Rows; len(rows) != 2 || !strings.Contains(rows[1], "X") {
+		t.Errorf("ops row should carry X marker: %q", rows)
+	}
+}
+
+func TestAdminRemoveLastAdminMembershipBlocked(t *testing.T) {
+	// root is ZZADMIN's only member; R must be blocked.
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'G', Row: 1}, // users list: G on root
+			{Cmd: 'R', Row: 0}, // remove ZZADMIN — blocked
+			{PF: 3}, {PF: 3},
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	f.Run(ctx, nil)
+	if msg := p.gotLists[2].ErrMsg; !strings.Contains(msg, "CANNOT REMOVE LAST") {
+		t.Errorf("errMsg = %q", msg)
+	}
+	got, _ := f.store.GetUserGroups(ctx, ids["root"])
+	if len(got) != 1 || got[0] != store.AdminGroup {
+		t.Errorf("root memberships changed: %v", got)
+	}
+}
+

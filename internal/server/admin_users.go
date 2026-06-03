@@ -255,7 +255,83 @@ func (f *adminFlow) setPassword(ctx context.Context, conn net.Conn, u store.User
 	}
 }
 
-// userGroups is implemented in Task 12; temporary stub.
+// userGroups shows every group with an X membership marker; line command A
+// adds the user, R removes (guarded for the last ZZADMIN member).
 func (f *adminFlow) userGroups(ctx context.Context, conn net.Conn, u store.User) (bool, error) {
-	return false, nil
+	page, errMsg := 0, ""
+	for {
+		groups, err := f.store.ListGroups(ctx)
+		if err != nil {
+			errMsg = logStoreErr("list groups", err)
+			groups = nil
+		}
+		memberOf, err := f.store.GetUserGroups(ctx, u.ID)
+		if err != nil {
+			errMsg = logStoreErr("get user groups", err)
+		}
+		member := make(map[string]bool, len(memberOf))
+		for _, name := range memberOf {
+			member[name] = true
+		}
+		var start, end int
+		var rowInfo string
+		page, start, end, rowInfo = pageBounds(page, len(groups))
+		pageGroups := groups[start:end]
+		rows := make([]string, len(pageGroups))
+		for i, g := range pageGroups {
+			marker := ""
+			if member[g.Name] {
+				marker = "X"
+			}
+			rows[i] = fmt.Sprintf("%-20s %s", g.Name, marker)
+		}
+		act, err := f.presenter.AdminList(conn, screens.AdminListView{
+			Title:   "TN3270 GATEWAY ADMIN: GROUPS FOR " + u.Username,
+			RowInfo: rowInfo,
+			Header:  "CMD  GROUP                MEMBER",
+			Rows:    rows,
+			Legend:  "A = add to group   R = remove from group",
+			ErrMsg:  errMsg,
+			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = back   PA3 = main menu",
+		})
+		if err != nil {
+			return false, err
+		}
+		errMsg = ""
+		switch {
+		case act.PA3:
+			return true, nil
+		case act.PF == 3:
+			return false, nil
+		case act.PF == 7:
+			page--
+		case act.PF == 8:
+			if end < len(groups) {
+				page++
+			}
+		case act.Cmd != 0:
+			if act.Row >= len(pageGroups) {
+				continue
+			}
+			g := pageGroups[act.Row]
+			switch act.Cmd {
+			case 'A':
+				if err := f.store.AddUserToGroup(ctx, u.ID, g.ID); err != nil {
+					errMsg = logStoreErr("add membership", err)
+				}
+			case 'R':
+				if g.Name == store.AdminGroup && member[g.Name] {
+					if msg := f.guardLastAdmin(ctx); msg != "" {
+						errMsg = msg
+						continue
+					}
+				}
+				if err := f.store.RemoveUserFromGroup(ctx, u.ID, g.ID); err != nil {
+					errMsg = logStoreErr("remove membership", err)
+				}
+			default:
+				errMsg = "INVALID COMMAND: " + string(act.Cmd)
+			}
+		}
+	}
 }
