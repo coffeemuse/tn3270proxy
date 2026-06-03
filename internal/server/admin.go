@@ -55,34 +55,30 @@ type adminFlow struct {
 	identity  auth.Identity
 }
 
-// Run loops on the admin menu until the user leaves: PF3 from the admin menu
-// or PA3 from anywhere (both land on the service menu). A non-nil error means
-// the client connection is unusable and the session should end.
+// Run loops on the admin menu until the user leaves via PF3 (back to the
+// service menu). A non-nil error means the client connection is unusable and
+// the session should end.
 func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 	errMsg := ""
 	for {
-		choice, back, exit, err := f.presenter.AdminMenu(conn, errMsg)
+		choice, back, err := f.presenter.AdminMenu(conn, errMsg)
 		if err != nil {
 			return err
 		}
-		if back || exit {
+		if back {
 			return nil
 		}
 		errMsg = ""
-		var bail bool
 		switch choice {
 		case 1:
-			bail, err = f.users(ctx, conn)
+			err = f.users(ctx, conn)
 		case 2:
-			bail, err = f.groups(ctx, conn)
+			err = f.groups(ctx, conn)
 		case 3:
-			bail, err = f.services(ctx, conn)
+			err = f.services(ctx, conn)
 		}
 		if err != nil {
 			return err
-		}
-		if bail {
-			return nil // PA3 anywhere in admin → service menu
 		}
 	}
 }

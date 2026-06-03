@@ -17,7 +17,7 @@ func isReservedGroup(name string) bool {
 }
 
 // groups drives the group list and the add-group form.
-func (f *adminFlow) groups(ctx context.Context, conn net.Conn) (bool, error) {
+func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 	page, errMsg := 0, ""
 	var pendingDelete *store.Group
 	for {
@@ -47,10 +47,10 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) (bool, error) {
 			Rows:    rows,
 			Legend:  "D = delete   PF4 = add group",
 			ErrMsg:  errMsg,
-			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = admin menu   PA3 = main menu",
+			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = admin menu",
 		})
 		if err != nil {
-			return false, err
+			return err
 		}
 		errMsg = ""
 
@@ -58,8 +58,6 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) (bool, error) {
 			target := *pendingDelete
 			pendingDelete = nil
 			switch {
-			case act.PA3:
-				return true, nil
 			case act.Cmd == 0 && act.PF == 0:
 				if err := f.store.DeleteGroup(ctx, target.ID); err != nil {
 					errMsg = logStoreErr("delete group", err)
@@ -71,14 +69,11 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) (bool, error) {
 		}
 
 		switch {
-		case act.PA3:
-			return true, nil
 		case act.PF == 3:
-			return false, nil
+			return nil
 		case act.PF == 4:
-			bail, err := f.groupAdd(ctx, conn)
-			if err != nil || bail {
-				return bail, err
+			if err := f.groupAdd(ctx, conn); err != nil {
+				return err
 			}
 		case act.PF == 7:
 			page--
@@ -106,7 +101,7 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) (bool, error) {
 	}
 }
 
-func (f *adminFlow) groupAdd(ctx context.Context, conn net.Conn) (bool, error) {
+func (f *adminFlow) groupAdd(ctx context.Context, conn net.Conn) error {
 	name, errMsg := "", ""
 	for {
 		act, err := f.presenter.AdminForm(conn, screens.AdminFormView{
@@ -117,13 +112,10 @@ func (f *adminFlow) groupAdd(ctx context.Context, conn net.Conn) (bool, error) {
 			ErrMsg: errMsg,
 		})
 		if err != nil {
-			return false, err
-		}
-		if act.PA3 {
-			return true, nil
+			return err
 		}
 		if act.Cancel {
-			return false, nil
+			return nil
 		}
 		name = act.Values[screens.FieldName]
 		if name == "" {
@@ -145,6 +137,6 @@ func (f *adminFlow) groupAdd(ctx context.Context, conn net.Conn) (bool, error) {
 			errMsg = logStoreErr("create group", err)
 			continue
 		}
-		return false, nil
+		return nil
 	}
 }

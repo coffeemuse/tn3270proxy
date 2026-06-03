@@ -16,8 +16,8 @@ import (
 // --- fakes ---
 
 type adminMenuStep struct {
-	choice     int
-	back, exit bool
+	choice int
+	back   bool
 }
 
 // fakeAdminPresenter pops scripted results and captures every view it is asked
@@ -32,14 +32,14 @@ type fakeAdminPresenter struct {
 	gotForms    []screens.AdminFormView
 }
 
-func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, errMsg string) (int, bool, bool, error) {
+func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, errMsg string) (int, bool, error) {
 	f.gotMenuErrs = append(f.gotMenuErrs, errMsg)
 	if len(f.menu) == 0 {
 		panic("unexpected AdminMenu call")
 	}
 	s := f.menu[0]
 	f.menu = f.menu[1:]
-	return s.choice, s.back, s.exit, nil
+	return s.choice, s.back, nil
 }
 
 func (f *fakeAdminPresenter) AdminList(_ net.Conn, v screens.AdminListView) (AdminListAction, error) {
@@ -103,14 +103,9 @@ func lastList(t *testing.T, p *fakeAdminPresenter) screens.AdminListView {
 
 // --- tests ---
 
-func TestAdminFlowMenuBackAndExit(t *testing.T) {
+func TestAdminFlowMenuBack(t *testing.T) {
 	p := &fakeAdminPresenter{menu: []adminMenuStep{{back: true}}}
 	f, _ := newAdminFixture(t, p)
-	if err := f.Run(context.Background(), nil); err != nil {
-		t.Fatal(err)
-	}
-	p = &fakeAdminPresenter{menu: []adminMenuStep{{exit: true}}}
-	f, _ = newAdminFixture(t, p)
 	if err := f.Run(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}

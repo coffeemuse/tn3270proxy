@@ -13,9 +13,8 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
-// users drives the user list and its sub-screens. Returns bail=true when the
-// user pressed PA3 (straight back to the service menu).
-func (f *adminFlow) users(ctx context.Context, conn net.Conn) (bool, error) {
+// users drives the user list and its sub-screens.
+func (f *adminFlow) users(ctx context.Context, conn net.Conn) error {
 	page, errMsg := 0, ""
 	var pendingDelete *store.User
 	for {
@@ -44,10 +43,10 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) (bool, error) {
 			Rows:    rows,
 			Legend:  "S = set password   G = groups   D = delete   PF4 = add user",
 			ErrMsg:  errMsg,
-			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = admin menu   PA3 = main menu",
+			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = admin menu",
 		})
 		if err != nil {
-			return false, err
+			return err
 		}
 		errMsg = ""
 
@@ -58,8 +57,6 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) (bool, error) {
 			target := *pendingDelete
 			pendingDelete = nil
 			switch {
-			case act.PA3:
-				return true, nil
 			case act.Cmd == 0 && act.PF == 0:
 				errMsg = f.deleteUser(ctx, target)
 				continue
@@ -69,14 +66,11 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) (bool, error) {
 		}
 
 		switch {
-		case act.PA3:
-			return true, nil
 		case act.PF == 3:
-			return false, nil
+			return nil
 		case act.PF == 4:
-			bail, err := f.userAdd(ctx, conn)
-			if err != nil || bail {
-				return bail, err
+			if err := f.userAdd(ctx, conn); err != nil {
+				return err
 			}
 		case act.PF == 7:
 			page--
@@ -91,14 +85,12 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) (bool, error) {
 			u := pageUsers[act.Row]
 			switch act.Cmd {
 			case 'S':
-				bail, err := f.setPassword(ctx, conn, u)
-				if err != nil || bail {
-					return bail, err
+				if err := f.setPassword(ctx, conn, u); err != nil {
+					return err
 				}
 			case 'G':
-				bail, err := f.userGroups(ctx, conn, u)
-				if err != nil || bail {
-					return bail, err
+				if err := f.userGroups(ctx, conn, u); err != nil {
+					return err
 				}
 			case 'D':
 				pendingDelete = &u
@@ -165,7 +157,7 @@ func passwordFromForm(values map[string]string) (string, string) {
 	return pass, ""
 }
 
-func (f *adminFlow) userAdd(ctx context.Context, conn net.Conn) (bool, error) {
+func (f *adminFlow) userAdd(ctx context.Context, conn net.Conn) error {
 	username, errMsg := "", ""
 	for {
 		act, err := f.presenter.AdminForm(conn, screens.AdminFormView{
@@ -178,13 +170,10 @@ func (f *adminFlow) userAdd(ctx context.Context, conn net.Conn) (bool, error) {
 			ErrMsg: errMsg,
 		})
 		if err != nil {
-			return false, err
-		}
-		if act.PA3 {
-			return true, nil
+			return err
 		}
 		if act.Cancel {
-			return false, nil
+			return nil
 		}
 		username = act.Values[screens.FieldUsername]
 		if username == "" {
@@ -213,11 +202,11 @@ func (f *adminFlow) userAdd(ctx context.Context, conn net.Conn) (bool, error) {
 			errMsg = logStoreErr("create user", err)
 			continue
 		}
-		return false, nil
+		return nil
 	}
 }
 
-func (f *adminFlow) setPassword(ctx context.Context, conn net.Conn, u store.User) (bool, error) {
+func (f *adminFlow) setPassword(ctx context.Context, conn net.Conn, u store.User) error {
 	errMsg := ""
 	for {
 		act, err := f.presenter.AdminForm(conn, screens.AdminFormView{
@@ -229,13 +218,10 @@ func (f *adminFlow) setPassword(ctx context.Context, conn net.Conn, u store.User
 			ErrMsg: errMsg,
 		})
 		if err != nil {
-			return false, err
-		}
-		if act.PA3 {
-			return true, nil
+			return err
 		}
 		if act.Cancel {
-			return false, nil
+			return nil
 		}
 		pass, msg := passwordFromForm(act.Values)
 		if msg != "" {
@@ -251,13 +237,13 @@ func (f *adminFlow) setPassword(ctx context.Context, conn net.Conn, u store.User
 			errMsg = logStoreErr("set password", err)
 			continue
 		}
-		return false, nil
+		return nil
 	}
 }
 
 // userGroups shows every group with an X membership marker; line command A
 // adds the user, R removes (guarded for the last ZZADMIN member).
-func (f *adminFlow) userGroups(ctx context.Context, conn net.Conn, u store.User) (bool, error) {
+func (f *adminFlow) userGroups(ctx context.Context, conn net.Conn, u store.User) error {
 	page, errMsg := 0, ""
 	for {
 		groups, err := f.store.ListGroups(ctx)
@@ -292,17 +278,15 @@ func (f *adminFlow) userGroups(ctx context.Context, conn net.Conn, u store.User)
 			Rows:    rows,
 			Legend:  "A = add to group   R = remove from group",
 			ErrMsg:  errMsg,
-			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = back   PA3 = main menu",
+			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = back",
 		})
 		if err != nil {
-			return false, err
+			return err
 		}
 		errMsg = ""
 		switch {
-		case act.PA3:
-			return true, nil
 		case act.PF == 3:
-			return false, nil
+			return nil
 		case act.PF == 7:
 			page--
 		case act.PF == 8:

@@ -30,7 +30,7 @@ func ynBool(s string) (val, ok bool) {
 }
 
 // services drives the service list and its sub-screens.
-func (f *adminFlow) services(ctx context.Context, conn net.Conn) (bool, error) {
+func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 	page, errMsg := 0, ""
 	var pendingDelete *store.Service
 	for {
@@ -56,10 +56,10 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) (bool, error) {
 			Rows:    rows,
 			Legend:  "S = edit   G = group access   D = delete   PF4 = add service",
 			ErrMsg:  errMsg,
-			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = admin menu   PA3 = main menu",
+			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = admin menu",
 		})
 		if err != nil {
-			return false, err
+			return err
 		}
 		errMsg = ""
 
@@ -67,8 +67,6 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) (bool, error) {
 			target := *pendingDelete
 			pendingDelete = nil
 			switch {
-			case act.PA3:
-				return true, nil
 			case act.Cmd == 0 && act.PF == 0:
 				if err := f.store.DeleteService(ctx, target.ID); err != nil {
 					errMsg = logStoreErr("delete service", err)
@@ -80,14 +78,11 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) (bool, error) {
 		}
 
 		switch {
-		case act.PA3:
-			return true, nil
 		case act.PF == 3:
-			return false, nil
+			return nil
 		case act.PF == 4:
-			bail, err := f.serviceForm(ctx, conn, nil)
-			if err != nil || bail {
-				return bail, err
+			if err := f.serviceForm(ctx, conn, nil); err != nil {
+				return err
 			}
 		case act.PF == 7:
 			page--
@@ -102,14 +97,12 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) (bool, error) {
 			s := pageSvcs[act.Row]
 			switch act.Cmd {
 			case 'S':
-				bail, err := f.serviceForm(ctx, conn, &s)
-				if err != nil || bail {
-					return bail, err
+				if err := f.serviceForm(ctx, conn, &s); err != nil {
+					return err
 				}
 			case 'G':
-				bail, err := f.serviceGroups(ctx, conn, s)
-				if err != nil || bail {
-					return bail, err
+				if err := f.serviceGroups(ctx, conn, s); err != nil {
+					return err
 				}
 			case 'D':
 				pendingDelete = &s
@@ -123,7 +116,7 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) (bool, error) {
 
 // serviceForm adds (existing == nil) or edits a service. Both TLS fields are
 // exposed: tls (encrypt) and verify (authenticate the backend cert).
-func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *store.Service) (bool, error) {
+func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *store.Service) error {
 	title := "TN3270 GATEWAY ADMIN: ADD SERVICE"
 	name, host, port, tlsYN, verifyYN := "", "", "", "N", "Y" // verify defaults on (secure default)
 	if existing != nil {
@@ -145,13 +138,10 @@ func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *st
 			ErrMsg: errMsg,
 		})
 		if err != nil {
-			return false, err
-		}
-		if act.PA3 {
-			return true, nil
+			return err
 		}
 		if act.Cancel {
-			return false, nil
+			return nil
 		}
 		name = act.Values[screens.FieldName]
 		host = act.Values[screens.FieldHost]
@@ -185,7 +175,7 @@ func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *st
 				errMsg = logStoreErr("update service", err)
 				continue
 			}
-			return false, nil
+			return nil
 		}
 	}
 }
@@ -209,7 +199,7 @@ func (f *adminFlow) checkServiceNameFree(ctx context.Context, name string, exist
 // serviceGroups shows every group with an X access marker for svc; line
 // command A grants access, R revokes. No guardrails — revoking all access
 // only hides the service from menus.
-func (f *adminFlow) serviceGroups(ctx context.Context, conn net.Conn, svc store.Service) (bool, error) {
+func (f *adminFlow) serviceGroups(ctx context.Context, conn net.Conn, svc store.Service) error {
 	page, errMsg := 0, ""
 	for {
 		groups, err := f.store.ListGroups(ctx)
@@ -244,17 +234,15 @@ func (f *adminFlow) serviceGroups(ctx context.Context, conn net.Conn, svc store.
 			Rows:    rows,
 			Legend:  "A = grant access   R = revoke access",
 			ErrMsg:  errMsg,
-			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = back   PA3 = main menu",
+			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = back",
 		})
 		if err != nil {
-			return false, err
+			return err
 		}
 		errMsg = ""
 		switch {
-		case act.PA3:
-			return true, nil
 		case act.PF == 3:
-			return false, nil
+			return nil
 		case act.PF == 7:
 			page--
 		case act.PF == 8:
