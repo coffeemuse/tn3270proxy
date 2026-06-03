@@ -1,8 +1,12 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
+	"os"
 )
 
 // Listener describes a plaintext TCP listener.
@@ -24,6 +28,24 @@ type Config struct {
 	DBPath string
 	Plain  Listener
 	TLS    TLSListener
+}
+
+// fileConfig is the on-disk JSON shape. Pointer fields distinguish
+// "absent in file" (leave default) from "present and zero".
+type fileConfig struct {
+	DB        *string `json:"db"`
+	Listeners struct {
+		Plain *struct {
+			Enabled *bool   `json:"enabled"`
+			Addr    *string `json:"addr"`
+		} `json:"plain"`
+		TLS *struct {
+			Enabled *bool   `json:"enabled"`
+			Addr    *string `json:"addr"`
+			Cert    *string `json:"cert"`
+			Key     *string `json:"key"`
+		} `json:"tls"`
+	} `json:"listeners"`
 }
 
 const (
@@ -55,8 +77,14 @@ func Load(args []string) (Config, error) {
 
 	cfg := defaults()
 
-	// (config-file merge added in Task 2)
-	_ = configPath
+	path := defaultConfigFile
+	explicit := set["config"]
+	if explicit {
+		path = *configPath
+	}
+	if err := mergeFile(&cfg, path, explicit); err != nil {
+		return Config{}, err
+	}
 
 	if set["db"] {
 		cfg.DBPath = *dbPath
@@ -69,6 +97,48 @@ func Load(args []string) (Config, error) {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+func mergeFile(cfg *Config, path string, explicit bool) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !explicit && errors.Is(err, os.ErrNotExist) {
+			return nil // default file is optional
+		}
+		return fmt.Errorf("read config %q: %w", path, err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var fc fileConfig
+	if err := dec.Decode(&fc); err != nil {
+		return fmt.Errorf("parse config %q: %w", path, err)
+	}
+	if fc.DB != nil {
+		cfg.DBPath = *fc.DB
+	}
+	if p := fc.Listeners.Plain; p != nil {
+		if p.Enabled != nil {
+			cfg.Plain.Enabled = *p.Enabled
+		}
+		if p.Addr != nil {
+			cfg.Plain.Addr = *p.Addr
+		}
+	}
+	if tl := fc.Listeners.TLS; tl != nil {
+		if tl.Enabled != nil {
+			cfg.TLS.Enabled = *tl.Enabled
+		}
+		if tl.Addr != nil {
+			cfg.TLS.Addr = *tl.Addr
+		}
+		if tl.Cert != nil {
+			cfg.TLS.Cert = *tl.Cert
+		}
+		if tl.Key != nil {
+			cfg.TLS.Key = *tl.Key
+		}
+	}
+	return nil
 }
 
 func validate(cfg Config) error {
