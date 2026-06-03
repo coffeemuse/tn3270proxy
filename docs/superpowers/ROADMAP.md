@@ -9,11 +9,11 @@ existing code, design considerations, a suggested approach, and dependencies.
 implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
 
-**Progress:** Milestone **1 (TLS-terminated inbound listener) is complete and on `main`.**
-Remaining suggested order: **2 → 5 → 7 → 3 → 4 → 6**, i.e. finish hardening the public edge
-(backend TLS, then audit), make the screens adapt to larger terminals (7 — self-contained,
-improves the core UX), then build admin tooling, then protocol breadth, then scale. Backend
-TLS (#2) is the natural next step — it pairs with the inbound TLS just shipped.
+**Progress:** Milestones **1 (TLS-terminated inbound listener) and 2 (backend-side TLS
+dialing) are complete.** Remaining suggested order: **5 → 7 → 3 → 4 → 6**, i.e. finish
+hardening the public edge (audit), make the screens adapt to larger terminals (7 —
+self-contained, improves the core UX), then build admin tooling, then protocol breadth, then
+scale. Audit logging (#5) is the natural next step — you want audit before going public.
 
 ---
 
@@ -55,7 +55,16 @@ cert + `crypto/tls` client dialing the listener and completing go3270 negotiatio
 
 ---
 
-## 2. Backend-side TLS dialing  *(reserved hook already exists)*
+## 2. Backend-side TLS dialing  ✅ **DONE** *(complete; see spec/plan)*
+
+> **Completed.** Spec: `docs/superpowers/specs/2026-06-03-backend-tls-dialing-design.md`;
+> plan: `docs/superpowers/plans/2026-06-03-backend-tls-dialing.md`. Delivered: a per-service
+> `tls_verify` column (default on; guarded idempotent migration), `verify` in the seed format
+> (`*bool`, omitted → on), `bridge.Bridge(..., *tls.Config)` (nil = plaintext), and a
+> `server.BackendTLS{Enabled,Verify}` intent on the `Bridger` seam translated by
+> `backendTLSConfig` (TLS 1.2 floor, ServerName = configured host, system-root verification;
+> `Verify=false` → encrypted-but-unauthenticated). Deferred: CA bundles, ServerName override,
+> mTLS. The historical notes below are retained for reference.
 
 **Goal:** Connect to backend services over TLS when the service is marked TLS. The
 `services.tls` column **already exists** and is plumbed through `store.Service.TLS`, the seed
@@ -251,7 +260,7 @@ slotted after audit since it's UX polish rather than edge-hardening.
 
 | Future need | Existing hook |
 |---|---|
-| Backend TLS | `services.tls` column → `store.Service.TLS` → `SeedService.TLS` (plumbed; bridge ignores it) |
+| Backend TLS | ✅ done — per-service `tls_verify`; `bridge.Bridge` takes a `*tls.Config` |
 | Configurable escape key | `Session.EscapeAID` / `bridge.EscapeAIDPA3` (hard-coded to PA3 at wiring) |
 | Alternate transport (TLS in) | ✅ done — `internal/listen.Build` + `server.ServeAll`; `Server` stayed `net.Listener`-based |
 | Admin via 3270 | group model + session machine; an "admin" group + admin menu branch |
