@@ -37,6 +37,16 @@ func Bridge(client net.Conn, addr, termType string, escapeAID byte) (Cause, erro
 
 	results := make(chan Cause, 2)
 
+	// Concurrency note: both goroutines may write to the same connection — the
+	// backend→client goroutine forwards 3270 data to client while the
+	// client→backend goroutine writes negotiation replies to client (and
+	// symmetrically for backend). net.Conn.Write is goroutine-safe, so this is
+	// not a data race. In the MVP, Telnet negotiation is front-loaded and data
+	// flows afterward, so reply and data writes do not meaningfully overlap in
+	// practice. If mid-session renegotiation is added later, interleaving of a
+	// negotiation reply with a forwarded data chunk on the same connection
+	// becomes a real hazard to revisit.
+
 	// backend → client: proxy answers Telnet as a client toward the backend.
 	go func() {
 		p := newProcessor(roleClient, termType, 0)
@@ -70,11 +80,15 @@ func relay(src, dst net.Conn, p *telnetProcessor, closeCause Cause) Cause {
 		if n > 0 {
 			fwd, reply, escaped := p.process(buf[:n])
 			if len(reply) > 0 {
+				// net.Conn.Write returns a non-nil error on a short write, so
+				// discarding the byte count is correct — any partial write
+				// surfaces here as CauseError.
 				if _, werr := src.Write(reply); werr != nil {
 					return CauseError
 				}
 			}
 			if len(fwd) > 0 {
+				// Same short-write guarantee as above.
 				if _, werr := dst.Write(fwd); werr != nil {
 					return CauseError
 				}
