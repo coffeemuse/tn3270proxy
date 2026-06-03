@@ -47,8 +47,9 @@ internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(svcs, e
                   Field-name constants: FieldUsername/Password/Error/Selection.
 internal/bridge   The bespoke core. telnetProcessor parses one Telnet leg (forward 3270
                   data + IAC IAC / IAC EOR framing; answer negotiation locally; detect PA3
-                  escape). Bridge(client, addr, termType, escapeAID) dials backend + relays
-                  both ways. Cause = {Error,BackendClosed,ClientClosed,UserEscaped}.
+                  escape). Bridge(client, addr, termType, escapeAID, *tls.Config) dials
+                  backend (nil = plaintext, non-nil = TLS) + relays both ways.
+                  Cause = {Error,BackendClosed,ClientClosed,UserEscaped}.
                   Exported escape key: EscapeAIDPA3.
 internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative, idempotent seeding.
 internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop) behind
@@ -72,9 +73,13 @@ so the session is unit-tested with fakes (no live 3270 client needed).
 - **No credential logging, ever.** Lifecycle logging uses stdlib `log`; usernames are OK to
   log, passwords/Login() contents are not.
 - **Commits:** conventional-ish prefixes (`feat:`/`test:`/`chore:`/`docs:`), small and focused.
-- **Reserved hooks for future work:** `services.tls` column exists but backend-TLS dialing is
-  not implemented; the escape AID is wired through `Session.EscapeAID` / `bridge.EscapeAIDPA3`
-  and is meant to become configurable.
+- **Backend TLS:** implemented. A service dials over TLS when `services.tls` is set; the
+  per-service `services.tls_verify` column (default on) controls certificate verification
+  (system roots + hostname, browser-like). `verify:false` in seed JSON encrypts without
+  authenticating (for self-signed internal hosts). ServerName is always the configured
+  host — connect-by-IP with verify on needs an IP SAN. The escape AID
+  (`Session.EscapeAID` / `bridge.EscapeAIDPA3`) remains the reserved hook meant to become
+  configurable.
 
 ## Gotchas (learned the hard way)
 

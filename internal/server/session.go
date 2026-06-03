@@ -22,9 +22,17 @@ type Presenter interface {
 	Menu(conn net.Conn, services []store.Service, errMsg string) (selected *store.Service, quit bool, err error)
 }
 
+// BackendTLS expresses a service's backend-TLS intent. The server layer keeps
+// crypto/tls out of the session machine; realBridger turns this into a
+// *tls.Config.
+type BackendTLS struct {
+	Enabled bool // dial the backend over TLS
+	Verify  bool // validate the backend cert (system roots + hostname)
+}
+
 // Bridger connects the client to a backend service.
 type Bridger interface {
-	Bridge(client net.Conn, addr, termType string, escapeAID byte) (bridge.Cause, error)
+	Bridge(client net.Conn, addr, termType string, escapeAID byte, btls BackendTLS) (bridge.Cause, error)
 }
 
 // Authenticator verifies credentials against a store. Matches auth.Authenticate.
@@ -74,7 +82,8 @@ func (s *Session) Run(conn net.Conn) {
 		}
 
 		addr := net.JoinHostPort(selected.Host, strconv.Itoa(selected.Port))
-		cause, berr := s.Bridger.Bridge(conn, addr, termType, s.EscapeAID)
+		btls := BackendTLS{Enabled: selected.TLS, Verify: selected.TLSVerify}
+		cause, berr := s.Bridger.Bridge(conn, addr, termType, s.EscapeAID, btls)
 		switch cause {
 		case bridge.CauseClientClosed:
 			return

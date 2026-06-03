@@ -52,9 +52,11 @@ type fakeBridger struct {
 	causes []bridge.Cause
 	errs   []error
 	calls  int
+	gotTLS []BackendTLS
 }
 
-func (f *fakeBridger) Bridge(conn net.Conn, addr, termType string, escapeAID byte) (bridge.Cause, error) {
+func (f *fakeBridger) Bridge(conn net.Conn, addr, termType string, escapeAID byte, btls BackendTLS) (bridge.Cause, error) {
+	f.gotTLS = append(f.gotTLS, btls)
 	i := f.calls
 	f.calls++
 	var err error
@@ -80,7 +82,7 @@ func newTestSession(t *testing.T, p *fakePresenter, b *fakeBridger) *Session {
 	t.Cleanup(func() { st.Close() })
 	ctx := context.Background()
 	gid, _ := st.CreateGroup(ctx, "ops")
-	sid, _ := st.CreateService(ctx, "PROD", "10.0.0.1", 23, false)
+	sid, _ := st.CreateService(ctx, "PROD", "10.0.0.1", 23, false, true)
 	st.LinkGroupService(ctx, gid, sid)
 
 	return &Session{
@@ -172,6 +174,30 @@ func TestSessionBackendErrorShownOnMenu(t *testing.T) {
 
 	if len(p.menuErrors) < 2 || p.menuErrors[1] == "" {
 		t.Errorf("expected error message on menu after backend failure; got %v", p.menuErrors)
+	}
+}
+
+func TestSessionPassesTLSIntentToBridger(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{user: "alice", pass: "good"}},
+		menuPicks: []menuResult{
+			{sel: &store.Service{Name: "SEC", Host: "10.0.0.9", Port: 992, TLS: true, TLSVerify: true}},
+			{quit: true},
+		},
+	}
+	b := &fakeBridger{causes: []bridge.Cause{bridge.CauseUserEscaped}}
+	s := newTestSession(t, p, b)
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(b.gotTLS) != 1 {
+		t.Fatalf("bridge called %d times, want 1", len(b.gotTLS))
+	}
+	if got := b.gotTLS[0]; !got.Enabled || !got.Verify {
+		t.Errorf("intent = %+v, want {Enabled:true Verify:true}", got)
 	}
 }
 

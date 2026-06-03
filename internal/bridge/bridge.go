@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"crypto/tls"
 	"net"
 	"time"
 )
@@ -27,9 +28,16 @@ var pastDeadline = time.Unix(1, 0)
 // (offering termType), and relays the 3270 datastream between client and
 // backend until one side closes or the user presses escapeAID. The client
 // connection is NOT closed (the caller reuses it for the menu); its deadlines
-// are reset before returning.
-func Bridge(client net.Conn, addr, termType string, escapeAID byte) (Cause, error) {
-	backend, err := net.DialTimeout("tcp", addr, dialTimeout)
+// are reset before returning. When tlsCfg is non-nil the backend is dialed over
+// TLS; nil dials plaintext.
+func Bridge(client net.Conn, addr, termType string, escapeAID byte, tlsCfg *tls.Config) (Cause, error) {
+	var backend net.Conn
+	var err error
+	if tlsCfg != nil {
+		backend, err = tls.DialWithDialer(&net.Dialer{Timeout: dialTimeout}, "tcp", addr, tlsCfg)
+	} else {
+		backend, err = net.DialTimeout("tcp", addr, dialTimeout)
+	}
 	if err != nil {
 		return CauseError, err
 	}

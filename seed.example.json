@@ -5,6 +5,8 @@
     { "username": "bob",   "password": "changeme", "groups": ["dev"] }
   ],
   "services": [
-    { "name": "PUB TSO", "host": "localhost", "port": 3270, "groups": ["ops"] }
+    { "name": "PUB TSO",  "host": "localhost",         "port": 3270, "groups": ["ops"] },
+    { "name": "SEC CICS", "host": "cics.corp.example", "port": 992, "tls": true, "groups": ["ops"] },
+    { "name": "LAB CICS", "host": "10.0.0.5",          "port": 992, "tls": true, "verify": false, "groups": ["dev"] }
   ]
 }

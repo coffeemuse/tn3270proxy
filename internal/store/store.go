@@ -52,11 +52,12 @@ CREATE TABLE IF NOT EXISTS user_groups (
 	PRIMARY KEY (user_id, group_id)
 );
 CREATE TABLE IF NOT EXISTS services (
-	id   INTEGER PRIMARY KEY,
-	name TEXT UNIQUE NOT NULL,
-	host TEXT NOT NULL,
-	port INTEGER NOT NULL,
-	tls  INTEGER NOT NULL DEFAULT 0
+	id         INTEGER PRIMARY KEY,
+	name       TEXT UNIQUE NOT NULL,
+	host       TEXT NOT NULL,
+	port       INTEGER NOT NULL,
+	tls        INTEGER NOT NULL DEFAULT 0,
+	tls_verify INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS group_services (
 	group_id   INTEGER NOT NULL REFERENCES groups(id),
@@ -68,6 +69,46 @@ CREATE TABLE IF NOT EXISTS group_services (
 func (s *Store) migrate() error {
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("migrate: %w", err)
+	}
+	// Existing DBs predating tls_verify won't get it from CREATE TABLE IF NOT
+	// EXISTS, so add it explicitly (idempotent: skipped when already present).
+	if err := s.ensureColumn("services", "tls_verify",
+		"ALTER TABLE services ADD COLUMN tls_verify INTEGER NOT NULL DEFAULT 1"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureColumn runs alterSQL only if table lacks column. SQLite's
+// ALTER TABLE ADD COLUMN errors if the column already exists, so we probe
+// PRAGMA table_info first to keep migrate() idempotent.
+func (s *Store) ensureColumn(table, column, alterSQL string) error {
+	rows, err := s.db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return fmt.Errorf("inspect %s: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid     int
+			name    string
+			ctype   string
+			notnull int
+			dflt    sql.NullString
+			pk      int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return fmt.Errorf("inspect %s: %w", table, err)
+		}
+		if name == column {
+			return nil // already present; defer rows.Close() handles cleanup
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("inspect %s: %w", table, err)
+	}
+	if _, err := s.db.Exec(alterSQL); err != nil {
+		return fmt.Errorf("add column %s.%s: %w", table, column, err)
 	}
 	return nil
 }
@@ -161,22 +202,27 @@ func (s *Store) insertOrGet(ctx context.Context, insertSQL string, insertArgs []
 
 // Service is a backend TN3270 host the menu can offer.
 type Service struct {
-	ID   int64
-	Name string
-	Host string
-	Port int
-	TLS  bool
+	ID        int64
+	Name      string
+	Host      string
+	Port      int
+	TLS       bool
+	TLSVerify bool
 }
 
 // CreateService inserts a service, or returns the existing service's id.
-func (s *Store) CreateService(ctx context.Context, name, host string, port int, tls bool) (int64, error) {
+func (s *Store) CreateService(ctx context.Context, name, host string, port int, tls, verify bool) (int64, error) {
 	tlsInt := 0
 	if tls {
 		tlsInt = 1
 	}
+	verifyInt := 0
+	if verify {
+		verifyInt = 1
+	}
 	return s.insertOrGet(ctx,
-		"INSERT OR IGNORE INTO services (name, host, port, tls) VALUES (?, ?, ?, ?)",
-		[]any{name, host, port, tlsInt},
+		"INSERT OR IGNORE INTO services (name, host, port, tls, tls_verify) VALUES (?, ?, ?, ?, ?)",
+		[]any{name, host, port, tlsInt, verifyInt},
 		"SELECT id FROM services WHERE name = ?",
 		[]any{name})
 }
@@ -201,7 +247,7 @@ func (s *Store) ListServicesForGroups(ctx context.Context, groups []string) ([]S
 		placeholders[i] = "?"
 		args[i] = g
 	}
-	query := `SELECT DISTINCT s.id, s.name, s.host, s.port, s.tls
+	query := `SELECT DISTINCT s.id, s.name, s.host, s.port, s.tls, s.tls_verify
 		FROM services s
 		JOIN group_services gs ON gs.service_id = s.id
 		JOIN groups g ON g.id = gs.group_id
@@ -215,11 +261,12 @@ func (s *Store) ListServicesForGroups(ctx context.Context, groups []string) ([]S
 	var out []Service
 	for rows.Next() {
 		var svc Service
-		var tlsInt int
-		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Host, &svc.Port, &tlsInt); err != nil {
+		var tlsInt, verifyInt int
+		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Host, &svc.Port, &tlsInt, &verifyInt); err != nil {
 			return nil, err
 		}
 		svc.TLS = tlsInt != 0
+		svc.TLSVerify = verifyInt != 0
 		out = append(out, svc)
 	}
 	return out, rows.Err()
