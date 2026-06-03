@@ -76,6 +76,10 @@ func (s *Store) migrate() error {
 		"ALTER TABLE services ADD COLUMN tls_verify INTEGER NOT NULL DEFAULT 1"); err != nil {
 		return err
 	}
+	// The reserved admin group always exists; seeding only assigns members.
+	if _, err := s.db.Exec("INSERT OR IGNORE INTO groups (name) VALUES (?)", AdminGroup); err != nil {
+		return fmt.Errorf("ensure %s group: %w", AdminGroup, err)
+	}
 	return nil
 }
 
