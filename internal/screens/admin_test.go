@@ -81,3 +81,18 @@ func TestAdminListScreenEmpty(t *testing.T) {
 		t.Errorf("empty list should say (none)")
 	}
 }
+
+func TestAdminListScreenTruncatesOverflow(t *testing.T) {
+	rows := make([]string, AdminListPageSize+3)
+	for i := range rows {
+		rows[i] = fmt.Sprintf("row%d", i)
+	}
+	screen := AdminListScreen(AdminListView{Title: "T", Rows: rows})
+	last := fmt.Sprintf("%s%d", FieldCmdPrefix, AdminListPageSize-1)
+	if _, ok := fieldByName(screen, last); !ok {
+		t.Errorf("missing last in-page cmd field %q", last)
+	}
+	if _, ok := fieldByName(screen, fmt.Sprintf("%s%d", FieldCmdPrefix, AdminListPageSize)); ok {
+		t.Errorf("overflow row should be truncated")
+	}
+}

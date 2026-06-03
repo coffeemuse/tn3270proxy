@@ -27,7 +27,7 @@ const AdminListPageSize = 14
 // help lines. The flow layer composes these for users/groups/services.
 type AdminListView struct {
 	Title   string   // row-0 title
-	RowInfo string   // row-0 right side, e.g. "ROW 1 TO 14 OF 30"
+	RowInfo string   // row-0 right side at col 60, e.g. "ROW 1 TO 14 OF 30"
 	Header  string   // column header line
 	Rows    []string // pre-formatted data rows (CMD inputs added by the builder)
 	Legend  string   // line-command legend
@@ -37,14 +37,19 @@ type AdminListView struct {
 
 // AdminListScreen renders v. Data rows start at row 4; the CMD input for row i
 // is named FieldCmdPrefix+i ("cmd0", "cmd1", ...). At most AdminListPageSize
-// rows fit.
+// rows fit; rows beyond AdminListPageSize are truncated — callers paginate via
+// AdminListPageSize.
 func AdminListScreen(v AdminListView) go3270.Screen {
 	screen := go3270.Screen{
 		{Row: 0, Col: 2, Intense: true, Content: v.Title},
 		{Row: 0, Col: 60, Content: v.RowInfo},
 		{Row: 2, Col: 2, Content: v.Header},
 	}
-	for i, r := range v.Rows {
+	rows := v.Rows
+	if len(rows) > AdminListPageSize {
+		rows = rows[:AdminListPageSize]
+	}
+	for i, r := range rows {
 		row := 4 + i
 		screen = append(screen,
 			go3270.Field{Row: row, Col: 2, Name: fmt.Sprintf("%s%d", FieldCmdPrefix, i), Write: true, Highlighting: go3270.Underscore},
@@ -52,7 +57,7 @@ func AdminListScreen(v AdminListView) go3270.Screen {
 			go3270.Field{Row: row, Col: 7, Content: r},
 		)
 	}
-	if len(v.Rows) == 0 {
+	if len(rows) == 0 {
 		screen = append(screen, go3270.Field{Row: 4, Col: 7, Content: "(none)"})
 	}
 	screen = append(screen,
