@@ -101,7 +101,7 @@ func (s *Store) ensureColumn(table, column, alterSQL string) error {
 			return fmt.Errorf("inspect %s: %w", table, err)
 		}
 		if name == column {
-			return rows.Err() // already present
+			return nil // already present; defer rows.Close() handles cleanup
 		}
 	}
 	if err := rows.Err(); err != nil {
