@@ -121,8 +121,7 @@ func TestMenuScreenCapacityGrowsAndTruncates(t *testing.T) {
 		t.Errorf("MOD 2 mapping = %d entries, want %d", len(mapping), g2.MenuCapacity(false))
 	}
 	for _, f := range screen {
-		if f.Row >= g2.InputRow() && f.Name != FieldSelection && f.Name != FieldError &&
-			f.Row != g2.InputRow() && f.Row != g2.ErrorRow() && f.Row != g2.HelpRow() {
+		if f.Row > g2.InputRow() && f.Row != g2.ErrorRow() && f.Row != g2.HelpRow() {
 			t.Errorf("MOD 2: unexpected field on row %d: %+v", f.Row, f)
 		}
 	}
@@ -136,29 +135,30 @@ func TestMenuScreenCapacityGrowsAndTruncates(t *testing.T) {
 }
 
 func TestMenuScreenAdminEntryNeverCollidesWhenFull(t *testing.T) {
-	svcs := make([]store.Service, 30)
+	svcs := make([]store.Service, 32)
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
 	}
-	g := Geometry{Rows: 24, Cols: 80}
-	screen, mapping := MenuScreen(g, svcs, true, "")
-	if len(mapping) != g.MenuCapacity(true) { // one less: row reserved for A entry
-		t.Errorf("admin mapping = %d entries, want %d", len(mapping), g.MenuCapacity(true))
-	}
-	adminRow := -1
-	occupied := map[int]int{}
-	for _, f := range screen {
-		if strings.Contains(f.Content, "Administration") {
-			adminRow = f.Row
+	for _, g := range []Geometry{{Rows: 24, Cols: 80}, {Rows: 43, Cols: 80}} {
+		screen, mapping := MenuScreen(g, svcs, true, "")
+		if len(mapping) != g.MenuCapacity(true) { // one less: row reserved for A entry
+			t.Errorf("%+v: admin mapping = %d entries, want %d", g, len(mapping), g.MenuCapacity(true))
 		}
-		if f.Content != "" {
-			occupied[f.Row]++
+		adminRow := -1
+		occupied := map[int]int{}
+		for _, f := range screen {
+			if strings.Contains(f.Content, "Administration") {
+				adminRow = f.Row
+			}
+			if f.Content != "" {
+				occupied[f.Row]++
+			}
 		}
-	}
-	if adminRow < 0 || adminRow > g.InputRow()-2 {
-		t.Errorf("admin entry row = %d, want ≤ %d", adminRow, g.InputRow()-2)
-	}
-	if occupied[adminRow] != 1 {
-		t.Errorf("admin entry shares row %d with another field", adminRow)
+		if adminRow < 0 || adminRow > g.InputRow()-2 {
+			t.Errorf("%+v: admin entry row = %d, want ≤ %d", g, adminRow, g.InputRow()-2)
+		}
+		if occupied[adminRow] != 1 {
+			t.Errorf("%+v: admin entry shares row %d with another field", g, adminRow)
+		}
 	}
 }
