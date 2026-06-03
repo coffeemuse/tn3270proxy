@@ -27,7 +27,7 @@ func (go3270Presenter) Login(conn net.Conn, errMsg string) (string, string, bool
 		screen, rules, map[string]string{},
 		[]go3270.AID{go3270.AIDEnter},
 		[]go3270.AID{go3270.AIDPF3},
-		screens.FieldError, 4, 17, conn,
+		screens.FieldError, 3, 17, conn,
 	)
 	if err != nil {
 		return "", "", false, err
