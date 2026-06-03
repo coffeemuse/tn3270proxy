@@ -42,7 +42,7 @@ func (go3270Presenter) Login(conn net.Conn, errMsg string) (string, string, bool
 
 func (go3270Presenter) Menu(conn net.Conn, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
 	for {
-		screen, mapping := screens.MenuScreen(svcs, admin, errMsg)
+		screen, mapping := screens.MenuScreen(screens.DefaultGeometry, svcs, admin, errMsg)
 		resp, err := go3270.HandleScreen(
 			screen, nil, map[string]string{},
 			[]go3270.AID{go3270.AIDEnter},
