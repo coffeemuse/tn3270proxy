@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -94,7 +95,7 @@ func TestListAllServicesAndGetService(t *testing.T) {
 	if err != nil || got.Name != "PROD" || got.Host != "h1" || got.Port != 23 {
 		t.Fatalf("GetService = %+v, %v", got, err)
 	}
-	if _, err := st.GetService(ctx, 99999); err != ErrNotFound {
+	if _, err := st.GetService(ctx, 99999); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing service err = %v, want ErrNotFound", err)
 	}
 }
@@ -121,11 +122,14 @@ func TestSetPassword(t *testing.T) {
 	if err := st.SetPassword(ctx, uid, "newhash"); err != nil {
 		t.Fatal(err)
 	}
-	u, _ := st.GetUserByUsername(ctx, "alice")
+	u, err := st.GetUserByUsername(ctx, "alice")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
 	if u.PasswordHash != "newhash" {
 		t.Errorf("hash = %q, want newhash", u.PasswordHash)
 	}
-	if err := st.SetPassword(ctx, 99999, "h"); err != ErrNotFound {
+	if err := st.SetPassword(ctx, 99999, "h"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing user err = %v, want ErrNotFound", err)
 	}
 }
@@ -137,12 +141,15 @@ func TestUpdateService(t *testing.T) {
 	if err := st.UpdateService(ctx, sid, "PROD2", "h2", 992, true, false); err != nil {
 		t.Fatal(err)
 	}
-	svc, _ := st.GetService(ctx, sid)
+	svc, err := st.GetService(ctx, sid)
+	if err != nil {
+		t.Fatalf("GetService: %v", err)
+	}
 	want := Service{ID: sid, Name: "PROD2", Host: "h2", Port: 992, TLS: true, TLSVerify: false}
 	if svc != want {
 		t.Errorf("service = %+v, want %+v", svc, want)
 	}
-	if err := st.UpdateService(ctx, 99999, "X", "h", 23, false, true); err != ErrNotFound {
+	if err := st.UpdateService(ctx, 99999, "X", "h", 23, false, true); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing service err = %v, want ErrNotFound", err)
 	}
 }
