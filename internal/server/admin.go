@@ -128,7 +128,5 @@ func logStoreErr(op string, err error) string {
 }
 
 // users is implemented in admin_users.go (Task 11).
-// groups / services are implemented in admin_groups.go, admin_services.go (Tasks 13-15).
-// Temporary stubs keep this task compiling:
-
-func (f *adminFlow) services(ctx context.Context, conn net.Conn) (bool, error) { return false, nil }
+// groups is implemented in admin_groups.go (Task 13).
+// services is implemented in admin_services.go (Task 14).

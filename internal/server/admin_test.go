@@ -486,3 +486,99 @@ func TestAdminGroupDeleteCancel(t *testing.T) {
 	}
 }
 
+func TestAdminServiceAdd(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{{Values: map[string]string{
+			screens.FieldName: "DEV", screens.FieldHost: "dev.example", screens.FieldPort: "992",
+			screens.FieldTLS: "y", screens.FieldVerify: "n", // case-insensitive Y/N
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	svcs, _ := f.store.ListAllServices(ctx)
+	if len(svcs) != 2 || svcs[0].Name != "DEV" {
+		t.Fatalf("services = %+v", svcs)
+	}
+	got := svcs[0]
+	if got.Host != "dev.example" || got.Port != 992 || !got.TLS || got.TLSVerify {
+		t.Errorf("DEV = %+v", got)
+	}
+}
+
+func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // edit PROD
+		forms: []AdminFormAction{{Values: map[string]string{
+			screens.FieldName: "PROD", screens.FieldHost: "h2", screens.FieldPort: "1023",
+			screens.FieldTLS: "Y", screens.FieldVerify: "Y",
+		}}},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	form := p.gotForms[0] // pre-filled from the existing service
+	if form.Fields[0].Value != "PROD" || form.Fields[1].Value != "h" || form.Fields[2].Value != "23" {
+		t.Errorf("pre-fill = %+v", form.Fields)
+	}
+	svc, _ := f.store.GetService(ctx, ids["prod"])
+	if svc.Host != "h2" || svc.Port != 1023 || !svc.TLS || !svc.TLSVerify {
+		t.Errorf("updated = %+v", svc)
+	}
+}
+
+func TestAdminServicePortValidation(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{
+			{Values: map[string]string{screens.FieldName: "X", screens.FieldHost: "h",
+				screens.FieldPort: "70000", screens.FieldTLS: "N", screens.FieldVerify: "Y"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if msg := p.gotForms[1].ErrMsg; msg != "PORT MUST BE 1-65535" {
+		t.Errorf("errMsg = %q", msg)
+	}
+}
+
+func TestAdminServiceDuplicateName(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{
+			{Values: map[string]string{screens.FieldName: "PROD", screens.FieldHost: "h",
+				screens.FieldPort: "23", screens.FieldTLS: "N", screens.FieldVerify: "Y"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if msg := p.gotForms[1].ErrMsg; msg != "'PROD' ALREADY EXISTS" {
+		t.Errorf("errMsg = %q", msg)
+	}
+}
+
+func TestAdminServiceDeleteCascades(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}}, // D PROD, Enter confirms
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.GetService(ctx, ids["prod"]); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("PROD should be deleted: %v", err)
+	}
+}
