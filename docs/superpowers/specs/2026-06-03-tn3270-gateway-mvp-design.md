@@ -152,16 +152,25 @@ After a menu selection:
    SUPPRESS-GO-AHEAD, and TERMINAL-TYPE. The terminal type offered to the backend echoes
    the type the client negotiated with us in the Negotiating state, so screen geometry
    matches end-to-end.
-3. **Relay**: two goroutines copy bytes in each direction (client↔backend) until either
-   side closes or the escape condition fires.
+3. **Relay**: two goroutines relay bytes in each direction (client↔backend) until either
+   side closes or the escape condition fires. The relay is **Telnet-aware** (see below),
+   not a raw byte copy.
 4. **Escape**: the client→backend direction is watched for the **escape AID — PA3**
    (chosen as the least commonly used AID, minimizing collision with backend
    applications). On detection, the bridge stops relaying, closes the backend
    connection, and returns control to the server with a "user escaped" cause.
 
-During bridging the proxy performs **pure byte relay** — it does **not** parse or
-rewrite the 3270 datastream (apart from the minimal inspection needed to detect the
-escape AID). This keeps the MVP small and maximizes protocol fidelity.
+**Why the relay is Telnet-aware, not a raw copy.** Each leg has its own independent
+Telnet negotiation state: the end user already negotiated Telnet with the proxy (via
+`go3270`), and the backend mainframe will independently drive Telnet negotiation against
+the proxy acting as a client. Those negotiation commands (`IAC DO/WILL/DONT/WONT`,
+`IAC SB … SE`) must be answered **locally on the leg they arrive on** and must **not** be
+forwarded to the other side. The relay therefore parses the Telnet command layer: it
+forwards 3270 application data and record framing (`IAC EOR`, escaped `IAC IAC`) to the
+peer, while intercepting and replying to negotiation on the originating leg. It does
+**not** parse or rewrite the 3270 datastream itself (no Erase/Write/order parsing) — the
+only application-level inspection is checking whether a client record begins with the
+escape AID. This keeps the MVP small while remaining protocol-correct.
 
 **Teardown causes** returned to the server: `backend-closed`, `client-closed`,
 `user-escaped`, `error`. All of them route back to the Menu state except
