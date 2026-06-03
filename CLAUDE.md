@@ -7,7 +7,10 @@ Orientation for working in this repo. Read this first in a fresh session.
 A **TN3270 gateway**. It presents itself as a TN3270 *server* on the (eventually public)
 internet, authenticates users against a local SQLite DB, shows a **group-filtered menu**
 of internal TN3270 services, and **bridges** the user to the selected backend host. During
-a bridged session, **PA3** returns the user to the menu; **PF3** at the menu disconnects.
+a bridged session, **PA3** returns the user to the menu (PA3 does nothing
+on the proxy's own screens). **PF3** uniformly steps back one level: admin
+sub-screen → admin menu → service menu → login screen → disconnect; PF3 at the
+service menu is a logoff, and re-login re-evaluates groups.
 Members of the reserved `ZZADMIN` group get an extra `A` menu entry opening a full-CRUD admin screen set (users / groups / services).
 
 The connect → login → menu → bridge core loop (the MVP) is **complete and on `main`**.
