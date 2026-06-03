@@ -80,7 +80,7 @@ func newTestSession(t *testing.T, p *fakePresenter, b *fakeBridger) *Session {
 	t.Cleanup(func() { st.Close() })
 	ctx := context.Background()
 	gid, _ := st.CreateGroup(ctx, "ops")
-	sid, _ := st.CreateService(ctx, "PROD", "10.0.0.1", 23, false, false)
+	sid, _ := st.CreateService(ctx, "PROD", "10.0.0.1", 23, false, true)
 	st.LinkGroupService(ctx, gid, sid)
 
 	return &Session{

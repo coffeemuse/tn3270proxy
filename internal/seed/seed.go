@@ -78,6 +78,8 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 	}
 
 	for _, svc := range data.Services {
+		// CreateService is INSERT OR IGNORE: re-seeding an existing service does
+		// not update tls/tls_verify. Change these via a manual UPDATE for now.
 		verify := true // secure default when "verify" is omitted
 		if svc.Verify != nil {
 			verify = *svc.Verify

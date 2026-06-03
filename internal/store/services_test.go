@@ -42,7 +42,7 @@ func TestListServicesForGroups(t *testing.T) {
 	}
 }
 
-func TestServicesVerifyColumnDefaultsOn(t *testing.T) {
+func TestCreateServiceVerifyRoundTrips(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
 
