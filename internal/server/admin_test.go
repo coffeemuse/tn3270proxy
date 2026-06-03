@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
@@ -121,6 +124,7 @@ func TestPageBounds(t *testing.T) {
 	}{
 		{0, 0, 0, 0, 0, "ROW 0 OF 0"},
 		{0, 3, 0, 0, 3, "ROW 1 TO 3 OF 3"},
+		{-1, 3, 0, 0, 3, "ROW 1 TO 3 OF 3"}, // PF7 on page 0 underflows; clamp
 		{0, 20, 0, 0, 14, "ROW 1 TO 14 OF 20"},
 		{1, 20, 1, 14, 20, "ROW 15 TO 20 OF 20"},
 		{5, 20, 1, 14, 20, "ROW 15 TO 20 OF 20"}, // clamped after deletions
@@ -134,6 +138,169 @@ func TestPageBounds(t *testing.T) {
 	}
 }
 
-func TestAdminStoreSatisfiedByStore(t *testing.T) {
-	var _ AdminStore = (*store.Store)(nil)
+func TestAdminUserAddHappyPath(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{{Values: map[string]string{
+			screens.FieldUsername: "carol",
+			screens.FieldPassword: "pw",
+			screens.FieldRetype:   "pw",
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	u, err := f.store.GetUserByUsername(ctx, "carol")
+	if err != nil {
+		t.Fatalf("carol not created: %v", err)
+	}
+	if u.PasswordHash == "pw" || u.PasswordHash == "" {
+		t.Errorf("password stored unhashed: %q", u.PasswordHash)
+	}
+	// AdminStore is a superset of auth.UserStore, so the real auth path works.
+	if _, err := auth.Authenticate(ctx, f.store, "carol", "pw"); err != nil {
+		t.Errorf("authenticate with new password: %v", err)
+	}
 }
+
+func TestAdminUserAddDuplicatePreservesInput(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{
+			{Values: map[string]string{screens.FieldUsername: "alice", screens.FieldPassword: "pw", screens.FieldRetype: "pw"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	if err := f.Run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	last := p.gotForms[len(p.gotForms)-1]
+	if last.ErrMsg != "'alice' ALREADY EXISTS" {
+		t.Errorf("errMsg = %q", last.ErrMsg)
+	}
+	if last.Fields[0].Value != "alice" {
+		t.Errorf("username not preserved on re-render: %+v", last.Fields[0])
+	}
+}
+
+func TestAdminUserAddPasswordMismatch(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{
+			{Values: map[string]string{screens.FieldUsername: "carol", screens.FieldPassword: "a", screens.FieldRetype: "b"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if msg := p.gotForms[len(p.gotForms)-1].ErrMsg; msg != "PASSWORDS DO NOT MATCH" {
+		t.Errorf("errMsg = %q", msg)
+	}
+	if _, err := f.store.GetUserByUsername(context.Background(), "carol"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("carol should not exist: %v", err)
+	}
+}
+
+func TestAdminSetPassword(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // S on alice
+		forms: []AdminFormAction{{Values: map[string]string{
+			screens.FieldPassword: "newpw", screens.FieldRetype: "newpw",
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.Authenticate(ctx, f.store, "alice", "newpw"); err != nil {
+		t.Errorf("authenticate with new password: %v", err)
+	}
+}
+
+func TestAdminDeleteUserConfirmFlow(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}}, // D alice, Enter confirms
+	}
+	f, _ := newAdminFixture(t, p)
+	if err := f.Run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if msg := p.gotLists[1].ErrMsg; !strings.Contains(msg, "CONFIRM DELETE OF 'alice'") {
+		t.Errorf("confirm prompt = %q", msg)
+	}
+	if _, err := f.store.GetUserByUsername(context.Background(), "alice"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("alice should be deleted: %v", err)
+	}
+}
+
+func TestAdminDeleteUserCancel(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 3}, {PF: 3}}, // PF3 cancels, stays
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if _, err := f.store.GetUserByUsername(context.Background(), "alice"); err != nil {
+		t.Errorf("alice should survive cancel: %v", err)
+	}
+}
+
+func TestAdminDeleteOwnAccountBlocked(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {}, {PF: 3}}, // D on root (self)
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if msg := p.gotLists[2].ErrMsg; msg != "CANNOT DELETE YOUR OWN ACCOUNT" {
+		t.Errorf("errMsg = %q", msg)
+	}
+	if _, err := f.store.GetUserByUsername(context.Background(), "root"); err != nil {
+		t.Errorf("root should survive: %v", err)
+	}
+}
+
+func TestAdminDeleteLastAdminBlocked(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {}, {PF: 3}}, // alice deletes root
+	}
+	f, ids := newAdminFixture(t, p)
+	f.identity = auth.Identity{UserID: ids["alice"], Username: "alice", Groups: []string{store.AdminGroup}}
+	f.Run(context.Background(), nil)
+	if msg := p.gotLists[2].ErrMsg; !strings.Contains(msg, "CANNOT REMOVE LAST") {
+		t.Errorf("errMsg = %q", msg)
+	}
+	if _, err := f.store.GetUserByUsername(context.Background(), "root"); err != nil {
+		t.Errorf("root should survive: %v", err)
+	}
+}
+
+func TestAdminUserListPaging(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{PF: 8}, {PF: 7}, {PF: 3}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	for i := 0; i < 20; i++ { // 22 users total incl. root + alice
+		f.store.CreateUser(ctx, fmt.Sprintf("user%02d", i), "h")
+	}
+	f.Run(ctx, nil)
+	wants := []string{"ROW 1 TO 14 OF 22", "ROW 15 TO 22 OF 22", "ROW 1 TO 14 OF 22"}
+	for i, want := range wants {
+		if got := p.gotLists[i].RowInfo; got != want {
+			t.Errorf("render %d RowInfo = %q, want %q", i, got, want)
+		}
+	}
+}
+
