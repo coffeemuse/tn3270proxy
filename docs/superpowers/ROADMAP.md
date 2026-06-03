@@ -9,15 +9,11 @@ existing code, design considerations, a suggested approach, and dependencies.
 implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
 
-**Progress:** Milestones **1, 2, 3, 3.5, and 7 are complete** (3 merged to `main`; live smoke
-test passed 2026-06-03; 3.5 merged to `main`; live smoke test pending; 7 merged to `main`;
-live smoke test passed 2026-06-03). Remaining order: **5 → 4 → 6** — audit logging first
-(still wanted before going public), then protocol breadth, scale.
+**Progress:** Milestones **1, 2, 3, 3.5, and 7 are complete**, all merged to `main`, and
+**all live smoke tests have passed** (#3 and #7 on 2026-06-03; #2 and #3.5 confirmed
+2026-06-03). Remaining order: **5 → 4 → 6** — audit logging first (still wanted before
+going public), then protocol breadth, scale.
 **Next up: #5 (audit logging).**
-
-**Carried-over debt:** #2's manual live smoke test (real emulator + TLS TN3270 backend; see
-the checklist at the end of `docs/superpowers/plans/2026-06-03-backend-tls-dialing.md`) has
-NOT been run yet — no TLS backend was available. Run it when one exists.
 
 ---
 
@@ -59,7 +55,7 @@ cert + `crypto/tls` client dialing the listener and completing go3270 negotiatio
 
 ---
 
-## 2. Backend-side TLS dialing  ✅ **DONE** *(complete; see spec/plan)*
+## 2. Backend-side TLS dialing  ✅ **DONE** *(smoke test passed; see spec/plan)*
 
 > **Completed.** Spec: `docs/superpowers/specs/2026-06-03-backend-tls-dialing-design.md`;
 > plan: `docs/superpowers/plans/2026-06-03-backend-tls-dialing.md`. Delivered: a per-service
@@ -149,7 +145,7 @@ services.
 
 ---
 
-## 3.5 Admin / menu UX refinements  ✅ **DONE** *(merged; live smoke test pending)*
+## 3.5 Admin / menu UX refinements  ✅ **DONE** *(merged; smoke test passed)*
 
 > **Completed.** Spec: `docs/superpowers/specs/2026-06-03-admin-menu-ux-design.md`;
 > plan: `docs/superpowers/plans/2026-06-03-admin-menu-ux.md`. Delivered: `M` line
@@ -157,9 +153,8 @@ services.
 > last-ZZADMIN guard applies from both sides); PA3 removed from all admin screens
 > (`bail` plumbing deleted — PF3 walks up one level, PA3 stays bridge-only); layered
 > PF3 (menu PF3 = logoff to login screen, login PF3 = disconnect; re-login
-> re-evaluates groups). Run the manual smoke checklist in the plan (Task 5) in a real
-> emulator, then drop the "smoke test pending" qualifier. The historical notes below
-> are retained for reference.
+> re-evaluates groups). Live smoke test passed 2026-06-03 (manual checklist in the
+> plan, Task 5). The historical notes below are retained for reference.
 
 **Goal:** Polish items surfaced by the #3 live smoke test (2026-06-03). Three changes,
 all small, all in the session/adminFlow/screens layer — no schema work.
