@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -156,4 +157,70 @@ func (s *Store) insertOrGet(ctx context.Context, insertSQL string, insertArgs []
 		return 0, err
 	}
 	return id, nil
+}
+
+// Service is a backend TN3270 host the menu can offer.
+type Service struct {
+	ID   int64
+	Name string
+	Host string
+	Port int
+	TLS  bool
+}
+
+// CreateService inserts a service, or returns the existing service's id.
+func (s *Store) CreateService(ctx context.Context, name, host string, port int, tls bool) (int64, error) {
+	tlsInt := 0
+	if tls {
+		tlsInt = 1
+	}
+	return s.insertOrGet(ctx,
+		"INSERT OR IGNORE INTO services (name, host, port, tls) VALUES (?, ?, ?, ?)",
+		[]any{name, host, port, tlsInt},
+		"SELECT id FROM services WHERE name = ?",
+		[]any{name})
+}
+
+// LinkGroupService grants a group access to a service (idempotent).
+func (s *Store) LinkGroupService(ctx context.Context, groupID, serviceID int64) error {
+	_, err := s.db.ExecContext(ctx,
+		"INSERT OR IGNORE INTO group_services (group_id, service_id) VALUES (?, ?)",
+		groupID, serviceID)
+	return err
+}
+
+// ListServicesForGroups returns the distinct services visible to any of the
+// named groups, ordered by service name.
+func (s *Store) ListServicesForGroups(ctx context.Context, groups []string) ([]Service, error) {
+	if len(groups) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(groups))
+	args := make([]any, len(groups))
+	for i, g := range groups {
+		placeholders[i] = "?"
+		args[i] = g
+	}
+	query := `SELECT DISTINCT s.id, s.name, s.host, s.port, s.tls
+		FROM services s
+		JOIN group_services gs ON gs.service_id = s.id
+		JOIN groups g ON g.id = gs.group_id
+		WHERE g.name IN (` + strings.Join(placeholders, ",") + `)
+		ORDER BY s.name`
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Service
+	for rows.Next() {
+		var svc Service
+		var tlsInt int
+		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Host, &svc.Port, &tlsInt); err != nil {
+			return nil, err
+		}
+		svc.TLS = tlsInt != 0
+		out = append(out, svc)
+	}
+	return out, rows.Err()
 }
