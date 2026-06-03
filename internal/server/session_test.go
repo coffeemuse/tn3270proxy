@@ -14,10 +14,11 @@ import (
 // --- fakes ---
 
 type fakePresenter struct {
-	termType   string
-	logins     []loginResult
-	menuPicks  []menuResult
-	menuErrors []string
+	termType    string
+	logins      []loginResult
+	menuPicks   []menuResult
+	menuErrors  []string
+	loginErrors []string
 }
 
 type loginResult struct {
@@ -33,7 +34,8 @@ type menuResult struct {
 
 func (f *fakePresenter) Negotiate(conn net.Conn) (string, error) { return f.termType, nil }
 
-func (f *fakePresenter) Login(conn net.Conn) (string, string, bool, error) {
+func (f *fakePresenter) Login(conn net.Conn, errMsg string) (string, string, bool, error) {
+	f.loginErrors = append(f.loginErrors, errMsg)
 	r := f.logins[0]
 	f.logins = f.logins[1:]
 	return r.user, r.pass, r.quit, r.err
@@ -111,6 +113,17 @@ func TestSessionLoginRetryThenQuit(t *testing.T) {
 	}
 	if b.calls != 0 {
 		t.Errorf("bridge should not be called when user quits at menu")
+	}
+	// First login render has no error; the retry after bad creds must carry a
+	// generic (non-empty) message — and must not leak whether the user exists.
+	if len(p.loginErrors) < 2 {
+		t.Fatalf("expected at least 2 login renders, got %d", len(p.loginErrors))
+	}
+	if p.loginErrors[0] != "" {
+		t.Errorf("first login render errMsg = %q, want empty", p.loginErrors[0])
+	}
+	if p.loginErrors[1] == "" {
+		t.Errorf("retry login render should show a generic auth-failure message")
 	}
 }
 

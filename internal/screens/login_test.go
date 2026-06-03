@@ -16,7 +16,7 @@ func fieldByName(s go3270.Screen, name string) (go3270.Field, bool) {
 }
 
 func TestLoginScreenFields(t *testing.T) {
-	screen, rules := LoginScreen()
+	screen, rules := LoginScreen("")
 
 	uf, ok := fieldByName(screen, FieldUsername)
 	if !ok {
@@ -41,5 +41,16 @@ func TestLoginScreenFields(t *testing.T) {
 	// Username must be non-blank to submit.
 	if _, ok := rules[FieldUsername]; !ok {
 		t.Errorf("expected validation rule on username")
+	}
+}
+
+func TestLoginScreenShowsError(t *testing.T) {
+	screen, _ := LoginScreen("Invalid credentials")
+	f, ok := fieldByName(screen, FieldError)
+	if !ok {
+		t.Fatalf("missing error field")
+	}
+	if f.Content != "Invalid credentials" {
+		t.Errorf("error content = %q, want %q", f.Content, "Invalid credentials")
 	}
 }

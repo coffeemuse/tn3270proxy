@@ -18,7 +18,7 @@ import (
 // implementation (Task 14) wraps go3270; tests use a fake.
 type Presenter interface {
 	Negotiate(conn net.Conn) (termType string, err error)
-	Login(conn net.Conn) (username, password string, quit bool, err error)
+	Login(conn net.Conn, errMsg string) (username, password string, quit bool, err error)
 	Menu(conn net.Conn, services []store.Service, errMsg string) (selected *store.Service, quit bool, err error)
 }
 
@@ -93,8 +93,9 @@ func (s *Session) Run(conn net.Conn) {
 // doLogin loops the login screen until success, or returns ok=false if the
 // user quits.
 func (s *Session) doLogin(ctx context.Context, conn net.Conn) (auth.Identity, bool) {
+	errMsg := ""
 	for {
-		user, pass, quit, err := s.Presenter.Login(conn)
+		user, pass, quit, err := s.Presenter.Login(conn, errMsg)
 		if err != nil || quit {
 			return auth.Identity{}, false
 		}
@@ -105,5 +106,7 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn) (auth.Identity, bo
 		if !errors.Is(err, auth.ErrInvalidCredentials) {
 			return auth.Identity{}, false
 		}
+		// Generic message — never reveals whether the username exists (spec §7).
+		errMsg = "Invalid userid or password"
 	}
 }

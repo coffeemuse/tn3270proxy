@@ -21,8 +21,8 @@ func (go3270Presenter) Negotiate(conn net.Conn) (string, error) {
 	return dev.TerminalType(), nil
 }
 
-func (go3270Presenter) Login(conn net.Conn) (string, string, bool, error) {
-	screen, rules := screens.LoginScreen()
+func (go3270Presenter) Login(conn net.Conn, errMsg string) (string, string, bool, error) {
+	screen, rules := screens.LoginScreen(errMsg)
 	resp, err := go3270.HandleScreen(
 		screen, rules, map[string]string{},
 		[]go3270.AID{go3270.AIDEnter},
