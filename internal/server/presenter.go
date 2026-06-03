@@ -66,5 +66,5 @@ func (go3270Presenter) Menu(conn net.Conn, svcs []store.Service, errMsg string) 
 type realBridger struct{}
 
 func (realBridger) Bridge(client net.Conn, addr, termType string, escapeAID byte) (bridge.Cause, error) {
-	return bridge.Bridge(client, addr, termType, escapeAID)
+	return bridge.Bridge(client, addr, termType, escapeAID, nil)
 }

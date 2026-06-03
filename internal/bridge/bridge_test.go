@@ -1,6 +1,13 @@
 package bridge
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
 	"net"
 	"testing"
 	"time"
@@ -80,7 +87,7 @@ func TestBridgeNegotiatesAndRelays(t *testing.T) {
 
 	done := make(chan Cause, 1)
 	go func() {
-		c, err := Bridge(proxySide, fb.addr(), "IBM-3278-2-E", aidPA3)
+		c, err := Bridge(proxySide, fb.addr(), "IBM-3278-2-E", aidPA3, nil)
 		if err != nil {
 			t.Errorf("Bridge error: %v", err)
 		}
@@ -121,7 +128,7 @@ func TestBridgeEscapeOnPA3(t *testing.T) {
 
 	done := make(chan Cause, 1)
 	go func() {
-		c, _ := Bridge(proxySide, fb.addr(), "IBM-3278-2-E", aidPA3)
+		c, _ := Bridge(proxySide, fb.addr(), "IBM-3278-2-E", aidPA3, nil)
 		done <- c
 	}()
 
@@ -141,9 +148,118 @@ func TestBridgeEscapeOnPA3(t *testing.T) {
 func TestBridgeDialError(t *testing.T) {
 	clientConn, proxySide := net.Pipe()
 	defer clientConn.Close()
-	c, err := Bridge(proxySide, "127.0.0.1:1", "IBM-3278-2-E", aidPA3)
+	c, err := Bridge(proxySide, "127.0.0.1:1", "IBM-3278-2-E", aidPA3, nil)
 	if err == nil {
 		t.Errorf("expected dial error")
+	}
+	if c != CauseError {
+		t.Errorf("cause = %v, want CauseError", c)
+	}
+}
+
+// selfSignedCert returns a TLS server certificate valid for 127.0.0.1 and a
+// pool trusting it. Used to exercise the bridge's TLS dial path.
+func selfSignedCert(t *testing.T) (tls.Certificate, *x509.CertPool) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "127.0.0.1"},
+		NotBefore:    time.Unix(0, 0),
+		NotAfter:     time.Unix(1<<31-1, 0),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(leaf)
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}, pool
+}
+
+// startFakeTLSBackend is the TLS twin of startFakeBackend: same Telnet/echo
+// serve loop, behind a tls.NewListener.
+func startFakeTLSBackend(t *testing.T, cert tls.Certificate) *fakeBackend {
+	t.Helper()
+	raw, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln := tls.NewListener(raw, &tls.Config{Certificates: []tls.Certificate{cert}})
+	fb := &fakeBackend{ln: ln, termType: make(chan string, 1)}
+	go fb.serve()
+	t.Cleanup(func() { ln.Close() })
+	return fb
+}
+
+func TestBridgeTLSBackendVerified(t *testing.T) {
+	cert, pool := selfSignedCert(t)
+	fb := startFakeTLSBackend(t, cert)
+
+	clientConn, proxySide := net.Pipe()
+	defer clientConn.Close()
+
+	host, _, _ := net.SplitHostPort(fb.addr())
+	tlsCfg := &tls.Config{RootCAs: pool, ServerName: host}
+
+	done := make(chan Cause, 1)
+	go func() {
+		c, err := Bridge(proxySide, fb.addr(), "IBM-3278-2-E", aidPA3, tlsCfg)
+		if err != nil {
+			t.Errorf("Bridge error: %v", err)
+		}
+		done <- c
+	}()
+
+	select {
+	case tt := <-fb.termType:
+		if tt[:12] != "IBM-3278-2-E" {
+			t.Errorf("backend got termtype %q", tt[:12])
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("backend never received terminal type over TLS")
+	}
+
+	rec := []byte{0xF5, 0xC3, 0x11, 0x40, 0x40, cIAC, cEOR}
+	if _, err := clientConn.Write(rec); err != nil {
+		t.Fatal(err)
+	}
+	got := make([]byte, len(rec))
+	clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := readFull(clientConn, got); err != nil {
+		t.Fatalf("reading echo over TLS: %v", err)
+	}
+	for i := range rec {
+		if got[i] != rec[i] {
+			t.Errorf("echo[%d] = %#x, want %#x", i, got[i], rec[i])
+		}
+	}
+}
+
+func TestBridgeTLSBackendUntrustedFails(t *testing.T) {
+	cert, _ := selfSignedCert(t)
+	fb := startFakeTLSBackend(t, cert)
+
+	clientConn, proxySide := net.Pipe()
+	defer clientConn.Close()
+
+	host, _, _ := net.SplitHostPort(fb.addr())
+	// No RootCAs → system roots → self-signed cert is untrusted → handshake fails.
+	tlsCfg := &tls.Config{ServerName: host}
+
+	c, err := Bridge(proxySide, fb.addr(), "IBM-3278-2-E", aidPA3, tlsCfg)
+	if err == nil {
+		t.Errorf("expected TLS verification error")
 	}
 	if c != CauseError {
 		t.Errorf("cause = %v, want CauseError", c)
