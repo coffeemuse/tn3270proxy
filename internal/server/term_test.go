@@ -24,6 +24,8 @@ func TestNormalizeTermFallsBackTo24x80(t *testing.T) {
 			if got.Type != c.in.Type {
 				t.Errorf("Type changed: %q → %q", c.in.Type, got.Type)
 			}
+			// dev is always nil in tests (go3270.DevInfo cannot be faked);
+			// this guards against future refactors that might populate dev.
 			if (c.wantRows == 24 && c.in.Rows != 24) && got.dev != nil {
 				t.Errorf("fallback must drop dev")
 			}
