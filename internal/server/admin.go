@@ -45,7 +45,7 @@ var _ AdminStore = (*store.Store)(nil)
 // to the screen.
 const msgTempError = "TEMPORARY ERROR; TRY AGAIN"
 
-const adminPageSize = screens.AdminListPageSize
+var adminPageSize = screens.DefaultGeometry.ListPageSize()
 
 // adminFlow drives the admin screen set for one authenticated admin. Policy
 // (guardrails, duplicate pre-checks, validation, hashing) lives here; the

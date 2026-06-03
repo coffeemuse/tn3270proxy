@@ -38,7 +38,7 @@ var adminListExitKeys = []go3270.AID{
 
 func (go3270Presenter) AdminMenu(conn net.Conn, errMsg string) (int, bool, error) {
 	for {
-		screen := screens.AdminMenuScreen(errMsg)
+		screen := screens.AdminMenuScreen(screens.DefaultGeometry, errMsg)
 		resp, err := go3270.HandleScreen(
 			screen, nil, map[string]string{},
 			[]go3270.AID{go3270.AIDEnter},
@@ -64,7 +64,7 @@ func (go3270Presenter) AdminMenu(conn net.Conn, errMsg string) (int, bool, error
 }
 
 func (go3270Presenter) AdminList(conn net.Conn, v screens.AdminListView) (AdminListAction, error) {
-	screen := screens.AdminListScreen(v)
+	screen := screens.AdminListScreen(screens.DefaultGeometry, v)
 	// cursor on the first CMD field (attribute col 2 → input col 3); no input
 	// fields exist on an empty list, so home the cursor there.
 	crow, ccol := 4, 3
@@ -84,7 +84,7 @@ func (go3270Presenter) AdminList(conn net.Conn, v screens.AdminListView) (AdminL
 }
 
 func (go3270Presenter) AdminForm(conn net.Conn, v screens.AdminFormView) (AdminFormAction, error) {
-	screen := screens.AdminFormScreen(v)
+	screen := screens.AdminFormScreen(screens.DefaultGeometry, v)
 	resp, err := go3270.HandleScreen(
 		screen, nil, map[string]string{},
 		[]go3270.AID{go3270.AIDEnter},

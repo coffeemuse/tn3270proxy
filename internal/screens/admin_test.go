@@ -18,7 +18,7 @@ func screenContains(s go3270.Screen, sub string) bool {
 }
 
 func TestAdminMenuScreenFields(t *testing.T) {
-	screen := AdminMenuScreen("boom")
+	screen := AdminMenuScreen(DefaultGeometry, "boom")
 	f, ok := fieldByName(screen, FieldOption)
 	if !ok {
 		t.Errorf("missing %q field", FieldOption)
@@ -47,7 +47,7 @@ func TestAdminListScreenRowsAndCmdFields(t *testing.T) {
 		ErrMsg:  "oops",
 		PFHelp:  "Enter = process",
 	}
-	screen := AdminListScreen(v)
+	screen := AdminListScreen(DefaultGeometry, v)
 	for i := range v.Rows {
 		name := fmt.Sprintf("%s%d", FieldCmdPrefix, i)
 		f, ok := fieldByName(screen, name)
@@ -73,7 +73,7 @@ func TestAdminListScreenRowsAndCmdFields(t *testing.T) {
 }
 
 func TestAdminListScreenEmpty(t *testing.T) {
-	screen := AdminListScreen(AdminListView{Title: "T"})
+	screen := AdminListScreen(DefaultGeometry, AdminListView{Title: "T"})
 	if _, ok := fieldByName(screen, FieldCmdPrefix+"0"); ok {
 		t.Errorf("empty list should have no cmd fields")
 	}
@@ -83,30 +83,30 @@ func TestAdminListScreenEmpty(t *testing.T) {
 }
 
 func TestAdminListScreenTruncatesOverflow(t *testing.T) {
-	rows := make([]string, AdminListPageSize+3)
+	rows := make([]string, DefaultGeometry.ListPageSize()+3)
 	for i := range rows {
 		rows[i] = fmt.Sprintf("row%d", i)
 	}
-	screen := AdminListScreen(AdminListView{Title: "T", Rows: rows})
-	last := fmt.Sprintf("%s%d", FieldCmdPrefix, AdminListPageSize-1)
+	screen := AdminListScreen(DefaultGeometry, AdminListView{Title: "T", Rows: rows})
+	last := fmt.Sprintf("%s%d", FieldCmdPrefix, DefaultGeometry.ListPageSize()-1)
 	if _, ok := fieldByName(screen, last); !ok {
 		t.Errorf("missing last in-page cmd field %q", last)
 	}
-	if _, ok := fieldByName(screen, fmt.Sprintf("%s%d", FieldCmdPrefix, AdminListPageSize)); ok {
+	if _, ok := fieldByName(screen, fmt.Sprintf("%s%d", FieldCmdPrefix, DefaultGeometry.ListPageSize())); ok {
 		t.Errorf("overflow row should be truncated")
 	}
 }
 
 func TestAdminFormScreenTruncatesOverflow(t *testing.T) {
-	fields := make([]AdminFormField, AdminFormMaxFields+2)
+	fields := make([]AdminFormField, DefaultGeometry.FormMaxFields()+2)
 	for i := range fields {
 		fields[i] = AdminFormField{Name: fmt.Sprintf("f%d", i), Label: "L", Length: 8}
 	}
-	screen := AdminFormScreen(AdminFormView{Title: "T", Fields: fields})
-	if _, ok := fieldByName(screen, fmt.Sprintf("f%d", AdminFormMaxFields-1)); !ok {
+	screen := AdminFormScreen(DefaultGeometry, AdminFormView{Title: "T", Fields: fields})
+	if _, ok := fieldByName(screen, fmt.Sprintf("f%d", DefaultGeometry.FormMaxFields()-1)); !ok {
 		t.Errorf("missing last in-form field")
 	}
-	if _, ok := fieldByName(screen, fmt.Sprintf("f%d", AdminFormMaxFields)); ok {
+	if _, ok := fieldByName(screen, fmt.Sprintf("f%d", DefaultGeometry.FormMaxFields())); ok {
 		t.Errorf("overflow field should be truncated")
 	}
 }
@@ -120,7 +120,7 @@ func TestAdminFormScreenFields(t *testing.T) {
 		},
 		ErrMsg: "bad",
 	}
-	screen := AdminFormScreen(v)
+	screen := AdminFormScreen(DefaultGeometry, v)
 	u, ok := fieldByName(screen, FieldUsername)
 	if !ok || !u.Write || u.Content != "alice" || u.Hidden {
 		t.Errorf("username field = %+v, ok=%v", u, ok)
@@ -135,5 +135,55 @@ func TestAdminFormScreenFields(t *testing.T) {
 	}
 	if !screenContains(screen, "PF3 = cancel") {
 		t.Errorf("missing cancel help")
+	}
+}
+
+func TestAdminScreensBottomAnchored(t *testing.T) {
+	g := Geometry{Rows: 32, Cols: 80}
+
+	menu := AdminMenuScreen(g, "boom")
+	opt, _ := fieldByName(menu, FieldOption)
+	if opt.Row != g.InputRow() {
+		t.Errorf("admin menu option row = %d, want %d", opt.Row, g.InputRow())
+	}
+
+	list := AdminListScreen(g, AdminListView{Title: "T", Legend: "L", ErrMsg: "E", PFHelp: "H", Rows: []string{"r"}})
+	e, _ := fieldByName(list, FieldError)
+	if e.Row != g.ErrorRow() {
+		t.Errorf("list error row = %d, want %d", e.Row, g.ErrorRow())
+	}
+	legendOK, helpOK := false, false
+	for _, f := range list {
+		if f.Row == g.LegendRow() && f.Content == "L" {
+			legendOK = true
+		}
+		if f.Row == g.HelpRow() && f.Content == "H" {
+			helpOK = true
+		}
+	}
+	if !legendOK || !helpOK {
+		t.Errorf("legend on %d / help on %d not found (legendOK=%v helpOK=%v)", g.LegendRow(), g.HelpRow(), legendOK, helpOK)
+	}
+
+	form := AdminFormScreen(g, AdminFormView{Title: "T", ErrMsg: "E"})
+	e, _ = fieldByName(form, FieldError)
+	if e.Row != g.ErrorRow() {
+		t.Errorf("form error row = %d, want %d", e.Row, g.ErrorRow())
+	}
+}
+
+func TestAdminListScreenPageSizeGrowsWithRows(t *testing.T) {
+	g := Geometry{Rows: 32, Cols: 80} // page size 22
+	rows := make([]string, 25)
+	for i := range rows {
+		rows[i] = fmt.Sprintf("row%d", i)
+	}
+	screen := AdminListScreen(g, AdminListView{Title: "T", Rows: rows})
+	last := fmt.Sprintf("%s%d", FieldCmdPrefix, g.ListPageSize()-1)
+	if _, ok := fieldByName(screen, last); !ok {
+		t.Errorf("missing last in-page cmd field %q", last)
+	}
+	if _, ok := fieldByName(screen, fmt.Sprintf("%s%d", FieldCmdPrefix, g.ListPageSize())); ok {
+		t.Errorf("row beyond MOD 3 page size should be truncated")
 	}
 }
