@@ -138,6 +138,47 @@ func (p *telnetProcessor) process(in []byte) (forward, reply []byte, escaped boo
 	return forward, reply, escaped
 }
 
-// Stubs replaced in Task 10.
-func (p *telnetProcessor) negotiate(cmd, opt byte) []byte { return nil }
-func (p *telnetProcessor) subnegReply() []byte            { return nil }
+// agreeable reports whether this leg will enable the given option.
+func (p *telnetProcessor) agreeable(opt byte) bool {
+	switch opt {
+	case optBINARY, optEOR, optSGA:
+		return true
+	case optTERMTYPE:
+		// The client leg offers a terminal type; the server leg accepts a
+		// peer's offer to send one.
+		return true
+	}
+	return false
+}
+
+// negotiate answers a WILL/WONT/DO/DONT command on this leg.
+func (p *telnetProcessor) negotiate(cmd, opt byte) []byte {
+	switch cmd {
+	case cDO:
+		if p.agreeable(opt) {
+			return []byte{cIAC, cWILL, opt}
+		}
+		return []byte{cIAC, cWONT, opt}
+	case cWILL:
+		if p.agreeable(opt) {
+			return []byte{cIAC, cDO, opt}
+		}
+		return []byte{cIAC, cDONT, opt}
+	case cWONT, cDONT:
+		// Accept the peer's refusal silently to avoid negotiation loops.
+		return nil
+	}
+	return nil
+}
+
+// subnegReply answers a subnegotiation. The only one we handle is a
+// TERMINAL-TYPE SEND request, to which we reply with our terminal type.
+func (p *telnetProcessor) subnegReply() []byte {
+	if len(p.subneg) >= 2 && p.subneg[0] == optTERMTYPE && p.subneg[1] == ttSEND {
+		out := []byte{cIAC, cSB, optTERMTYPE, ttIS}
+		out = append(out, []byte(p.termType)...)
+		out = append(out, cIAC, cSE)
+		return out
+	}
+	return nil
+}
