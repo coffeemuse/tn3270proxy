@@ -22,6 +22,10 @@ const (
 // (rows 4..17 of the fixed 24x80 layout).
 const AdminListPageSize = 14
 
+// AdminFormMaxFields is how many labeled inputs fit above the error line
+// (rows 3, 5, ..., 19 of the fixed 24x80 layout).
+const AdminFormMaxFields = 9
+
 // AdminListView is the view model for an ISPF-style admin list screen: one
 // 1-character CMD input per data row plus bottom-anchored legend, error, and
 // help lines. The flow layer composes these for users/groups/services.
@@ -74,7 +78,7 @@ type AdminFormField struct {
 	Label  string
 	Value  string // pre-filled content (edit forms)
 	Hidden bool   // non-display (passwords)
-	Length int    // input length in columns
+	Length int    // input length in columns; effective max 62 (stop field clamps at col 79)
 }
 
 // AdminFormView is the view model for a labeled-input admin form screen.
@@ -85,17 +89,26 @@ type AdminFormView struct {
 }
 
 // AdminFormScreen renders v. The first input is at row 3 col 16 (so the
-// caller's initial cursor is (3, 17)); inputs are two rows apart.
+// caller's initial cursor is (3, 17)); inputs are two rows apart. Fields
+// beyond AdminFormMaxFields are truncated.
 func AdminFormScreen(v AdminFormView) go3270.Screen {
 	screen := go3270.Screen{
 		{Row: 0, Col: 2, Intense: true, Content: v.Title},
 	}
-	for i, f := range v.Fields {
+	fields := v.Fields
+	if len(fields) > AdminFormMaxFields {
+		fields = fields[:AdminFormMaxFields]
+	}
+	for i, f := range fields {
 		row := 3 + 2*i
+		stopCol := 17 + f.Length
+		if stopCol > 79 {
+			stopCol = 79
+		}
 		screen = append(screen,
 			go3270.Field{Row: row, Col: 2, Content: f.Label},
 			go3270.Field{Row: row, Col: 16, Name: f.Name, Write: true, Hidden: f.Hidden, Content: f.Value, Highlighting: go3270.Underscore},
-			go3270.Field{Row: row, Col: 17 + f.Length}, // stop field
+			go3270.Field{Row: row, Col: stopCol}, // stop field
 		)
 	}
 	screen = append(screen,

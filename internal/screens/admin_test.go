@@ -97,6 +97,20 @@ func TestAdminListScreenTruncatesOverflow(t *testing.T) {
 	}
 }
 
+func TestAdminFormScreenTruncatesOverflow(t *testing.T) {
+	fields := make([]AdminFormField, AdminFormMaxFields+2)
+	for i := range fields {
+		fields[i] = AdminFormField{Name: fmt.Sprintf("f%d", i), Label: "L", Length: 8}
+	}
+	screen := AdminFormScreen(AdminFormView{Title: "T", Fields: fields})
+	if _, ok := fieldByName(screen, fmt.Sprintf("f%d", AdminFormMaxFields-1)); !ok {
+		t.Errorf("missing last in-form field")
+	}
+	if _, ok := fieldByName(screen, fmt.Sprintf("f%d", AdminFormMaxFields)); ok {
+		t.Errorf("overflow field should be truncated")
+	}
+}
+
 func TestAdminFormScreenFields(t *testing.T) {
 	v := AdminFormView{
 		Title: "TN3270 GATEWAY ADMIN: ADD USER",
