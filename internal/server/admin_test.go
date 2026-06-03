@@ -368,3 +368,91 @@ func TestAdminRemoveLastAdminMembershipBlocked(t *testing.T) {
 	}
 }
 
+func TestAdminGroupAddAndCounts(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{{Values: map[string]string{screens.FieldName: "dev"}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	groups, _ := f.store.ListGroups(ctx)
+	// sort: ZZADMIN, dev, ops
+	if len(groups) != 3 || groups[1].Name != "dev" {
+		t.Fatalf("groups = %+v", groups)
+	}
+	// the re-rendered list shows member/service counts; ops row has 1 and 1
+	last := lastList(t, p)
+	if len(last.Rows) != 3 || !strings.Contains(last.Rows[2], "1") {
+		t.Errorf("ops row missing counts: %q", last.Rows)
+	}
+}
+
+func TestAdminGroupAddReservedBlocked(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{
+			{Values: map[string]string{screens.FieldName: "zzNew"}}, // prefix check is case-insensitive
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if msg := p.gotForms[1].ErrMsg; msg != "ZZ* GROUP NAMES ARE RESERVED" {
+		t.Errorf("errMsg = %q", msg)
+	}
+}
+
+func TestAdminGroupAddDuplicateBlocked(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{
+			{Values: map[string]string{screens.FieldName: "ops"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if msg := p.gotForms[1].ErrMsg; msg != "'ops' ALREADY EXISTS" {
+		t.Errorf("errMsg = %q", msg)
+	}
+}
+
+func TestAdminGroupDeleteReservedBlocked(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 3}}, // D on ZZADMIN — no confirm offered
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if msg := p.gotLists[1].ErrMsg; msg != "ZZ* GROUP NAMES ARE RESERVED" {
+		t.Errorf("errMsg = %q", msg)
+	}
+	if groups, _ := f.store.ListGroups(context.Background()); len(groups) != 2 {
+		t.Errorf("groups = %+v", groups)
+	}
+}
+
+func TestAdminGroupDeleteCascades(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {}, {PF: 3}}, // D ops, Enter confirms
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := f.store.GetUserGroups(ctx, ids["alice"]); len(got) != 0 {
+		t.Errorf("alice memberships = %v", got)
+	}
+	if gs, _ := f.store.ListGroupsForService(ctx, ids["prod"]); len(gs) != 0 {
+		t.Errorf("PROD links = %v", gs)
+	}
+}
+
