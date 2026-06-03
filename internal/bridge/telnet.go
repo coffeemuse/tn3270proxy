@@ -147,9 +147,10 @@ func (p *telnetProcessor) agreeable(opt byte) bool {
 	case optBINARY, optEOR, optSGA:
 		return true
 	case optTERMTYPE:
-		// The client leg offers a terminal type; the server leg accepts a
-		// peer's offer to send one.
-		return true
+		// Only the client leg (proxy→backend) offers a terminal type.
+		// The server leg must not agree to TERMTYPE: its termType is empty,
+		// which would produce a malformed empty IS reply.
+		return p.role == roleClient
 	}
 	return false
 }

@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log"
 	"net"
 	"strconv"
 
@@ -46,6 +47,7 @@ func (s *Session) Run(conn net.Conn) {
 
 	termType, err := s.Presenter.Negotiate(conn)
 	if err != nil {
+		log.Printf("telnet negotiation failed: %v", err)
 		return
 	}
 
@@ -58,7 +60,9 @@ func (s *Session) Run(conn net.Conn) {
 	for {
 		services, err := s.Store.ListServicesForGroups(ctx, identity.Groups)
 		if err != nil {
-			return
+			log.Printf("listing services for user %s failed: %v", identity.Username, err)
+			services = nil
+			errMsg = "Temporary error retrieving services; try again"
 		}
 		selected, quit, err := s.Presenter.Menu(conn, services, errMsg)
 		if err != nil || quit {
@@ -75,6 +79,7 @@ func (s *Session) Run(conn net.Conn) {
 		case bridge.CauseClientClosed:
 			return
 		case bridge.CauseError:
+			log.Printf("bridge error to %s (%s): %v", selected.Name, addr, berr)
 			errMsg = "Could not connect to " + selected.Name
 			if berr == nil {
 				errMsg = "Session error on " + selected.Name

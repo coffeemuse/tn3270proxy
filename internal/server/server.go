@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"net"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
@@ -26,13 +27,16 @@ func (s *Server) Serve() error {
 		if err != nil {
 			return err
 		}
+		log.Printf("accepted connection from %s", conn.RemoteAddr())
 		go s.handle(conn)
 	}
 }
 
 func (s *Server) handle(conn net.Conn) {
 	defer func() {
-		_ = recover()
+		if r := recover(); r != nil {
+			log.Printf("session panic from %s: %v", conn.RemoteAddr(), r)
+		}
 		conn.Close()
 	}()
 	s.Handler.Handle(conn)
