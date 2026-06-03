@@ -9,14 +9,23 @@ existing code, design considerations, a suggested approach, and dependencies.
 implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
 
-Suggested order (rationale in each section): **1 → 2 → 5 → 7 → 3 → 4 → 6**, i.e. harden the
-public edge first (TLS in, then TLS out, then audit), make the screens adapt to larger
-terminals (7 — self-contained, improves the core UX), then build admin tooling, then protocol
-breadth, then scale.
+**Progress:** Milestone **1 (TLS-terminated inbound listener) is complete and on `main`.**
+Remaining suggested order: **2 → 5 → 7 → 3 → 4 → 6**, i.e. finish hardening the public edge
+(backend TLS, then audit), make the screens adapt to larger terminals (7 — self-contained,
+improves the core UX), then build admin tooling, then protocol breadth, then scale. Backend
+TLS (#2) is the natural next step — it pairs with the inbound TLS just shipped.
 
 ---
 
-## 1. TLS-terminated inbound listener  *(highest priority — it's public-facing)*
+## 1. TLS-terminated inbound listener  ✅ **DONE** *(merged to `main`)*
+
+> **Completed.** Spec: `docs/superpowers/specs/2026-06-03-tls-inbound-listener-design.md`;
+> plan: `docs/superpowers/plans/2026-06-03-tls-inbound-listener.md`. Delivered: a JSON config
+> file (`tn3270proxy.json`, default-discovered) with independent `plain`/`tls` listeners and
+> `defaults < file < flags` precedence (strict, unknown-key-rejecting); `internal/listen.Build`
+> (immediate TLS via `tls.NewListener`, TLS 1.2 floor); `server.ServeAll` (one accept loop per
+> listener sharing a handler, race-clean teardown-on-error). Backward compatible (no config →
+> plaintext `:2323`). The historical notes below are retained for reference.
 
 **Goal:** Accept TLS connections from clients (TN3270 over TLS, sometimes "TN3270 Secure"),
 not just plaintext. This is the gating item for any real public exposure.
@@ -244,7 +253,7 @@ slotted after audit since it's UX polish rather than edge-hardening.
 |---|---|
 | Backend TLS | `services.tls` column → `store.Service.TLS` → `SeedService.TLS` (plumbed; bridge ignores it) |
 | Configurable escape key | `Session.EscapeAID` / `bridge.EscapeAIDPA3` (hard-coded to PA3 at wiring) |
-| Alternate transport (TLS in) | `Server` is `net.Listener`-based; all layers take `net.Conn` |
+| Alternate transport (TLS in) | ✅ done — `internal/listen.Build` + `server.ServeAll`; `Server` stayed `net.Listener`-based |
 | Admin via 3270 | group model + session machine; an "admin" group + admin menu branch |
 | Audit | `Session.Run` sees Identity + service + bridge Cause; add an `Auditor` seam |
 | Pluggable identity source | `auth.UserStore` interface already abstracts the store (LDAP later = new impl) |
