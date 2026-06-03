@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -33,5 +34,50 @@ func TestAdminMenuScreenFields(t *testing.T) {
 		if !screenContains(screen, want) {
 			t.Errorf("menu missing %q", want)
 		}
+	}
+}
+
+func TestAdminListScreenRowsAndCmdFields(t *testing.T) {
+	v := AdminListView{
+		Title:   "TN3270 GATEWAY ADMIN: USERS",
+		RowInfo: "ROW 1 TO 2 OF 2",
+		Header:  "CMD  USERNAME     GROUPS",
+		Rows:    []string{"alice  ops", "bob    dev"},
+		Legend:  "S = set password",
+		ErrMsg:  "oops",
+		PFHelp:  "Enter = process",
+	}
+	screen := AdminListScreen(v)
+	for i := range v.Rows {
+		name := fmt.Sprintf("%s%d", FieldCmdPrefix, i)
+		f, ok := fieldByName(screen, name)
+		if !ok {
+			t.Fatalf("missing cmd field %q", name)
+		}
+		if !f.Write {
+			t.Errorf("%q not writable", name)
+		}
+	}
+	if _, ok := fieldByName(screen, fmt.Sprintf("%s%d", FieldCmdPrefix, 2)); ok {
+		t.Errorf("unexpected extra cmd field")
+	}
+	for _, want := range []string{"alice  ops", "bob    dev", "ROW 1 TO 2 OF 2", "S = set password"} {
+		if !screenContains(screen, want) {
+			t.Errorf("screen missing %q", want)
+		}
+	}
+	f, _ := fieldByName(screen, FieldError)
+	if f.Content != "oops" {
+		t.Errorf("error = %q", f.Content)
+	}
+}
+
+func TestAdminListScreenEmpty(t *testing.T) {
+	screen := AdminListScreen(AdminListView{Title: "T"})
+	if _, ok := fieldByName(screen, FieldCmdPrefix+"0"); ok {
+		t.Errorf("empty list should have no cmd fields")
+	}
+	if !screenContains(screen, "(none)") {
+		t.Errorf("empty list should say (none)")
 	}
 }

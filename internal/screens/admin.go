@@ -1,6 +1,8 @@
 package screens
 
 import (
+	"fmt"
+
 	"github.com/racingmars/go3270"
 )
 
@@ -19,6 +21,47 @@ const (
 // AdminListPageSize is how many data rows fit on an admin list screen
 // (rows 4..17 of the fixed 24x80 layout).
 const AdminListPageSize = 14
+
+// AdminListView is the view model for an ISPF-style admin list screen: one
+// 1-character CMD input per data row plus bottom-anchored legend, error, and
+// help lines. The flow layer composes these for users/groups/services.
+type AdminListView struct {
+	Title   string   // row-0 title
+	RowInfo string   // row-0 right side, e.g. "ROW 1 TO 14 OF 30"
+	Header  string   // column header line
+	Rows    []string // pre-formatted data rows (CMD inputs added by the builder)
+	Legend  string   // line-command legend
+	ErrMsg  string   // error / confirm-prompt line
+	PFHelp  string   // bottom help line
+}
+
+// AdminListScreen renders v. Data rows start at row 4; the CMD input for row i
+// is named FieldCmdPrefix+i ("cmd0", "cmd1", ...). At most AdminListPageSize
+// rows fit.
+func AdminListScreen(v AdminListView) go3270.Screen {
+	screen := go3270.Screen{
+		{Row: 0, Col: 2, Intense: true, Content: v.Title},
+		{Row: 0, Col: 60, Content: v.RowInfo},
+		{Row: 2, Col: 2, Content: v.Header},
+	}
+	for i, r := range v.Rows {
+		row := 4 + i
+		screen = append(screen,
+			go3270.Field{Row: row, Col: 2, Name: fmt.Sprintf("%s%d", FieldCmdPrefix, i), Write: true, Highlighting: go3270.Underscore},
+			go3270.Field{Row: row, Col: 4}, // stop field: 1-char command input
+			go3270.Field{Row: row, Col: 7, Content: r},
+		)
+	}
+	if len(v.Rows) == 0 {
+		screen = append(screen, go3270.Field{Row: 4, Col: 7, Content: "(none)"})
+	}
+	screen = append(screen,
+		go3270.Field{Row: 20, Col: 2, Content: v.Legend},
+		go3270.Field{Row: 21, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
+		go3270.Field{Row: 23, Col: 2, Content: v.PFHelp},
+	)
+	return screen
+}
 
 // AdminMenuScreen renders the top-level admin menu. The caller drives it with
 // HandleScreen: AIDEnter submits, PF3/PA3 exit (both return to the service
