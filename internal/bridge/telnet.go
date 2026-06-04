@@ -94,7 +94,11 @@ func (p *telnetProcessor) process(in []byte) (forward, reply []byte, escaped boo
 			if p.atRecStart {
 				p.atRecStart = false
 				if p.escapeAID != 0 && b == p.escapeAID {
-					escaped = true
+					// Escape detected: drop the AID byte and everything after
+					// it in this chunk. The escape record must never reach the
+					// backend — the user is leaving the session, and bridge
+					// teardown follows, so the processor is not reused.
+					return forward, reply, true
 				}
 			}
 			forward = append(forward, b)
