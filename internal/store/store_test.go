@@ -3,8 +3,11 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 )
 
 // newTestStore opens a fresh migrated store in a temp directory.
@@ -86,5 +89,64 @@ func TestOpenCreatesTables(t *testing.T) {
 		if err != nil {
 			t.Errorf("table %q not found: %v", table, err)
 		}
+	}
+}
+
+func TestOpenPragmas(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+
+	var journalMode string
+	if err := st.db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err != nil {
+		t.Fatalf("PRAGMA journal_mode: %v", err)
+	}
+	if journalMode != "wal" {
+		t.Errorf("journal_mode = %q, want wal", journalMode)
+	}
+
+	var foreignKeys int
+	if err := st.db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
+		t.Fatalf("PRAGMA foreign_keys: %v", err)
+	}
+	if foreignKeys != 1 {
+		t.Errorf("foreign_keys = %d, want 1", foreignKeys)
+	}
+}
+
+// TestConcurrentAuditInserts fails with "database is locked" before the fix (busy_timeout=0, delete mode).
+func TestConcurrentAuditInserts(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	const workers = 20
+	at := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func(i int) {
+			defer wg.Done()
+			errs <- st.RecordAudit(ctx, AuditEvent{
+				At:        at,
+				SessionID: fmt.Sprintf("s%d", i),
+				Kind:      AuditConnect,
+			})
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Errorf("concurrent insert: %v", err)
+		}
+	}
+
+	got, err := st.ListAudit(ctx, AuditFilter{Limit: workers + 1})
+	if err != nil {
+		t.Fatalf("ListAudit: %v", err)
+	}
+	if len(got) != workers {
+		t.Errorf("want %d audit rows, got %d", workers, len(got))
 	}
 }
