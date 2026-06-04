@@ -58,8 +58,14 @@ func runServe(args []string) error {
 		fmt.Printf("tn3270proxy listening (tls) on %s (db=%s)\n", cfg.TLS.Addr, cfg.DBPath)
 	}
 
-	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3)
-	return server.ServeAll(listeners, handler)
+	limits := server.Limits{
+		PreAuthIdle: cfg.Limits.PreAuthIdle,
+		Idle:        cfg.Limits.Idle,
+		MaxConns:    cfg.Limits.MaxConns,
+		MaxPerIP:    cfg.Limits.MaxPerIP,
+	}
+	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits)
+	return server.ServeAll(listeners, handler, limits)
 }
 
 func runSeed(args []string) error {
