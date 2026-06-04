@@ -121,7 +121,7 @@ func TestAdminFormScreenTruncatesOverflow(t *testing.T) {
 	for i := range fields {
 		fields[i] = AdminFormField{Name: fmt.Sprintf("f%d", i), Label: "L", Length: 8}
 	}
-	screen := AdminFormScreen(DefaultGeometry, AdminFormView{Title: "T", Fields: fields})
+	screen, _ := AdminFormScreen(DefaultGeometry, AdminFormView{Title: "T", Fields: fields})
 	if _, ok := fieldByName(screen, fmt.Sprintf("f%d", DefaultGeometry.FormMaxFields()-1)); !ok {
 		t.Errorf("missing last in-form field")
 	}
@@ -139,7 +139,7 @@ func TestAdminFormScreenFields(t *testing.T) {
 		},
 		ErrMsg: "bad",
 	}
-	screen := AdminFormScreen(DefaultGeometry, v)
+	screen, _ := AdminFormScreen(DefaultGeometry, v)
 	u, ok := fieldByName(screen, FieldUsername)
 	if !ok || !u.Write || u.Content != "alice" || u.Hidden {
 		t.Errorf("username field = %+v, ok=%v", u, ok)
@@ -184,7 +184,7 @@ func TestAdminScreensBottomAnchored(t *testing.T) {
 		t.Errorf("legend on %d / help on %d not found (legendOK=%v helpOK=%v)", g.LegendRow(), g.HelpRow(), legendOK, helpOK)
 	}
 
-	form := AdminFormScreen(g, AdminFormView{Title: "T", ErrMsg: "E"})
+	form, _ := AdminFormScreen(g, AdminFormView{Title: "T", ErrMsg: "E"})
 	e, _ = fieldByName(form, FieldError)
 	if e.Row != g.ErrorRow() {
 		t.Errorf("form error row = %d, want %d", e.Row, g.ErrorRow())
@@ -228,6 +228,18 @@ func TestAdminListScreenCursorEmptyHomes(t *testing.T) {
 	_, cur := AdminListScreen(DefaultGeometry, AdminListView{Title: "T"})
 	if cur != (Cursor{Row: 0, Col: 0}) {
 		t.Errorf("empty-list cursor = %+v, want {0 0} (home)", cur)
+	}
+}
+
+func TestAdminFormScreenCursor(t *testing.T) {
+	fields := []AdminFormField{{Name: FieldName, Label: "Name"}, {Name: FieldHost, Label: "Host"}}
+	screen, cur := AdminFormScreen(DefaultGeometry, AdminFormView{Title: "T", Fields: fields})
+	ff, ok := fieldByName(screen, FieldName)
+	if !ok {
+		t.Fatalf("missing %q field", FieldName)
+	}
+	if want := cursorAt(ff); cur != want {
+		t.Errorf("form cursor = %+v, want %+v (first field row %d col %d)", cur, want, ff.Row, ff.Col)
 	}
 }
 
