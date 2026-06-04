@@ -44,8 +44,10 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 
 ```
 cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, and `audit list|prune`; wires everything
-internal/config   Config{DBPath, Plain, TLS}; Load(args) merges defaults<file<flags.
-                  Optional JSON file (tn3270proxy.json) defines plain+tls listeners.
+internal/config   Config{DBPath, Plain, TLS, Limits}; Load(args) merges defaults<file<flags.
+                  Optional JSON file (tn3270proxy.json) defines plain+tls listeners and a
+                  `limits` section (pre_auth_idle/idle as Go duration strings, max_conns,
+                  max_per_ip; defaults 2m/30m/512/16, max_per_ip 0 disables).
 internal/listen   Build(cfg) → []net.Listener (plaintext + tls.NewListener, immediate TLS).
 internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + group-gated
                   ListServicesForGroups. All Create* are idempotent (INSERT OR IGNORE).
@@ -78,6 +80,12 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
                   Auditor seam (best-effort store-backed auditing; nil disables) +
                   storeAuditor + per-connection auditTrail record session lifecycle events.
+                  Hardening (GH issue #1): idleConn wraps every conn and arms an idle
+                  deadline around each Read/Write (pre-auth window → wider post-auth via
+                  the idleSetter seam; deadline-fired disconnects audit as "idle timeout");
+                  connLimiter (shared across listeners by ServeAll(…, Limits)) claims a
+                  global slot BEFORE Accept (over-cap conns wait in the kernel backlog)
+                  and enforces the per-IP cap after Accept by closing.
 ```
 
 Data flow: `main → Server.Serve` (accept) → `Session.Run` → `Presenter` (go3270 screens) /

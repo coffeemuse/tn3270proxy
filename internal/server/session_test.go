@@ -18,7 +18,8 @@ import (
 
 type fakePresenter struct {
 	termType     string
-	rows, cols   int // 0,0 → Negotiate reports 24×80
+	rows, cols   int   // 0,0 → Negotiate reports 24×80
+	negErr       error // non-nil → Negotiate fails
 	logins       []loginResult
 	menuPicks    []menuResult
 	menuErrors   []string
@@ -40,6 +41,9 @@ type menuResult struct {
 }
 
 func (f *fakePresenter) Negotiate(conn net.Conn) (Term, error) {
+	if f.negErr != nil {
+		return Term{}, f.negErr
+	}
 	rows, cols := f.rows, f.cols
 	if rows == 0 {
 		rows, cols = 24, 80
