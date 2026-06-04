@@ -2,7 +2,9 @@ package seed
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
@@ -66,6 +68,27 @@ func TestApplyIsIdempotent(t *testing.T) {
 	svcs, _ := st.ListServicesForGroups(ctx, []string{"ops"})
 	if len(svcs) != 1 {
 		t.Errorf("expected 1 service after double seed, got %d", len(svcs))
+	}
+}
+
+func TestApplyRejectsTooLongPasswordWithoutPartialWrite(t *testing.T) {
+	ctx := context.Background()
+	st, _ := store.Open(filepath.Join(t.TempDir(), "seed.db"))
+	defer st.Close()
+	data := SeedData{
+		Users: []SeedUser{
+			{Username: "alice", Password: "ok"},
+			{Username: "bob", Password: strings.Repeat("a", 73)}, // > 72-byte bcrypt limit
+		},
+	}
+	err := Apply(ctx, st, data)
+	if !errors.Is(err, auth.ErrPasswordTooLong) {
+		t.Fatalf("Apply err = %v, want ErrPasswordTooLong", err)
+	}
+	// Pre-validation must run before any writes: the earlier valid user must
+	// NOT have been committed (no partial state).
+	if _, err := st.GetUserByUsername(ctx, "alice"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("alice should not be created when a later user is invalid: %v", err)
 	}
 }
 

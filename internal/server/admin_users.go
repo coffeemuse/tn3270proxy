@@ -155,6 +155,9 @@ func passwordFromForm(values map[string]string) (string, string) {
 	if pass != retype {
 		return "", "PASSWORDS DO NOT MATCH"
 	}
+	if errors.Is(auth.ValidatePassword(pass), auth.ErrPasswordTooLong) {
+		return "", fmt.Sprintf("PASSWORD TOO LONG (MAX %d BYTES)", auth.MaxPasswordLen)
+	}
 	return pass, ""
 }
 
