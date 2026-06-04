@@ -216,6 +216,26 @@ func TestAdminUserAddPasswordMismatch(t *testing.T) {
 	}
 }
 
+func TestAdminUserAddPasswordTooLong(t *testing.T) {
+	long := strings.Repeat("a", 73) // > bcrypt's 72-byte limit
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{
+			{Values: map[string]string{screens.FieldUsername: "dave", screens.FieldPassword: long, screens.FieldRetype: long}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if msg := p.gotForms[len(p.gotForms)-1].ErrMsg; msg != "PASSWORD TOO LONG (MAX 72 BYTES)" {
+		t.Errorf("errMsg = %q", msg)
+	}
+	if _, err := f.store.GetUserByUsername(context.Background(), "dave"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("dave should not exist: %v", err)
+	}
+}
+
 func TestAdminSetPassword(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
