@@ -431,4 +431,42 @@ func TestSessionAuditsConnectAndDisconnect(t *testing.T) {
 	if rec.events[0].SessionID != rec.events[1].SessionID {
 		t.Error("session ids differ within one connection")
 	}
+	disc := rec.events[1]
+	if disc.Detail != "quit at login" {
+		t.Errorf("disconnect detail = %q, want %q", disc.Detail, "quit at login")
+	}
+	if disc.Username != "" {
+		t.Errorf("disconnect username = %q, want empty (quit before login)", disc.Username)
+	}
+}
+
+func TestSessionAuditsDisconnectAfterClientClosed(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "alice", pass: "good"}},
+		menuPicks: []menuResult{{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}}},
+	}
+	b := &fakeBridger{causes: []bridge.Cause{bridge.CauseClientClosed}}
+	s := newTestSession(t, p, b)
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if b.calls != 1 {
+		t.Errorf("bridge calls = %d, want 1", b.calls)
+	}
+	kinds := rec.kinds()
+	if len(kinds) == 0 || kinds[len(kinds)-1] != store.AuditDisconnect {
+		t.Fatalf("last event kind = %v, want disconnect", kinds)
+	}
+	disc := rec.events[len(rec.events)-1]
+	if disc.Detail != "client closed during bridge" {
+		t.Errorf("disconnect detail = %q, want %q", disc.Detail, "client closed during bridge")
+	}
+	if disc.Username != "alice" {
+		t.Errorf("disconnect username = %q, want %q", disc.Username, "alice")
+	}
 }
