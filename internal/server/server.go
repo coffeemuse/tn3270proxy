@@ -130,23 +130,32 @@ func ServeAll(listeners []net.Listener, handler connHandler, limits Limits) erro
 	if len(listeners) == 0 {
 		return errors.New("server: no listeners")
 	}
-	errc := make(chan error, len(listeners))
-	var once sync.Once
 	closeAll := func() {
 		for _, ln := range listeners {
 			ln.Close()
 		}
 	}
+	// The first listener to fail records its error and triggers closeAll, both
+	// guarded by the same sync.Once. closeAll wakes the healthy listeners'
+	// Accept with a benign "use of closed network connection", but those errors
+	// reach record only after the Once has fired, so they are dropped and can
+	// never mask the genuine root cause (issue #13).
+	var (
+		once  sync.Once
+		first error
+		wg    sync.WaitGroup
+	)
+	record := func(err error) {
+		once.Do(func() {
+			first = err
+			closeAll()
+		})
+	}
 	for _, srv := range newServers(listeners, handler, limits) {
-		go func() {
-			err := srv.Serve()
-			once.Do(closeAll)
-			errc <- err
-		}()
+		wg.Go(func() {
+			record(srv.Serve())
+		})
 	}
-	first := <-errc
-	for i := 1; i < len(listeners); i++ {
-		<-errc
-	}
+	wg.Wait()
 	return first
 }
