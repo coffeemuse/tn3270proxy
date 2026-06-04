@@ -55,12 +55,13 @@ CREATE TABLE IF NOT EXISTS user_groups (
 	PRIMARY KEY (user_id, group_id)
 );
 CREATE TABLE IF NOT EXISTS services (
-	id         INTEGER PRIMARY KEY,
-	name       TEXT UNIQUE NOT NULL,
-	host       TEXT NOT NULL,
-	port       INTEGER NOT NULL,
-	tls        INTEGER NOT NULL DEFAULT 0,
-	tls_verify INTEGER NOT NULL DEFAULT 1
+	id          INTEGER PRIMARY KEY,
+	name        TEXT UNIQUE COLLATE NOCASE NOT NULL,
+	description TEXT NOT NULL,
+	host        TEXT NOT NULL,
+	port        INTEGER NOT NULL,
+	tls         INTEGER NOT NULL DEFAULT 0,
+	tls_verify  INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS group_services (
 	group_id   INTEGER NOT NULL REFERENCES groups(id),
@@ -89,6 +90,13 @@ func (s *Store) migrate() error {
 	// EXISTS, so add it explicitly (idempotent: skipped when already present).
 	if err := s.ensureColumn("services", "tls_verify",
 		"ALTER TABLE services ADD COLUMN tls_verify INTEGER NOT NULL DEFAULT 1"); err != nil {
+		return err
+	}
+	// Existing DBs predating description won't get it from CREATE TABLE IF NOT
+	// EXISTS, so add it explicitly (idempotent: skipped when already present).
+	// Default '' is acceptable for legacy rows; new rows require non-empty via CreateService.
+	if err := s.ensureColumn("services", "description",
+		"ALTER TABLE services ADD COLUMN description TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	// The reserved admin group always exists; seeding only assigns members.
@@ -224,16 +232,58 @@ func (s *Store) insertOrGet(ctx context.Context, insertSQL string, insertArgs []
 
 // Service is a backend TN3270 host the menu can offer.
 type Service struct {
-	ID        int64
-	Name      string
-	Host      string
-	Port      int
-	TLS       bool
-	TLSVerify bool
+	ID          int64
+	Name        string
+	Description string
+	Host        string
+	Port        int
+	TLS         bool
+	TLSVerify   bool
+}
+
+const (
+	MaxServiceNameLen = 8
+	MaxDescriptionLen = 40
+)
+
+// NormalizeServiceName folds name to uppercase and validates it as a service
+// identifier: 1-8 characters, A-Z and 0-9 only. It returns the normalized name
+// or an error naming the rule violated.
+func NormalizeServiceName(name string) (string, error) {
+	n := strings.ToUpper(strings.TrimSpace(name))
+	if n == "" {
+		return "", errors.New("service name is required")
+	}
+	if len(n) > MaxServiceNameLen {
+		return "", errors.New("service name must be 8 characters or fewer")
+	}
+	for _, r := range n {
+		if !((r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return "", errors.New("service name may contain only letters A-Z and digits 0-9")
+		}
+	}
+	return n, nil
+}
+
+func validateDescription(desc string) error {
+	if desc == "" {
+		return errors.New("description is required")
+	}
+	if len(desc) > MaxDescriptionLen {
+		return errors.New("description must be 40 characters or fewer")
+	}
+	return nil
 }
 
 // CreateService inserts a service, or returns the existing service's id.
-func (s *Store) CreateService(ctx context.Context, name, host string, port int, tls, verify bool) (int64, error) {
+func (s *Store) CreateService(ctx context.Context, name, description, host string, port int, tls, verify bool) (int64, error) {
+	name, err := NormalizeServiceName(name)
+	if err != nil {
+		return 0, err
+	}
+	if err := validateDescription(description); err != nil {
+		return 0, err
+	}
 	tlsInt := 0
 	if tls {
 		tlsInt = 1
@@ -243,8 +293,8 @@ func (s *Store) CreateService(ctx context.Context, name, host string, port int, 
 		verifyInt = 1
 	}
 	return s.insertOrGet(ctx,
-		"INSERT OR IGNORE INTO services (name, host, port, tls, tls_verify) VALUES (?, ?, ?, ?, ?)",
-		[]any{name, host, port, tlsInt, verifyInt},
+		"INSERT OR IGNORE INTO services (name, description, host, port, tls, tls_verify) VALUES (?, ?, ?, ?, ?, ?)",
+		[]any{name, description, host, port, tlsInt, verifyInt},
 		"SELECT id FROM services WHERE name = ?",
 		[]any{name})
 }
@@ -269,7 +319,7 @@ func (s *Store) ListServicesForGroups(ctx context.Context, groups []string) ([]S
 		placeholders[i] = "?"
 		args[i] = g
 	}
-	query := `SELECT DISTINCT s.id, s.name, s.host, s.port, s.tls, s.tls_verify
+	query := `SELECT DISTINCT s.id, s.name, s.description, s.host, s.port, s.tls, s.tls_verify
 		FROM services s
 		JOIN group_services gs ON gs.service_id = s.id
 		JOIN groups g ON g.id = gs.group_id

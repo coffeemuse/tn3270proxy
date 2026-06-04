@@ -67,7 +67,7 @@ func TestMigrateAddsVerifyToLegacyDB(t *testing.T) {
 	defer st.Close()
 
 	ops, _ := st.CreateGroup(ctx, "ops")
-	sid, _ := st.CreateService(ctx, "SEC", "sec.example", 992, true, true)
+	sid, _ := st.CreateService(ctx, "SEC", "Secure Host", "sec.example", 992, true, true)
 	st.LinkGroupService(ctx, ops, sid)
 
 	svcs, err := st.ListServicesForGroups(ctx, []string{"ops"})
@@ -179,5 +179,56 @@ func TestConcurrentAuditInserts(t *testing.T) {
 	}
 	if len(got) != workers {
 		t.Errorf("want %d audit rows, got %d", workers, len(got))
+	}
+}
+
+func TestNormalizeServiceName(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"prod", "PROD", false},
+		{" Tso ", "TSO", false},
+		{"PRODCICS", "PRODCICS", false},
+		{"prod cics", "", true},
+		{"PROD_CICS", "", true},
+		{"TOOLONGNM", "", true},
+		{"", "", true},
+	}
+	for _, c := range cases {
+		got, err := NormalizeServiceName(c.in)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("NormalizeServiceName(%q) = %q, want error", c.in, got)
+			}
+			continue
+		}
+		if err != nil || got != c.want {
+			t.Errorf("NormalizeServiceName(%q) = (%q, %v), want (%q, nil)", c.in, got, err, c.want)
+		}
+	}
+}
+
+func TestCreateServiceFoldsNameAndRequiresDescription(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	id, err := st.CreateService(ctx, "prod", "Production CICS", "h", 23, false, true)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id2, err := st.CreateService(ctx, "PROD", "Production CICS", "h", 23, false, true)
+	if err != nil || id2 != id {
+		t.Fatalf("dedup create = (%d, %v), want same id %d", id2, err, id)
+	}
+	svcs, _ := st.ListAllServices(ctx)
+	if len(svcs) != 1 || svcs[0].Name != "PROD" || svcs[0].Description != "Production CICS" {
+		t.Fatalf("services = %+v, want one PROD/Production CICS", svcs)
+	}
+	if _, err := st.CreateService(ctx, "TSO", "", "h", 23, false, true); err == nil {
+		t.Error("empty description: want error, got nil")
+	}
+	if _, err := st.CreateService(ctx, "bad name", "desc", "h", 23, false, true); err == nil {
+		t.Error("invalid name: want error, got nil")
 	}
 }

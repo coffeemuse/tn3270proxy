@@ -34,8 +34,8 @@ func TestUserAndGroupRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUserGroups: %v", err)
 	}
-	if len(groups) != 1 || groups[0] != "ops" {
-		t.Errorf("groups = %v, want [ops]", groups)
+	if len(groups) != 1 || groups[0] != "OPS" {
+		t.Errorf("groups = %v, want [OPS]", groups)
 	}
 }
 
