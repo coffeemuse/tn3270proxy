@@ -37,7 +37,7 @@ func screenContains(s go3270.Screen, sub string) bool {
 }
 
 func TestAdminMenuScreenFields(t *testing.T) {
-	screen := AdminMenuScreen(DefaultGeometry, "boom")
+	screen, _ := AdminMenuScreen(DefaultGeometry, "boom")
 	f, ok := fieldByName(screen, FieldOption)
 	if !ok {
 		t.Errorf("missing %q field", FieldOption)
@@ -66,7 +66,7 @@ func TestAdminListScreenRowsAndCmdFields(t *testing.T) {
 		ErrMsg:  "oops",
 		PFHelp:  "Enter = process",
 	}
-	screen := AdminListScreen(DefaultGeometry, v)
+	screen, _ := AdminListScreen(DefaultGeometry, v)
 	for i := range v.Rows {
 		name := fmt.Sprintf("%s%d", FieldCmdPrefix, i)
 		f, ok := fieldByName(screen, name)
@@ -92,7 +92,7 @@ func TestAdminListScreenRowsAndCmdFields(t *testing.T) {
 }
 
 func TestAdminListScreenEmpty(t *testing.T) {
-	screen := AdminListScreen(DefaultGeometry, AdminListView{Title: "T"})
+	screen, _ := AdminListScreen(DefaultGeometry, AdminListView{Title: "T"})
 	if _, ok := fieldByName(screen, FieldCmdPrefix+"0"); ok {
 		t.Errorf("empty list should have no cmd fields")
 	}
@@ -106,7 +106,7 @@ func TestAdminListScreenTruncatesOverflow(t *testing.T) {
 	for i := range rows {
 		rows[i] = fmt.Sprintf("row%d", i)
 	}
-	screen := AdminListScreen(DefaultGeometry, AdminListView{Title: "T", Rows: rows})
+	screen, _ := AdminListScreen(DefaultGeometry, AdminListView{Title: "T", Rows: rows})
 	last := fmt.Sprintf("%s%d", FieldCmdPrefix, DefaultGeometry.ListPageSize()-1)
 	if _, ok := fieldByName(screen, last); !ok {
 		t.Errorf("missing last in-page cmd field %q", last)
@@ -121,7 +121,7 @@ func TestAdminFormScreenTruncatesOverflow(t *testing.T) {
 	for i := range fields {
 		fields[i] = AdminFormField{Name: fmt.Sprintf("f%d", i), Label: "L", Length: 8}
 	}
-	screen := AdminFormScreen(DefaultGeometry, AdminFormView{Title: "T", Fields: fields})
+	screen, _ := AdminFormScreen(DefaultGeometry, AdminFormView{Title: "T", Fields: fields})
 	if _, ok := fieldByName(screen, fmt.Sprintf("f%d", DefaultGeometry.FormMaxFields()-1)); !ok {
 		t.Errorf("missing last in-form field")
 	}
@@ -139,7 +139,7 @@ func TestAdminFormScreenFields(t *testing.T) {
 		},
 		ErrMsg: "bad",
 	}
-	screen := AdminFormScreen(DefaultGeometry, v)
+	screen, _ := AdminFormScreen(DefaultGeometry, v)
 	u, ok := fieldByName(screen, FieldUsername)
 	if !ok || !u.Write || u.Content != "alice" || u.Hidden {
 		t.Errorf("username field = %+v, ok=%v", u, ok)
@@ -160,13 +160,13 @@ func TestAdminFormScreenFields(t *testing.T) {
 func TestAdminScreensBottomAnchored(t *testing.T) {
 	g := Geometry{Rows: 32, Cols: 80}
 
-	menu := AdminMenuScreen(g, "boom")
+	menu, _ := AdminMenuScreen(g, "boom")
 	opt, _ := fieldByName(menu, FieldOption)
 	if opt.Row != g.InputRow() {
 		t.Errorf("admin menu option row = %d, want %d", opt.Row, g.InputRow())
 	}
 
-	list := AdminListScreen(g, AdminListView{Title: "T", Legend: "L", ErrMsg: "E", PFHelp: "H", Rows: []string{"r"}})
+	list, _ := AdminListScreen(g, AdminListView{Title: "T", Legend: "L", ErrMsg: "E", PFHelp: "H", Rows: []string{"r"}})
 	e, _ := fieldByName(list, FieldError)
 	if e.Row != g.ErrorRow() {
 		t.Errorf("list error row = %d, want %d", e.Row, g.ErrorRow())
@@ -184,7 +184,7 @@ func TestAdminScreensBottomAnchored(t *testing.T) {
 		t.Errorf("legend on %d / help on %d not found (legendOK=%v helpOK=%v)", g.LegendRow(), g.HelpRow(), legendOK, helpOK)
 	}
 
-	form := AdminFormScreen(g, AdminFormView{Title: "T", ErrMsg: "E"})
+	form, _ := AdminFormScreen(g, AdminFormView{Title: "T", ErrMsg: "E"})
 	e, _ = fieldByName(form, FieldError)
 	if e.Row != g.ErrorRow() {
 		t.Errorf("form error row = %d, want %d", e.Row, g.ErrorRow())
@@ -200,13 +200,56 @@ func TestAdminScreensBottomAnchored(t *testing.T) {
 	}
 }
 
+func TestAdminMenuScreenCursor(t *testing.T) {
+	screen, cur := AdminMenuScreen(DefaultGeometry, "")
+	of, ok := fieldByName(screen, FieldOption)
+	if !ok {
+		t.Fatalf("missing %q field", FieldOption)
+	}
+	if want := cursorAt(of); cur != want {
+		t.Errorf("admin menu cursor = %+v, want %+v (option field row %d col %d)", cur, want, of.Row, of.Col)
+	}
+}
+
+func TestAdminListScreenCursorPopulated(t *testing.T) {
+	screen, cur := AdminListScreen(DefaultGeometry, AdminListView{Title: "T", Rows: []string{"r0", "r1"}})
+	cf, ok := fieldByName(screen, FieldCmdPrefix+"0")
+	if !ok {
+		t.Fatalf("missing %q field", FieldCmdPrefix+"0")
+	}
+	if want := cursorAt(cf); cur != want {
+		t.Errorf("list cursor = %+v, want %+v (cmd0 field row %d col %d)", cur, want, cf.Row, cf.Col)
+	}
+}
+
+func TestAdminListScreenCursorEmptyHomes(t *testing.T) {
+	// No CMD input fields exist on an empty list, so the builder homes the
+	// cursor to (0,0) — the one place that knows len(Rows)==0.
+	_, cur := AdminListScreen(DefaultGeometry, AdminListView{Title: "T"})
+	if cur != (Cursor{Row: 0, Col: 0}) {
+		t.Errorf("empty-list cursor = %+v, want {0 0} (home)", cur)
+	}
+}
+
+func TestAdminFormScreenCursor(t *testing.T) {
+	fields := []AdminFormField{{Name: FieldName, Label: "Name"}, {Name: FieldHost, Label: "Host"}}
+	screen, cur := AdminFormScreen(DefaultGeometry, AdminFormView{Title: "T", Fields: fields})
+	ff, ok := fieldByName(screen, FieldName)
+	if !ok {
+		t.Fatalf("missing %q field", FieldName)
+	}
+	if want := cursorAt(ff); cur != want {
+		t.Errorf("form cursor = %+v, want %+v (first field row %d col %d)", cur, want, ff.Row, ff.Col)
+	}
+}
+
 func TestAdminListScreenPageSizeGrowsWithRows(t *testing.T) {
 	g := Geometry{Rows: 32, Cols: 80} // page size 22
 	rows := make([]string, 25)
 	for i := range rows {
 		rows[i] = fmt.Sprintf("row%d", i)
 	}
-	screen := AdminListScreen(g, AdminListView{Title: "T", Rows: rows})
+	screen, _ := AdminListScreen(g, AdminListView{Title: "T", Rows: rows})
 	last := fmt.Sprintf("%s%d", FieldCmdPrefix, g.ListPageSize()-1)
 	if _, ok := fieldByName(screen, last); !ok {
 		t.Errorf("missing last in-page cmd field %q", last)

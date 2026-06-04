@@ -139,6 +139,11 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   one column right. `(0,0)` or the field's own `Col` leaves the cursor in the wrong place.
   Unit tests do NOT catch this; only a real emulator does (s3270's status line reports
   cursor row/col — the smoke script asserts it; see the s3270-smoke-testing skill).
+  Builders now own this (GH #33): each screen builder returns a `screens.Cursor` computed
+  via the single `cursorAt(field)` helper (`internal/screens/cursor.go`), and presenters
+  consume it instead of hardcoding coordinates — so moving a field moves its cursor
+  automatically (an empty admin list homes to `{0,0}`). The smoke script asserts cursor
+  row/col per screen as the regression guard.
 - **Screen layout convention** (all screens are 0-based, 24 rows = 0..23): title on **row 0**,
   the **error line just above** the action/help line, and the **PF-key help on the last row
   (`geom.HelpRow()`; 23 on a MOD 2)**. Cursor lands on the primary input field per the rule
