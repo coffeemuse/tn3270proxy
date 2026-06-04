@@ -103,7 +103,7 @@ so the session is unit-tested with fakes (no live 3270 client needed).
 - **Reserved groups:** `ZZ*` (case-insensitive, `store.ReservedGroupPrefix`) group names are
   app-dictated; `store.AdminGroup` (`ZZADMIN`) is auto-created by `migrate()`. The admin UI
   can't create/delete `ZZ*` groups, only manage membership. Guardrails: no self-delete, never
-  empty ZZADMIN. Admin changes apply at the next menu render/login — live sessions are not
+  empty ZZADMIN, no self-demotion from ZZADMIN. Admin changes apply at the next menu render/login — live sessions are not
   re-evaluated.
 - **No credential logging, ever.** Lifecycle logging uses stdlib `log`; usernames are OK to
   log, passwords/Login() contents are not; `auth.HashPassword` is the single bcrypt path

@@ -310,8 +310,15 @@ func (f *adminFlow) userGroups(ctx context.Context, conn net.Conn, u store.User)
 				}
 			case 'R':
 				if g.Name == store.AdminGroup && member[g.Name] {
+					// Last-admin guard first: a sole admin self-removing gets the
+					// more informative "last admin" message; the self-demotion
+					// guard then catches the ≥2-admins fat-finger case.
 					if msg := f.guardLastAdmin(ctx); msg != "" {
 						errMsg = msg
+						continue
+					}
+					if u.ID == f.identity.UserID {
+						errMsg = "CANNOT REMOVE YOUR OWN ADMIN MEMBERSHIP"
 						continue
 					}
 				}
