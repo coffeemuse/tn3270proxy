@@ -106,6 +106,21 @@ func NewSessionHandler(st *store.Store, escapeAID byte, limits Limits) connHandl
 	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits}
 }
 
+// newServers builds one Server per listener, all sharing handler and one
+// connection limiter (the caps in limits are process-wide, not per-listener;
+// MaxConns 0 means unlimited).
+func newServers(listeners []net.Listener, handler connHandler, limits Limits) []*Server {
+	var limiter *connLimiter
+	if limits.MaxConns > 0 {
+		limiter = newConnLimiter(limits.MaxConns, limits.MaxPerIP)
+	}
+	servers := make([]*Server, len(listeners))
+	for i, ln := range listeners {
+		servers[i] = &Server{Listener: ln, Handler: handler, Limiter: limiter}
+	}
+	return servers
+}
+
 // ServeAll runs one accept loop per listener, all sharing handler and one
 // connection limiter (the caps in limits are process-wide, not per-listener).
 // The first listener error closes the remaining listeners (unblocking their
@@ -115,10 +130,6 @@ func ServeAll(listeners []net.Listener, handler connHandler, limits Limits) erro
 	if len(listeners) == 0 {
 		return errors.New("server: no listeners")
 	}
-	var limiter *connLimiter
-	if limits.MaxConns > 0 {
-		limiter = newConnLimiter(limits.MaxConns, limits.MaxPerIP)
-	}
 	errc := make(chan error, len(listeners))
 	var once sync.Once
 	closeAll := func() {
@@ -126,8 +137,7 @@ func ServeAll(listeners []net.Listener, handler connHandler, limits Limits) erro
 			ln.Close()
 		}
 	}
-	for _, ln := range listeners {
-		srv := &Server{Listener: ln, Handler: handler, Limiter: limiter}
+	for _, srv := range newServers(listeners, handler, limits) {
 		go func() {
 			err := srv.Serve()
 			once.Do(closeAll)
