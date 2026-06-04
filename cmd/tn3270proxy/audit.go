@@ -84,6 +84,10 @@ func runAuditList(args []string) error {
 // printAuditEvents writes one event per line: time, kind, session, user,
 // remote, service, detail.
 func printAuditEvents(w io.Writer, events []store.AuditEvent) {
+	if len(events) == 0 {
+		fmt.Fprintln(w, "no audit events")
+		return
+	}
 	for _, ev := range events {
 		fmt.Fprintf(w, "%s  %-12s %s  %-12s %-21s %-12s %s\n",
 			ev.At.Format(time.RFC3339), ev.Kind, ev.SessionID,

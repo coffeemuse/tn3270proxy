@@ -78,3 +78,11 @@ func TestPrintAuditEvents(t *testing.T) {
 		t.Errorf("output lines = %d, want 2:\n%s", n, out)
 	}
 }
+
+func TestPrintAuditEventsEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	printAuditEvents(&buf, nil)
+	if got := buf.String(); got != "no audit events\n" {
+		t.Errorf("printAuditEvents(nil) = %q, want %q", got, "no audit events\n")
+	}
+}
