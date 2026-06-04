@@ -72,7 +72,7 @@ func TestListUsersOrdered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(users) != 2 || users[0].Username != "abe" || users[1].Username != "zoe" {
+	if len(users) != 2 || users[0].Username != "ABE" || users[1].Username != "ZOE" {
 		t.Fatalf("users = %+v", users)
 	}
 }
@@ -85,9 +85,8 @@ func TestListGroupsOrderedIncludesAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// ORDER BY name is binary: uppercase sorts before lowercase, so
-	// ZZADMIN (auto-created by migrate) comes before ops.
-	if len(groups) != 2 || groups[0].Name != AdminGroup || groups[1].Name != "ops" {
+	// All names are now canonical uppercase; ORDER BY name: OPS < ZZADMIN.
+	if len(groups) != 2 || groups[0].Name != "OPS" || groups[1].Name != AdminGroup {
 		t.Fatalf("groups = %+v", groups)
 	}
 	if groups[0].ID == 0 {
@@ -98,8 +97,8 @@ func TestListGroupsOrderedIncludesAdmin(t *testing.T) {
 func TestListAllServicesAndGetService(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
-	id, _ := st.CreateService(ctx, "PROD", "h1", 23, true, false)
-	st.CreateService(ctx, "DEV", "h2", 992, false, true)
+	id, _ := st.CreateService(ctx, "PROD", "Production CICS", "h1", 23, true, false)
+	st.CreateService(ctx, "DEV", "Dev Environment", "h2", 992, false, true)
 	svcs, err := st.ListAllServices(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -123,13 +122,13 @@ func TestListGroupsForService(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
 	gid, _ := st.CreateGroup(ctx, "ops")
-	sid, _ := st.CreateService(ctx, "PROD", "h", 23, false, true)
+	sid, _ := st.CreateService(ctx, "PROD", "Production CICS", "h", 23, false, true)
 	st.LinkGroupService(ctx, gid, sid)
 	groups, err := st.ListGroupsForService(ctx, sid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(groups) != 1 || groups[0].Name != "ops" || groups[0].ID != gid {
+	if len(groups) != 1 || groups[0].Name != "OPS" || groups[0].ID != gid {
 		t.Fatalf("groups = %+v", groups)
 	}
 }
@@ -156,20 +155,29 @@ func TestSetPassword(t *testing.T) {
 func TestUpdateService(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)
-	sid, _ := st.CreateService(ctx, "PROD", "h1", 23, false, true)
-	if err := st.UpdateService(ctx, sid, "PROD2", "h2", 992, true, false); err != nil {
+	sid, _ := st.CreateService(ctx, "PROD", "Production CICS", "h1", 23, false, true)
+	if err := st.UpdateService(ctx, sid, "PROD2", "Updated Desc", "h2", 992, true, false); err != nil {
 		t.Fatal(err)
 	}
 	svc, err := st.GetService(ctx, sid)
 	if err != nil {
 		t.Fatalf("GetService: %v", err)
 	}
-	want := Service{ID: sid, Name: "PROD2", Host: "h2", Port: 992, TLS: true, TLSVerify: false}
+	want := Service{ID: sid, Name: "PROD2", Description: "Updated Desc", Host: "h2", Port: 992, TLS: true, TLSVerify: false}
 	if svc != want {
 		t.Errorf("service = %+v, want %+v", svc, want)
 	}
-	if err := st.UpdateService(ctx, 99999, "X", "h", 23, false, true); !errors.Is(err, ErrNotFound) {
+	if err := st.UpdateService(ctx, 99999, "X", "Some Desc", "h", 23, false, true); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing service err = %v, want ErrNotFound", err)
+	}
+
+	// Validation rejection: invalid name (contains a space).
+	if err := st.UpdateService(ctx, sid, "bad name", "Valid Desc", "h2", 23, false, true); err == nil {
+		t.Error("UpdateService with invalid name: expected error, got nil")
+	}
+	// Validation rejection: empty description.
+	if err := st.UpdateService(ctx, sid, "PROD2", "", "h2", 23, false, true); err == nil {
+		t.Error("UpdateService with empty description: expected error, got nil")
 	}
 }
 
@@ -180,7 +188,7 @@ func seedTriangle(t *testing.T, st *Store) (uid, gid, sid int64) {
 	ctx := context.Background()
 	uid, _ = st.CreateUser(ctx, "alice", "h")
 	gid, _ = st.CreateGroup(ctx, "ops")
-	sid, _ = st.CreateService(ctx, "PROD", "h", 23, false, true)
+	sid, _ = st.CreateService(ctx, "PROD", "Production CICS", "h", 23, false, true)
 	st.AddUserToGroup(ctx, uid, gid)
 	st.LinkGroupService(ctx, gid, sid)
 	return uid, gid, sid
@@ -328,8 +336,8 @@ func TestListUsersInGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(users) != 2 || users[0].Username != "alice" || users[1].Username != "zoe" {
-		t.Fatalf("users = %+v, want [alice zoe] (ordered by username)", users)
+	if len(users) != 2 || users[0].Username != "ALICE" || users[1].Username != "ZOE" {
+		t.Fatalf("users = %+v, want [ALICE ZOE] (ordered by username)", users)
 	}
 	if users[0].ID != uid {
 		t.Errorf("alice ID = %d, want %d", users[0].ID, uid)

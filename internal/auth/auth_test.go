@@ -57,7 +57,7 @@ func TestAuthenticateSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authenticate: %v", err)
 	}
-	if id.Username != "alice" || len(id.Groups) != 1 || id.Groups[0] != "ops" {
+	if id.Username != "ALICE" || len(id.Groups) != 1 || id.Groups[0] != "OPS" {
 		t.Errorf("identity = %+v", id)
 	}
 }

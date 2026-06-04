@@ -86,7 +86,7 @@ func TestMigrateAddsVerifyToLegacyDB(t *testing.T) {
 	defer st.Close()
 
 	ops, _ := st.CreateGroup(ctx, "ops")
-	sid, _ := st.CreateService(ctx, "SEC", "sec.example", 992, true, true)
+	sid, _ := st.CreateService(ctx, "SEC", "Secure Host", "sec.example", 992, true, true)
 	st.LinkGroupService(ctx, ops, sid)
 
 	svcs, err := st.ListServicesForGroups(ctx, []string{"ops"})
@@ -95,6 +95,50 @@ func TestMigrateAddsVerifyToLegacyDB(t *testing.T) {
 	}
 	if len(svcs) != 1 || !svcs[0].TLSVerify {
 		t.Fatalf("legacy migration: want TLSVerify true, got %+v", svcs)
+	}
+}
+
+func TestMigrateAddsDescriptionToLegacyDB(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy_desc.db")
+
+	// Simulate a pre-description database: services table WITHOUT the column.
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = raw.Exec(`CREATE TABLE services (
+		id   INTEGER PRIMARY KEY,
+		name TEXT UNIQUE NOT NULL,
+		host TEXT NOT NULL,
+		port INTEGER NOT NULL,
+		tls  INTEGER NOT NULL DEFAULT 0,
+		tls_verify INTEGER NOT NULL DEFAULT 1
+	);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Open through the store: migrate() must ALTER in description (default '').
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open legacy db: %v", err)
+	}
+	defer st.Close()
+
+	ops, _ := st.CreateGroup(ctx, "ops")
+	sid, _ := st.CreateService(ctx, "SEC", "Secure Host", "sec.example", 992, true, true)
+	st.LinkGroupService(ctx, ops, sid)
+
+	svcs, err := st.ListServicesForGroups(ctx, []string{"ops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svcs) != 1 || svcs[0].Description != "Secure Host" {
+		t.Fatalf("legacy migration: want Description 'Secure Host', got %+v", svcs)
 	}
 }
 
@@ -129,6 +173,37 @@ func TestOpenPragmas(t *testing.T) {
 	}
 	if foreignKeys != 1 {
 		t.Errorf("foreign_keys = %d, want 1", foreignKeys)
+	}
+}
+
+func TestUsernameFoldsToUppercase(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	if _, err := st.CreateUser(ctx, "alice", "hash"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	u, err := st.GetUserByUsername(ctx, "ALICE")
+	if err != nil {
+		t.Fatalf("lookup ALICE: %v", err)
+	}
+	if u.Username != "ALICE" {
+		t.Errorf("stored username = %q, want ALICE", u.Username)
+	}
+	if u2, err := st.GetUserByUsername(ctx, "aLiCe"); err != nil || u2.ID != u.ID {
+		t.Errorf("aLiCe lookup = (%+v, %v), want same id %d", u2, err, u.ID)
+	}
+}
+
+func TestGroupNameFoldsToUppercase(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	id, err := st.CreateGroup(ctx, "zzadmin")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id2, err := st.CreateGroup(ctx, "ZZADMIN")
+	if err != nil || id2 != id {
+		t.Fatalf("re-create ZZADMIN = (%d, %v), want same id %d", id2, err, id)
 	}
 }
 
@@ -167,5 +242,56 @@ func TestConcurrentAuditInserts(t *testing.T) {
 	}
 	if len(got) != workers {
 		t.Errorf("want %d audit rows, got %d", workers, len(got))
+	}
+}
+
+func TestNormalizeServiceName(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"prod", "PROD", false},
+		{" Tso ", "TSO", false},
+		{"PRODCICS", "PRODCICS", false},
+		{"prod cics", "", true},
+		{"PROD_CICS", "", true},
+		{"TOOLONGNM", "", true},
+		{"", "", true},
+	}
+	for _, c := range cases {
+		got, err := NormalizeServiceName(c.in)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("NormalizeServiceName(%q) = %q, want error", c.in, got)
+			}
+			continue
+		}
+		if err != nil || got != c.want {
+			t.Errorf("NormalizeServiceName(%q) = (%q, %v), want (%q, nil)", c.in, got, err, c.want)
+		}
+	}
+}
+
+func TestCreateServiceFoldsNameAndRequiresDescription(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	id, err := st.CreateService(ctx, "prod", "Production CICS", "h", 23, false, true)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id2, err := st.CreateService(ctx, "PROD", "Production CICS", "h", 23, false, true)
+	if err != nil || id2 != id {
+		t.Fatalf("dedup create = (%d, %v), want same id %d", id2, err, id)
+	}
+	svcs, _ := st.ListAllServices(ctx)
+	if len(svcs) != 1 || svcs[0].Name != "PROD" || svcs[0].Description != "Production CICS" {
+		t.Fatalf("services = %+v, want one PROD/Production CICS", svcs)
+	}
+	if _, err := st.CreateService(ctx, "TSO", "", "h", 23, false, true); err == nil {
+		t.Error("empty description: want error, got nil")
+	}
+	if _, err := st.CreateService(ctx, "bad name", "desc", "h", 23, false, true); err == nil {
+		t.Error("invalid name: want error, got nil")
 	}
 }

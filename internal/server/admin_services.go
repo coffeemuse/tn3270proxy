@@ -65,13 +65,13 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 		pageSvcs := svcs[start:end]
 		rows := make([]string, len(pageSvcs))
 		for i, s := range pageSvcs {
-			rows[i] = fmt.Sprintf("%-16s %-28s %-4s %s",
-				s.Name, fmt.Sprintf("%s:%d", s.Host, s.Port), yn(s.TLS), yn(s.TLSVerify))
+			rows[i] = fmt.Sprintf("%-8s %-20.20s %-18.18s %-3s %s",
+				s.Name, s.Description, fmt.Sprintf("%s:%d", s.Host, s.Port), yn(s.TLS), yn(s.TLSVerify))
 		}
 		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
 			Title:   "TN3270 GATEWAY ADMIN: SERVICES",
 			RowInfo: rowInfo,
-			Header:  "CMD  NAME             HOST:PORT                    TLS  VERIFY",
+			Header:  "CMD  NAME     DESCRIPTION          HOST:PORT          TLS VERIFY",
 			Rows:    rows,
 			Legend:  "S = edit   G = group access   D = delete   PF4 = add service",
 			ErrMsg:  errMsg,
@@ -139,10 +139,10 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 // exposed: tls (encrypt) and verify (authenticate the backend cert).
 func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *store.Service) error {
 	title := "TN3270 GATEWAY ADMIN: ADD SERVICE"
-	name, host, port, tlsYN, verifyYN := "", "", "", "N", "Y" // verify defaults on (secure default)
+	name, description, host, port, tlsYN, verifyYN := "", "", "", "", "N", "Y" // verify defaults on (secure default)
 	if existing != nil {
 		title = "TN3270 GATEWAY ADMIN: EDIT SERVICE"
-		name, host, port = existing.Name, existing.Host, strconv.Itoa(existing.Port)
+		name, description, host, port = existing.Name, existing.Description, existing.Host, strconv.Itoa(existing.Port)
 		tlsYN, verifyYN = yn(existing.TLS), yn(existing.TLSVerify)
 	}
 	errMsg := ""
@@ -150,7 +150,8 @@ func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *st
 		act, err := f.presenter.AdminForm(conn, f.term, screens.AdminFormView{
 			Title: title,
 			Fields: []screens.AdminFormField{
-				{Name: screens.FieldName, Label: "Name . . . .", Value: name, Length: 32},
+				{Name: screens.FieldName, Label: "Name . . . .", Value: name, Length: 8},
+				{Name: screens.FieldDescription, Label: "Descr. . . .", Value: description, Length: 40},
 				{Name: screens.FieldHost, Label: "Host . . . .", Value: host, Length: 48},
 				{Name: screens.FieldPort, Label: "Port . . . .", Value: port, Length: 5},
 				{Name: screens.FieldTLS, Label: "TLS (Y/N) .", Value: tlsYN, Length: 1},
@@ -165,6 +166,7 @@ func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *st
 			return nil
 		}
 		name = act.Values[screens.FieldName]
+		description = act.Values[screens.FieldDescription]
 		host = act.Values[screens.FieldHost]
 		port = act.Values[screens.FieldPort]
 		tlsYN = strings.ToUpper(act.Values[screens.FieldTLS])
@@ -173,9 +175,13 @@ func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *st
 		p, perr := strconv.Atoi(port)
 		tlsB, tlsOK := ynBool(tlsYN)
 		verifyB, verifyOK := ynBool(verifyYN)
+		normName, nameErr := store.NormalizeServiceName(name)
+		descErr := store.ValidateDescription(description)
 		switch {
-		case name == "":
-			errMsg = "NAME IS REQUIRED"
+		case nameErr != nil:
+			errMsg = strings.ToUpper(nameErr.Error())
+		case descErr != nil:
+			errMsg = strings.ToUpper(descErr.Error())
 		case host == "":
 			errMsg = "HOST IS REQUIRED"
 		case perr != nil || p < 1 || p > 65535:
@@ -183,21 +189,21 @@ func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *st
 		case !tlsOK || !verifyOK:
 			errMsg = "TLS AND VERIFY MUST BE Y OR N"
 		default:
-			if msg := f.checkServiceNameFree(ctx, name, existing); msg != "" {
+			if msg := f.checkServiceNameFree(ctx, normName, existing); msg != "" {
 				errMsg = msg
 				continue
 			}
 			if existing == nil {
-				if _, err := f.store.CreateService(ctx, name, host, p, tlsB, verifyB); err != nil {
+				if _, err := f.store.CreateService(ctx, normName, description, host, p, tlsB, verifyB); err != nil {
 					errMsg = logStoreErr("create service", err)
 					continue
 				}
-				f.recordAdmin(ctx, "service create "+name)
-			} else if err := f.store.UpdateService(ctx, existing.ID, name, host, p, tlsB, verifyB); err != nil {
+				f.recordAdmin(ctx, "service create "+normName)
+			} else if err := f.store.UpdateService(ctx, existing.ID, normName, description, host, p, tlsB, verifyB); err != nil {
 				errMsg = logStoreErr("update service", err)
 				continue
 			} else {
-				f.recordAdmin(ctx, "service update "+name)
+				f.recordAdmin(ctx, "service update "+normName)
 			}
 			return nil
 		}

@@ -101,13 +101,13 @@ func (s *Store) queryGroups(ctx context.Context, query string, args ...any) ([]G
 // ListAllServices returns all services ordered by name.
 func (s *Store) ListAllServices(ctx context.Context) ([]Service, error) {
 	return s.queryServices(ctx,
-		"SELECT id, name, host, port, tls, tls_verify FROM services ORDER BY name")
+		"SELECT id, name, description, host, port, tls, tls_verify FROM services ORDER BY name")
 }
 
 // GetService returns the service by id, or ErrNotFound.
 func (s *Store) GetService(ctx context.Context, id int64) (Service, error) {
 	svcs, err := s.queryServices(ctx,
-		"SELECT id, name, host, port, tls, tls_verify FROM services WHERE id = ?", id)
+		"SELECT id, name, description, host, port, tls, tls_verify FROM services WHERE id = ?", id)
 	if err != nil {
 		return Service{}, err
 	}
@@ -127,7 +127,7 @@ func (s *Store) queryServices(ctx context.Context, query string, args ...any) ([
 	for rows.Next() {
 		var svc Service
 		var tlsInt, verifyInt int
-		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Host, &svc.Port, &tlsInt, &verifyInt); err != nil {
+		if err := rows.Scan(&svc.ID, &svc.Name, &svc.Description, &svc.Host, &svc.Port, &tlsInt, &verifyInt); err != nil {
 			return nil, err
 		}
 		svc.TLS = tlsInt != 0
@@ -147,7 +147,14 @@ func (s *Store) SetPassword(ctx context.Context, userID int64, passwordHash stri
 
 // UpdateService replaces every editable field of the service. Returns
 // ErrNotFound for an unknown service id.
-func (s *Store) UpdateService(ctx context.Context, id int64, name, host string, port int, tls, verify bool) error {
+func (s *Store) UpdateService(ctx context.Context, id int64, name, description, host string, port int, tls, verify bool) error {
+	name, err := NormalizeServiceName(name)
+	if err != nil {
+		return err
+	}
+	if err := ValidateDescription(description); err != nil {
+		return err
+	}
 	tlsInt, verifyInt := 0, 0
 	if tls {
 		tlsInt = 1
@@ -156,8 +163,8 @@ func (s *Store) UpdateService(ctx context.Context, id int64, name, host string, 
 		verifyInt = 1
 	}
 	return s.execExpectingRow(ctx,
-		"UPDATE services SET name = ?, host = ?, port = ?, tls = ?, tls_verify = ? WHERE id = ?",
-		name, host, port, tlsInt, verifyInt, id)
+		"UPDATE services SET name = ?, description = ?, host = ?, port = ?, tls = ?, tls_verify = ? WHERE id = ?",
+		name, description, host, port, tlsInt, verifyInt, id)
 }
 
 // execExpectingRow runs a statement that must affect exactly one row, mapping

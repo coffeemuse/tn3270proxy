@@ -44,8 +44,8 @@ func TestApplySeedsUsersGroupsServices(t *testing.T) {
 			{Username: "alice", Password: "s3cret", Groups: []string{"ops"}},
 		},
 		Services: []SeedService{
-			{Name: "PROD CICS", Host: "prod", Port: 23, Groups: []string{"ops"}},
-			{Name: "TEST CICS", Host: "test", Port: 992, TLS: true, Groups: []string{"dev"}},
+			{Name: "PRODCICS", Description: "Production CICS", Host: "prod", Port: 23, Groups: []string{"ops"}},
+			{Name: "TESTCICS", Description: "Test CICS", Host: "test", Port: 992, TLS: true, Groups: []string{"dev"}},
 		},
 	}
 	if err := Apply(ctx, st, data); err != nil {
@@ -56,7 +56,7 @@ func TestApplySeedsUsersGroupsServices(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authenticate seeded user: %v", err)
 	}
-	if len(id.Groups) != 1 || id.Groups[0] != "ops" {
+	if len(id.Groups) != 1 || id.Groups[0] != "OPS" {
 		t.Errorf("groups = %v", id.Groups)
 	}
 
@@ -64,7 +64,7 @@ func TestApplySeedsUsersGroupsServices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(svcs) != 1 || svcs[0].Name != "PROD CICS" {
+	if len(svcs) != 1 || svcs[0].Name != "PRODCICS" {
 		t.Errorf("services = %+v", svcs)
 	}
 }
@@ -76,7 +76,7 @@ func TestApplyIsIdempotent(t *testing.T) {
 	data := SeedData{
 		Groups:   []string{"ops"},
 		Users:    []SeedUser{{Username: "alice", Password: "pw", Groups: []string{"ops"}}},
-		Services: []SeedService{{Name: "PROD", Host: "h", Port: 23, Groups: []string{"ops"}}},
+		Services: []SeedService{{Name: "PROD", Description: "Production", Host: "h", Port: 23, Groups: []string{"ops"}}},
 	}
 	if err := Apply(ctx, st, data); err != nil {
 		t.Fatal(err)
@@ -87,6 +87,24 @@ func TestApplyIsIdempotent(t *testing.T) {
 	svcs, _ := st.ListServicesForGroups(ctx, []string{"ops"})
 	if len(svcs) != 1 {
 		t.Errorf("expected 1 service after double seed, got %d", len(svcs))
+	}
+}
+
+func TestApplySeedsServiceDescription(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "seed.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	data := SeedData{Services: []SeedService{
+		{Name: "prodcics", Description: "Production CICS", Host: "h", Port: 23},
+	}}
+	if err := Apply(ctx, st, data); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	svcs, _ := st.ListAllServices(ctx)
+	if len(svcs) != 1 || svcs[0].Name != "PRODCICS" || svcs[0].Description != "Production CICS" {
+		t.Fatalf("services = %+v, want PRODCICS/Production CICS", svcs)
 	}
 }
 
@@ -125,10 +143,10 @@ func TestApplyVerifyDefaultsOnWhenOmitted(t *testing.T) {
 		Groups: []string{"ops"},
 		Services: []SeedService{
 			// Verify omitted (nil) → must default to ON.
-			{Name: "DEFON", Host: "a", Port: 992, TLS: true, Groups: []string{"ops"}},
+			{Name: "DEFON", Description: "Default On", Host: "a", Port: 992, TLS: true, Groups: []string{"ops"}},
 			// Verify explicitly false → must stay OFF.
-			{Name: "OFF", Host: "b", Port: 992, TLS: true, Verify: &verifyOff, Groups: []string{"ops"}},
-			{Name: "ON", Host: "c", Port: 992, TLS: true, Verify: &verifyOn, Groups: []string{"ops"}},
+			{Name: "OFF", Description: "Verify Off", Host: "b", Port: 992, TLS: true, Verify: &verifyOff, Groups: []string{"ops"}},
+			{Name: "ON", Description: "Verify On", Host: "c", Port: 992, TLS: true, Verify: &verifyOn, Groups: []string{"ops"}},
 		},
 	}
 	if err := Apply(ctx, st, data); err != nil {

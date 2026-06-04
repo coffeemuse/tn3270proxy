@@ -100,7 +100,7 @@ func newAdminFixture(t *testing.T, p *fakeAdminPresenter) (*adminFlow, map[strin
 	ids["ops"], _ = st.CreateGroup(ctx, "ops")
 	st.AddUserToGroup(ctx, ids["root"], ids["zzadmin"])
 	st.AddUserToGroup(ctx, ids["alice"], ids["ops"])
-	ids["prod"], _ = st.CreateService(ctx, "PROD", "h", 23, false, true)
+	ids["prod"], _ = st.CreateService(ctx, "PROD", "Production", "h", 23, false, true)
 	st.LinkGroupService(ctx, ids["ops"], ids["prod"])
 
 	f := &adminFlow{
@@ -282,7 +282,7 @@ func TestAdminDeleteUserConfirmFlow(t *testing.T) {
 	if err := f.Run(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
-	if msg := p.gotLists[1].ErrMsg; !strings.Contains(msg, "CONFIRM DELETE OF 'alice'") {
+	if msg := p.gotLists[1].ErrMsg; !strings.Contains(msg, "CONFIRM DELETE OF 'ALICE'") {
 		t.Errorf("confirm prompt = %q", msg)
 	}
 	if _, err := f.store.GetUserByUsername(context.Background(), "alice"); !errors.Is(err, store.ErrNotFound) {
@@ -373,13 +373,13 @@ func TestAdminDeleteUserOtherActionCancelsConfirm(t *testing.T) {
 }
 
 func TestAdminUserGroupsToggle(t *testing.T) {
-	// Group rows sort ZZADMIN(0), ops(1). Add alice to ZZADMIN, remove from ops.
+	// Group rows sort OPS(0), ZZADMIN(1) (all uppercase, lexicographic). Add alice to ZZADMIN, remove from OPS.
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
 		lists: []AdminListAction{
 			{Cmd: 'G', Row: 0}, // users list: G on alice
-			{Cmd: 'A', Row: 0}, // add ZZADMIN
-			{Cmd: 'R', Row: 1}, // remove ops
+			{Cmd: 'A', Row: 1}, // add ZZADMIN (row 1)
+			{Cmd: 'R', Row: 0}, // remove OPS (row 0)
 			{PF: 3},            // back to users list
 			{PF: 3},            // back to admin menu
 		},
@@ -393,19 +393,20 @@ func TestAdminUserGroupsToggle(t *testing.T) {
 	if len(got) != 1 || got[0] != store.AdminGroup {
 		t.Errorf("alice groups = %v, want [%s]", got, store.AdminGroup)
 	}
-	// membership marker rendered: second list render shows ops marked X for alice
-	if rows := p.gotLists[1].Rows; len(rows) != 2 || !strings.Contains(rows[1], "X") {
-		t.Errorf("ops row should carry X marker: %q", rows)
+	// membership marker rendered: second list render shows OPS marked X for alice (row 0)
+	if rows := p.gotLists[1].Rows; len(rows) != 2 || !strings.Contains(rows[0], "X") {
+		t.Errorf("OPS row should carry X marker: %q", rows)
 	}
 }
 
 func TestAdminRemoveLastAdminMembershipBlocked(t *testing.T) {
 	// root is ZZADMIN's only member; R must be blocked.
+	// Group rows sort OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
 		lists: []AdminListAction{
 			{Cmd: 'G', Row: 1}, // users list: G on root
-			{Cmd: 'R', Row: 0}, // remove ZZADMIN — blocked
+			{Cmd: 'R', Row: 1}, // remove ZZADMIN (row 1) — blocked
 			{PF: 3}, {PF: 3},
 		},
 	}
@@ -433,14 +434,14 @@ func TestAdminGroupAddAndCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	groups, _ := f.store.ListGroups(ctx)
-	// sort: ZZADMIN, dev, ops
-	if len(groups) != 3 || groups[1].Name != "dev" {
+	// sort (all uppercase): DEV, OPS, ZZADMIN
+	if len(groups) != 3 || groups[0].Name != "DEV" {
 		t.Fatalf("groups = %+v", groups)
 	}
-	// the re-rendered list shows member/service counts; ops row has 1 and 1
+	// the re-rendered list shows member/service counts; OPS row (index 1) has 1 and 1
 	last := lastList(t, p)
-	if len(last.Rows) != 3 || !strings.Contains(last.Rows[2], "1") {
-		t.Errorf("ops row missing counts: %q", last.Rows)
+	if len(last.Rows) != 3 || !strings.Contains(last.Rows[1], "1") {
+		t.Errorf("OPS row missing counts: %q", last.Rows)
 	}
 }
 
@@ -477,9 +478,10 @@ func TestAdminGroupAddDuplicateBlocked(t *testing.T) {
 }
 
 func TestAdminGroupDeleteReservedBlocked(t *testing.T) {
+	// Group rows sort OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 3}}, // D on ZZADMIN — no confirm offered
+		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {PF: 3}}, // D on ZZADMIN (row 1) — no confirm offered
 	}
 	f, _ := newAdminFixture(t, p)
 	f.Run(context.Background(), nil)
@@ -492,9 +494,10 @@ func TestAdminGroupDeleteReservedBlocked(t *testing.T) {
 }
 
 func TestAdminGroupDeleteCascades(t *testing.T) {
+	// Group rows sort OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {}, {PF: 3}}, // D ops, Enter confirms
+		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}}, // D OPS (row 0), Enter confirms
 	}
 	f, ids := newAdminFixture(t, p)
 	ctx := context.Background()
@@ -544,7 +547,7 @@ func TestAdminServiceAdd(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{PF: 4}, {PF: 3}},
 		forms: []AdminFormAction{{Values: map[string]string{
-			screens.FieldName: "DEV", screens.FieldHost: "dev.example", screens.FieldPort: "992",
+			screens.FieldName: "DEV", screens.FieldDescription: "Dev environment", screens.FieldHost: "dev.example", screens.FieldPort: "992",
 			screens.FieldTLS: "y", screens.FieldVerify: "n", // case-insensitive Y/N
 		}}},
 	}
@@ -568,7 +571,7 @@ func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // edit PROD
 		forms: []AdminFormAction{{Values: map[string]string{
-			screens.FieldName: "PROD", screens.FieldHost: "h2", screens.FieldPort: "1023",
+			screens.FieldName: "PROD", screens.FieldDescription: "Production v2", screens.FieldHost: "h2", screens.FieldPort: "1023",
 			screens.FieldTLS: "Y", screens.FieldVerify: "Y",
 		}}},
 	}
@@ -578,12 +581,16 @@ func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	form := p.gotForms[0] // pre-filled from the existing service
-	if form.Fields[0].Value != "PROD" || form.Fields[1].Value != "h" || form.Fields[2].Value != "23" {
+	// Fields: 0=Name, 1=Description, 2=Host, 3=Port
+	if form.Fields[0].Value != "PROD" || form.Fields[1].Value != "Production" || form.Fields[2].Value != "h" || form.Fields[3].Value != "23" {
 		t.Errorf("pre-fill = %+v", form.Fields)
 	}
 	svc, _ := f.store.GetService(ctx, ids["prod"])
 	if svc.Host != "h2" || svc.Port != 1023 || !svc.TLS || !svc.TLSVerify {
 		t.Errorf("updated = %+v", svc)
+	}
+	if svc.Description != "Production v2" {
+		t.Errorf("updated Description = %q, want %q", svc.Description, "Production v2")
 	}
 }
 
@@ -592,7 +599,7 @@ func TestAdminServicePortValidation(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{PF: 4}, {PF: 3}},
 		forms: []AdminFormAction{
-			{Values: map[string]string{screens.FieldName: "X", screens.FieldHost: "h",
+			{Values: map[string]string{screens.FieldName: "X", screens.FieldDescription: "Svc X", screens.FieldHost: "h",
 				screens.FieldPort: "70000", screens.FieldTLS: "N", screens.FieldVerify: "Y"}},
 			{Cancel: true},
 		},
@@ -609,7 +616,7 @@ func TestAdminServiceDuplicateName(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{PF: 4}, {PF: 3}},
 		forms: []AdminFormAction{
-			{Values: map[string]string{screens.FieldName: "PROD", screens.FieldHost: "h",
+			{Values: map[string]string{screens.FieldName: "PROD", screens.FieldDescription: "Production", screens.FieldHost: "h",
 				screens.FieldPort: "23", screens.FieldTLS: "N", screens.FieldVerify: "Y"}},
 			{Cancel: true},
 		},
@@ -619,6 +626,68 @@ func TestAdminServiceDuplicateName(t *testing.T) {
 	if msg := p.gotForms[1].ErrMsg; msg != "'PROD' ALREADY EXISTS" {
 		t.Errorf("errMsg = %q", msg)
 	}
+}
+
+func TestAdminServiceNameAndDescriptionValidation(t *testing.T) {
+	t.Run("invalid name with space", func(t *testing.T) {
+		p := &fakeAdminPresenter{
+			menu:  []adminMenuStep{{choice: 3}, {back: true}},
+			lists: []AdminListAction{{PF: 4}, {PF: 3}},
+			forms: []AdminFormAction{
+				{Values: map[string]string{
+					screens.FieldName:        "BAD NAME",
+					screens.FieldDescription: "Valid description",
+					screens.FieldHost:        "h",
+					screens.FieldPort:        "23",
+					screens.FieldTLS:         "N",
+					screens.FieldVerify:      "Y",
+				}},
+				{Cancel: true},
+			},
+		}
+		f, _ := newAdminFixture(t, p)
+		ctx := context.Background()
+		f.Run(ctx, nil)
+		if msg := p.gotForms[1].ErrMsg; !strings.Contains(msg, "SERVICE NAME") {
+			t.Errorf("errMsg = %q, want message containing SERVICE NAME", msg)
+		}
+		svcs, _ := f.store.ListAllServices(ctx)
+		for _, s := range svcs {
+			if s.Name != "PROD" {
+				t.Errorf("unexpected service persisted: %+v", s)
+			}
+		}
+	})
+
+	t.Run("empty description", func(t *testing.T) {
+		p := &fakeAdminPresenter{
+			menu:  []adminMenuStep{{choice: 3}, {back: true}},
+			lists: []AdminListAction{{PF: 4}, {PF: 3}},
+			forms: []AdminFormAction{
+				{Values: map[string]string{
+					screens.FieldName:        "OK",
+					screens.FieldDescription: "",
+					screens.FieldHost:        "h",
+					screens.FieldPort:        "23",
+					screens.FieldTLS:         "N",
+					screens.FieldVerify:      "Y",
+				}},
+				{Cancel: true},
+			},
+		}
+		f, _ := newAdminFixture(t, p)
+		ctx := context.Background()
+		f.Run(ctx, nil)
+		if msg := p.gotForms[1].ErrMsg; !strings.Contains(msg, "DESCRIPTION") {
+			t.Errorf("errMsg = %q, want message containing DESCRIPTION", msg)
+		}
+		svcs, _ := f.store.ListAllServices(ctx)
+		for _, s := range svcs {
+			if s.Name != "PROD" {
+				t.Errorf("unexpected service persisted: %+v", s)
+			}
+		}
+	})
 }
 
 func TestAdminServiceDeleteCascades(t *testing.T) {
@@ -666,7 +735,7 @@ func TestAdminServiceFormPreservesInputOnError(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{PF: 4}, {PF: 3}},
 		forms: []AdminFormAction{
-			{Values: map[string]string{screens.FieldName: "DEV", screens.FieldHost: "dev.example",
+			{Values: map[string]string{screens.FieldName: "DEV", screens.FieldDescription: "Dev environment", screens.FieldHost: "dev.example",
 				screens.FieldPort: "junk", screens.FieldTLS: "y", screens.FieldVerify: "n"}},
 			{Cancel: true},
 		},
@@ -677,7 +746,8 @@ func TestAdminServiceFormPreservesInputOnError(t *testing.T) {
 	if last.ErrMsg != "PORT MUST BE 1-65535" {
 		t.Errorf("errMsg = %q", last.ErrMsg)
 	}
-	wants := []string{"DEV", "dev.example", "junk", "Y", "N"} // Y/N canonicalized upper
+	// Fields: 0=Name, 1=Description, 2=Host, 3=Port, 4=TLS, 5=Verify; Y/N canonicalized upper
+	wants := []string{"DEV", "Dev environment", "dev.example", "junk", "Y", "N"}
 	for i, want := range wants {
 		if last.Fields[i].Value != want {
 			t.Errorf("field %d preserved = %q, want %q", i, last.Fields[i].Value, want)
@@ -686,13 +756,13 @@ func TestAdminServiceFormPreservesInputOnError(t *testing.T) {
 }
 
 func TestAdminServiceGroupsToggle(t *testing.T) {
-	// Group rows sort ZZADMIN(0), ops(1). Grant ZZADMIN access to PROD, revoke ops.
+	// Group rows sort OPS(0), ZZADMIN(1). Grant ZZADMIN access to PROD, revoke OPS.
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{
 			{Cmd: 'G', Row: 0}, // services list: G on PROD
-			{Cmd: 'A', Row: 0}, // grant ZZADMIN
-			{Cmd: 'R', Row: 1}, // revoke ops
+			{Cmd: 'A', Row: 1}, // grant ZZADMIN (row 1)
+			{Cmd: 'R', Row: 0}, // revoke OPS (row 0)
 			{PF: 3},            // back to services list
 			{PF: 3},            // back to admin menu
 		},
@@ -706,21 +776,21 @@ func TestAdminServiceGroupsToggle(t *testing.T) {
 	if len(groups) != 1 || groups[0].Name != store.AdminGroup {
 		t.Errorf("PROD groups = %+v, want [%s]", groups, store.AdminGroup)
 	}
-	// access marker rendered: ops row carries X on the first toggle render
-	if rows := p.gotLists[1].Rows; len(rows) != 2 || !strings.Contains(rows[1], "X") {
-		t.Errorf("ops row should carry X marker: %q", rows)
+	// access marker rendered: OPS row (row 0) carries X on the first toggle render
+	if rows := p.gotLists[1].Rows; len(rows) != 2 || !strings.Contains(rows[0], "X") {
+		t.Errorf("OPS row should carry X marker: %q", rows)
 	}
 }
 
 func TestAdminGroupMembersToggle(t *testing.T) {
-	// Group rows sort ZZADMIN(0), ops(1); user rows sort alice(0), root(1).
-	// M on ops, add root, remove alice.
+	// Group rows sort OPS(0), ZZADMIN(1); user rows sort ALICE(0), ROOT(1).
+	// M on OPS, add ROOT, remove ALICE.
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 2}, {back: true}},
 		lists: []AdminListAction{
-			{Cmd: 'M', Row: 1}, // groups list: M on ops
-			{Cmd: 'A', Row: 1}, // add root
-			{Cmd: 'R', Row: 0}, // remove alice
+			{Cmd: 'M', Row: 0}, // groups list: M on OPS (row 0)
+			{Cmd: 'A', Row: 1}, // add ROOT (row 1)
+			{Cmd: 'R', Row: 0}, // remove ALICE (row 0)
 			{PF: 3},            // back to groups list
 			{PF: 3},            // back to admin menu
 		},
@@ -731,30 +801,31 @@ func TestAdminGroupMembersToggle(t *testing.T) {
 		t.Fatal(err)
 	}
 	members, _ := f.store.ListUsersInGroup(ctx, ids["ops"])
-	if len(members) != 1 || members[0].Username != "root" {
-		t.Errorf("ops members = %+v, want [root]", members)
+	if len(members) != 1 || members[0].Username != "ROOT" {
+		t.Errorf("ops members = %+v, want [ROOT]", members)
 	}
 	// groups list advertises the new command
 	if legend := p.gotLists[0].Legend; !strings.Contains(legend, "M = members") {
 		t.Errorf("groups legend = %q", legend)
 	}
-	// first members render: alice carries the X marker, root does not
+	// first members render: ALICE carries the X marker, ROOT does not
 	if rows := p.gotLists[1].Rows; len(rows) != 2 ||
 		!strings.Contains(rows[0], "X") || strings.Contains(rows[1], "X") {
 		t.Errorf("member markers wrong: %q", rows)
 	}
-	if title := p.gotLists[1].Title; !strings.Contains(title, "MEMBERS OF ops") {
+	if title := p.gotLists[1].Title; !strings.Contains(title, "MEMBERS OF OPS") {
 		t.Errorf("title = %q", title)
 	}
 }
 
 func TestAdminGroupMembersLastAdminGuard(t *testing.T) {
 	// root is ZZADMIN's only member; R from the members side must be blocked.
+	// Group rows sort OPS(0), ZZADMIN(1); user rows sort ALICE(0), ROOT(1).
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 2}, {back: true}},
 		lists: []AdminListAction{
-			{Cmd: 'M', Row: 0}, // groups list: M on ZZADMIN
-			{Cmd: 'R', Row: 1}, // user rows alice(0), root(1): remove root — blocked
+			{Cmd: 'M', Row: 1}, // groups list: M on ZZADMIN (row 1)
+			{Cmd: 'R', Row: 1}, // user rows ALICE(0), ROOT(1): remove ROOT — blocked
 			{PF: 3}, {PF: 3},
 		},
 	}
@@ -777,7 +848,7 @@ func TestAdminSelfRemoveAdminGroupBlockedUserGroups(t *testing.T) {
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
 		lists: []AdminListAction{
 			{Cmd: 'G', Row: 1}, // users list: G on root (row 1, alice is row 0)
-			{Cmd: 'R', Row: 0}, // groups: remove ZZADMIN (row 0) — blocked
+			{Cmd: 'R', Row: 1}, // groups: remove ZZADMIN (row 1, ops is row 0) — blocked
 			{PF: 3}, {PF: 3},
 		},
 	}
@@ -801,7 +872,7 @@ func TestAdminRemoveOtherAdminAllowedUserGroups(t *testing.T) {
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
 		lists: []AdminListAction{
 			{Cmd: 'G', Row: 0}, // users list: G on alice (row 0)
-			{Cmd: 'R', Row: 0}, // groups: remove ZZADMIN (row 0) from alice — allowed
+			{Cmd: 'R', Row: 1}, // groups: remove ZZADMIN (row 1, ops is row 0) from alice — allowed
 			{PF: 3}, {PF: 3},
 		},
 	}
@@ -829,7 +900,7 @@ func TestAdminSelfRemoveNonAdminGroupAllowed(t *testing.T) {
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
 		lists: []AdminListAction{
 			{Cmd: 'G', Row: 1}, // users list: G on root (row 1)
-			{Cmd: 'R', Row: 1}, // groups: remove ops (row 1) from root — allowed
+			{Cmd: 'R', Row: 0}, // groups: remove OPS (row 0, zzadmin is row 1) from root — allowed
 			{PF: 3}, {PF: 3},
 		},
 	}
@@ -844,8 +915,8 @@ func TestAdminSelfRemoveNonAdminGroupAllowed(t *testing.T) {
 	}
 	got, _ := f.store.GetUserGroups(ctx, ids["root"])
 	for _, g := range got {
-		if g == "ops" {
-			t.Errorf("root should no longer be in ops: %v", got)
+		if g == "OPS" {
+			t.Errorf("root should no longer be in OPS: %v", got)
 		}
 	}
 }
@@ -853,12 +924,12 @@ func TestAdminSelfRemoveNonAdminGroupAllowed(t *testing.T) {
 // TestAdminSelfRemoveAdminGroupBlockedGroupMembers: self-removal from ZZADMIN
 // is blocked via the group-members screen even when ≥2 admins exist.
 func TestAdminSelfRemoveAdminGroupBlockedGroupMembers(t *testing.T) {
-	// user rows alice(0), root(1); ZZADMIN is group row 0.
+	// user rows ALICE(0), ROOT(1); group rows OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 2}, {back: true}},
 		lists: []AdminListAction{
-			{Cmd: 'M', Row: 0}, // groups list: M on ZZADMIN (row 0)
-			{Cmd: 'R', Row: 1}, // members: remove root (row 1) — blocked
+			{Cmd: 'M', Row: 1}, // groups list: M on ZZADMIN (row 1, ops is row 0)
+			{Cmd: 'R', Row: 1}, // members: remove ROOT (row 1) — blocked
 			{PF: 3}, {PF: 3},
 		},
 	}
@@ -871,7 +942,7 @@ func TestAdminSelfRemoveAdminGroupBlockedGroupMembers(t *testing.T) {
 	}
 	members, _ := f.store.ListUsersInGroup(ctx, ids["zzadmin"])
 	for _, m := range members {
-		if m.Username == "root" {
+		if m.Username == "ROOT" {
 			return // root is still there — good
 		}
 	}
@@ -881,12 +952,12 @@ func TestAdminSelfRemoveAdminGroupBlockedGroupMembers(t *testing.T) {
 // TestAdminRemoveOtherAdminAllowedGroupMembers: removing a *different* admin
 // from ZZADMIN via the group-members screen is still allowed when ≥2 admins.
 func TestAdminRemoveOtherAdminAllowedGroupMembers(t *testing.T) {
-	// user rows alice(0), root(1); ZZADMIN is group row 0.
+	// user rows ALICE(0), ROOT(1); group rows OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 2}, {back: true}},
 		lists: []AdminListAction{
-			{Cmd: 'M', Row: 0}, // groups list: M on ZZADMIN (row 0)
-			{Cmd: 'R', Row: 0}, // members: remove alice (row 0) — allowed
+			{Cmd: 'M', Row: 1}, // groups list: M on ZZADMIN (row 1, ops is row 0)
+			{Cmd: 'R', Row: 0}, // members: remove ALICE (row 0) — allowed
 			{PF: 3}, {PF: 3},
 		},
 	}
@@ -901,8 +972,8 @@ func TestAdminRemoveOtherAdminAllowedGroupMembers(t *testing.T) {
 	}
 	members, _ := f.store.ListUsersInGroup(ctx, ids["zzadmin"])
 	for _, m := range members {
-		if m.Username == "alice" {
-			t.Errorf("alice should no longer be in ZZADMIN: %+v", members)
+		if m.Username == "ALICE" {
+			t.Errorf("ALICE should no longer be in ZZADMIN: %+v", members)
 		}
 	}
 }
@@ -945,5 +1016,43 @@ func TestAdminAuditValidationFailureRecordsNothing(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("audit = %+v, want no events for a rejected create", got)
+	}
+}
+
+func TestServiceFormPersistsDescription(t *testing.T) {
+	// Drive the ADD-service path and assert the description is stored.
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{{Values: map[string]string{
+			screens.FieldName:        "prodcics",
+			screens.FieldDescription: "Production CICS",
+			screens.FieldHost:        "h",
+			screens.FieldPort:        "23",
+			screens.FieldTLS:         "N",
+			screens.FieldVerify:      "Y",
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	svcs, err := f.store.ListAllServices(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *store.Service
+	for i := range svcs {
+		if svcs[i].Name == "PRODCICS" {
+			found = &svcs[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("PRODCICS not found in services: %+v", svcs)
+	}
+	if found.Description != "Production CICS" {
+		t.Errorf("Description = %q, want %q", found.Description, "Production CICS")
 	}
 }

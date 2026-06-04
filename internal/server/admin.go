@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -49,8 +50,8 @@ type AdminStore interface {
 
 	ListAllServices(ctx context.Context) ([]store.Service, error)
 	GetService(ctx context.Context, id int64) (store.Service, error)
-	CreateService(ctx context.Context, name, host string, port int, tls, verify bool) (int64, error)
-	UpdateService(ctx context.Context, id int64, name, host string, port int, tls, verify bool) error
+	CreateService(ctx context.Context, name, description, host string, port int, tls, verify bool) (int64, error)
+	UpdateService(ctx context.Context, id int64, name, description, host string, port int, tls, verify bool) error
 	DeleteService(ctx context.Context, serviceID int64) error
 	ListGroupsForService(ctx context.Context, serviceID int64) ([]store.Group, error)
 	LinkGroupService(ctx context.Context, groupID, serviceID int64) error
@@ -130,8 +131,9 @@ func (f *adminFlow) groupIDByName(ctx context.Context, name string) (int64, bool
 	if err != nil {
 		return 0, false, err
 	}
+	nameUpper := strings.ToUpper(name)
 	for _, g := range groups {
-		if g.Name == name {
+		if g.Name == nameUpper {
 			return g.ID, true, nil
 		}
 	}

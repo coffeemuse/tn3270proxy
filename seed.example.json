@@ -6,8 +6,8 @@
     { "username": "bob",   "password": "changeme", "groups": ["dev"] }
   ],
   "services": [
-    { "name": "PUB TSO",  "host": "localhost",         "port": 3270, "groups": ["ops"] },
-    { "name": "SEC CICS", "host": "cics.corp.example", "port": 992, "tls": true, "groups": ["ops"] },
-    { "name": "LAB CICS", "host": "10.0.0.5",          "port": 992, "tls": true, "verify": false, "groups": ["dev"] }
+    { "name": "PUBTSO",  "description": "Public TSO",             "host": "localhost",         "port": 3270, "groups": ["ops"] },
+    { "name": "SECCICS", "description": "Secure CICS Region",     "host": "cics.corp.example", "port": 992, "tls": true, "groups": ["ops"] },
+    { "name": "LABCICS", "description": "Lab CICS (self-signed)", "host": "10.0.0.5",          "port": 992, "tls": true, "verify": false, "groups": ["dev"] }
   ]
 }

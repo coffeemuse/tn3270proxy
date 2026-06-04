@@ -50,9 +50,9 @@ cat > "$WORK/front-seed.json" <<EOF
   {"username":"alice","password":"changeme","groups":["ops"]},
   {"username":"charlie","password":"changeme","groups":["empty"]}],
  "services":[
-  {"name":"BACKEND","host":"127.0.0.1","port":$BACK_PORT,"groups":["ops"]},
-  {"name":"DEADHOST","host":"127.0.0.1","port":1,"groups":["ops"]},
-  {"name":"DEVONLY","host":"127.0.0.1","port":9999,"groups":["dev"]}]}
+  {"name":"BACKEND","description":"Backend Host","host":"127.0.0.1","port":$BACK_PORT,"groups":["ops"]},
+  {"name":"DEADHOST","description":"Dead Host","host":"127.0.0.1","port":1,"groups":["ops"]},
+  {"name":"DEVONLY","description":"Dev Only","host":"127.0.0.1","port":9999,"groups":["dev"]}]}
 EOF
 # Back seed: the backend is a second tn3270proxy instance — a real TN3270
 # server we control. Bridged sessions land on its login screen.

@@ -52,7 +52,7 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, errMsg stri
 	for i, svc := range shown {
 		key := fmt.Sprintf("%d", i+1)
 		mapping[key] = svc
-		label := fmt.Sprintf("%2s.  %-20s (%s:%d)", key, svc.Name, svc.Host, svc.Port)
+		label := fmt.Sprintf("%2s  %-8s  %s", key, svc.Name, svc.Description)
 		screen = append(screen, go3270.Field{Row: row, Col: 4, Content: label})
 		row++
 	}

@@ -124,7 +124,7 @@ func newTestSession(t *testing.T, p *fakePresenter, b *fakeBridger) *Session {
 	t.Cleanup(func() { st.Close() })
 	ctx := context.Background()
 	gid, _ := st.CreateGroup(ctx, "ops")
-	sid, _ := st.CreateService(ctx, "PROD", "10.0.0.1", 23, false, true)
+	sid, _ := st.CreateService(ctx, "PROD", "Production", "10.0.0.1", 23, false, true)
 	st.LinkGroupService(ctx, gid, sid)
 
 	return &Session{
@@ -255,8 +255,8 @@ func TestSessionPassesTLSIntentToBridger(t *testing.T) {
 
 func TestSessionClientClosedEndsSession(t *testing.T) {
 	p := &fakePresenter{
-		termType:  "IBM-3278-2-E",
-		logins:    []loginResult{{user: "alice", pass: "good"}},
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{user: "alice", pass: "good"}},
 		menuPicks: []menuResult{
 			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
 		},
