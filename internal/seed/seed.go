@@ -19,8 +19,9 @@ type SeedUser struct {
 
 // SeedService describes one service to create.
 type SeedService struct {
-	Name   string   `json:"name"`
-	Host   string   `json:"host"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Host        string   `json:"host"`
 	Port   int      `json:"port"`
 	TLS    bool     `json:"tls"`
 	Verify *bool    `json:"verify"` // omitted → verify ON (secure default)
@@ -84,7 +85,7 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 		if svc.Verify != nil {
 			verify = *svc.Verify
 		}
-		sid, err := st.CreateService(ctx, svc.Name, svc.Host, svc.Port, svc.TLS, verify)
+		sid, err := st.CreateService(ctx, svc.Name, svc.Description, svc.Host, svc.Port, svc.TLS, verify)
 		if err != nil {
 			return fmt.Errorf("create service %q: %w", svc.Name, err)
 		}
