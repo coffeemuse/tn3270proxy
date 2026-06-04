@@ -21,6 +21,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -86,5 +87,28 @@ func TestListServicesForGroupsEmpty(t *testing.T) {
 	}
 	if len(svcs) != 0 {
 		t.Errorf("got %d, want 0", len(svcs))
+	}
+}
+
+func TestGetServiceByName(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	id, err := st.CreateService(ctx, "prod", "Production CICS", "prod.example", 23, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// lowercase input normalizes to PROD
+	svc, err := st.GetServiceByName(ctx, "prod")
+	if err != nil {
+		t.Fatalf("GetServiceByName: %v", err)
+	}
+	if svc.ID != id || svc.Name != "PROD" {
+		t.Errorf("got %+v, want id=%d name=PROD", svc, id)
+	}
+
+	if _, err := st.GetServiceByName(ctx, "NOTFOUND"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing service: got %v, want ErrNotFound", err)
 	}
 }

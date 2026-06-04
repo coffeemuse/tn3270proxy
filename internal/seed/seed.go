@@ -23,6 +23,7 @@ package seed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
@@ -55,8 +56,9 @@ type SeedData struct {
 }
 
 // Apply creates the groups, users, and services described by data, linking
-// memberships and access. It is idempotent: re-applying the same data does not
-// create duplicates.
+// memberships and access. It is intended for first-run population of a fresh
+// database only; re-running against a populated database returns an error naming
+// the first conflicting user or service.
 func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 	// Pre-validate every password before any writes: Apply is non-transactional,
 	// so a password rejected mid-run (e.g. bcrypt's 72-byte limit) would leave
@@ -64,6 +66,24 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 	for _, u := range data.Users {
 		if err := auth.ValidatePassword(u.Password); err != nil {
 			return fmt.Errorf("user %q: %w", u.Username, err)
+		}
+	}
+
+	// Pre-flight conflict check: seed is a one-time tool. Detect any colliding
+	// user or service before the first write so a re-seed fails loudly and
+	// atomically (no partial state).
+	for _, u := range data.Users {
+		if _, err := st.GetUserByUsername(ctx, u.Username); err == nil {
+			return fmt.Errorf("user %q already exists; seed is a one-time tool for new installations — use the admin UI to change passwords", u.Username)
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("check user %q: %w", u.Username, err)
+		}
+	}
+	for _, svc := range data.Services {
+		if _, err := st.GetServiceByName(ctx, svc.Name); err == nil {
+			return fmt.Errorf("service %q already exists; seed is a one-time tool for new installations — use the admin UI to manage services", svc.Name)
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("check service %q: %w", svc.Name, err)
 		}
 	}
 
@@ -107,8 +127,6 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 	}
 
 	for _, svc := range data.Services {
-		// CreateService is INSERT OR IGNORE: re-seeding an existing service does
-		// not update tls/tls_verify. Change these via a manual UPDATE for now.
 		verify := true // secure default when "verify" is omitted
 		if svc.Verify != nil {
 			verify = *svc.Verify

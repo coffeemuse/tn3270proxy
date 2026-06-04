@@ -69,24 +69,89 @@ func TestApplySeedsUsersGroupsServices(t *testing.T) {
 	}
 }
 
-func TestApplyIsIdempotent(t *testing.T) {
+func TestApplyFreshDBSucceeds(t *testing.T) {
+	// A fresh DB already has ZZADMIN from migrate(); seeding with ZZADMIN listed
+	// in groups must still succeed because the conflict check covers users and
+	// services only — group existence is always idempotent.
 	ctx := context.Background()
 	st, _ := store.Open(filepath.Join(t.TempDir(), "seed.db"))
 	defer st.Close()
 	data := SeedData{
-		Groups:   []string{"ops"},
-		Users:    []SeedUser{{Username: "alice", Password: "pw", Groups: []string{"ops"}}},
+		Groups:   []string{"ZZADMIN", "ops"},
+		Users:    []SeedUser{{Username: "alice", Password: "pw", Groups: []string{"ops", "ZZADMIN"}}},
 		Services: []SeedService{{Name: "PROD", Description: "Production", Host: "h", Port: 23, Groups: []string{"ops"}}},
 	}
 	if err := Apply(ctx, st, data); err != nil {
-		t.Fatal(err)
-	}
-	if err := Apply(ctx, st, data); err != nil {
-		t.Fatalf("second Apply: %v", err)
+		t.Fatalf("Apply on fresh DB with ZZADMIN: %v", err)
 	}
 	svcs, _ := st.ListServicesForGroups(ctx, []string{"ops"})
 	if len(svcs) != 1 {
-		t.Errorf("expected 1 service after double seed, got %d", len(svcs))
+		t.Errorf("expected 1 service after fresh seed, got %d", len(svcs))
+	}
+}
+
+func TestApplyBlocksReSeedUser(t *testing.T) {
+	ctx := context.Background()
+	st, _ := store.Open(filepath.Join(t.TempDir(), "seed.db"))
+	defer st.Close()
+
+	first := SeedData{Users: []SeedUser{{Username: "alice", Password: "oldpw"}}}
+	if err := Apply(ctx, st, first); err != nil {
+		t.Fatalf("first Apply: %v", err)
+	}
+
+	second := SeedData{Users: []SeedUser{{Username: "alice", Password: "newpw"}}}
+	err := Apply(ctx, st, second)
+	if err == nil {
+		t.Fatal("re-seed with existing user should fail, got nil")
+	}
+	if !strings.Contains(err.Error(), "alice") && !strings.Contains(err.Error(), "ALICE") {
+		t.Errorf("error should name the colliding user, got: %v", err)
+	}
+}
+
+func TestApplyBlocksReSeedService(t *testing.T) {
+	ctx := context.Background()
+	st, _ := store.Open(filepath.Join(t.TempDir(), "seed.db"))
+	defer st.Close()
+
+	first := SeedData{Services: []SeedService{{Name: "PROD", Description: "Production", Host: "h", Port: 23}}}
+	if err := Apply(ctx, st, first); err != nil {
+		t.Fatalf("first Apply: %v", err)
+	}
+
+	second := SeedData{Services: []SeedService{{Name: "PROD", Description: "Production v2", Host: "h2", Port: 23}}}
+	err := Apply(ctx, st, second)
+	if err == nil {
+		t.Fatal("re-seed with existing service should fail, got nil")
+	}
+	if !strings.Contains(err.Error(), "PROD") {
+		t.Errorf("error should name the colliding service, got: %v", err)
+	}
+}
+
+func TestApplyBlocksReSeedNoPartialWrite(t *testing.T) {
+	// When the second user in the seed conflicts, the first (new) user must NOT
+	// be written — the pre-flight check runs before any writes.
+	ctx := context.Background()
+	st, _ := store.Open(filepath.Join(t.TempDir(), "seed.db"))
+	defer st.Close()
+
+	// Seed bob first so the second apply below finds a conflict on him.
+	if err := Apply(ctx, st, SeedData{Users: []SeedUser{{Username: "bob", Password: "pw"}}}); err != nil {
+		t.Fatalf("first Apply: %v", err)
+	}
+
+	// alice is new, bob conflicts — alice must not be created.
+	err := Apply(ctx, st, SeedData{Users: []SeedUser{
+		{Username: "alice", Password: "pw"},
+		{Username: "bob", Password: "newpw"},
+	}})
+	if err == nil {
+		t.Fatal("re-seed with existing user should fail")
+	}
+	if _, err := st.GetUserByUsername(ctx, "alice"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("alice must not be created when a later user conflicts: %v", err)
 	}
 }
 

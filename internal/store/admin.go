@@ -117,6 +117,23 @@ func (s *Store) GetService(ctx context.Context, id int64) (Service, error) {
 	return svcs[0], nil
 }
 
+// GetServiceByName returns the service by name (case-insensitive), or ErrNotFound.
+func (s *Store) GetServiceByName(ctx context.Context, name string) (Service, error) {
+	name, err := NormalizeServiceName(name)
+	if err != nil {
+		return Service{}, err
+	}
+	svcs, err := s.queryServices(ctx,
+		"SELECT id, name, description, host, port, tls, tls_verify FROM services WHERE name = ?", name)
+	if err != nil {
+		return Service{}, err
+	}
+	if len(svcs) == 0 {
+		return Service{}, ErrNotFound
+	}
+	return svcs[0], nil
+}
+
 func (s *Store) queryServices(ctx context.Context, query string, args ...any) ([]Service, error) {
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
