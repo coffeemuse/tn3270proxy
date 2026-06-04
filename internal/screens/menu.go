@@ -36,7 +36,7 @@ const FieldSelection = "selection"
 // errMsg, if non-empty, is shown on the error line. Services beyond the
 // screen's capacity are truncated (no pagination) so the list can never
 // collide with the input/error/help rows.
-func MenuScreen(geom Geometry, services []store.Service, admin bool, errMsg string) (go3270.Screen, map[string]store.Service) {
+func MenuScreen(geom Geometry, services []store.Service, admin bool, errMsg string) (go3270.Screen, map[string]store.Service, Cursor) {
 	screen := go3270.Screen{
 		{Row: 0, Col: 27, Intense: true, Content: "TN3270 GATEWAY MENU"},
 		{Row: 2, Col: 2, Content: "Select a service and press ENTER:"},
@@ -68,12 +68,13 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, errMsg stri
 		screen = append(screen, go3270.Field{Row: adminRow, Col: 4, Content: " A.  Administration"})
 	}
 
+	selection := go3270.Field{Row: geom.InputRow(), Col: 7, Name: FieldSelection, Write: true, NumericOnly: !admin, Highlighting: go3270.Underscore}
 	screen = append(screen,
 		go3270.Field{Row: geom.InputRow(), Col: 2, Content: "===>"},
-		go3270.Field{Row: geom.InputRow(), Col: 7, Name: FieldSelection, Write: true, NumericOnly: !admin, Highlighting: go3270.Underscore},
+		selection,
 		go3270.Field{Row: geom.InputRow(), Col: 15}, // stop field
 		go3270.Field{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
 		go3270.Field{Row: geom.HelpRow(), Col: 2, Content: "Enter = connect    PF3 = logoff    (PA3 returns here from a session)"},
 	)
-	return screen, mapping
+	return screen, mapping, cursorAt(selection)
 }

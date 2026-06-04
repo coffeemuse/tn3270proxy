@@ -48,7 +48,8 @@ cat > "$WORK/front-seed.json" <<EOF
 {"groups":["ops","dev","empty"],
  "users":[
   {"username":"alice","password":"changeme","groups":["ops"]},
-  {"username":"charlie","password":"changeme","groups":["empty"]}],
+  {"username":"charlie","password":"changeme","groups":["empty"]},
+  {"username":"admin","password":"changeme","groups":["ZZADMIN"]}],
  "services":[
   {"name":"BACKEND","description":"Backend Host","host":"127.0.0.1","port":$BACK_PORT,"groups":["ops"]},
   {"name":"DEADHOST","description":"Dead Host","host":"127.0.0.1","port":1,"groups":["ops"]},
@@ -117,6 +118,9 @@ check "3a menu shown after login" "TN3270 GATEWAY MENU" "$WORK/t3.out"
 check "3b ops service BACKEND listed" "BACKEND" "$WORK/t3.out"
 check "3c ops service DEADHOST listed" "DEADHOST" "$WORK/t3.out"
 ncheck "3d dev-only service hidden from alice" "DEVONLY" "$WORK/t3.out"
+# Cursor on the selection input (===> field at row 19 col 8 on a MOD 2);
+# login is the only other screen and it reports 3 17, so 19 8 is the menu.
+check "3e menu cursor on selection input" "I 2 24 80 19 8 " "$WORK/t3.out"
 
 # --- 4. select 1 + ENTER bridges to the backend proxy ---
 BACK_CONNS_BEFORE=$(grep -c "accepted connection" "$WORK/back.log")
@@ -229,6 +233,49 @@ check "8a empty menu shows no-services message" "no services available" "$WORK/t
 # the session were trapped/desynced; its absence proves the menu re-rendered.
 ncheck "8b Enter on empty menu does not hang (session not trapped)" "^error" "$WORK/t8.out"
 check "8c menu re-renders after Enter (session alive)" "TN3270 GATEWAY MENU" "$WORK/t8.out"
+
+# --- 9. admin cursor positions. admin is a ZZADMIN member with no service
+# groups, so the menu shows the "A" entry over an empty service list and the
+# selection field accepts letters. Walk: login -> service menu -> admin menu
+# -> users list -> add-user form (PF4), capturing the cursor at each stop.
+# The empty admin-list (0,0) cursor is NOT exercised here (every entity list is
+# non-empty in this seed); TestAdminListScreenCursorEmptyHomes covers it. ---
+s3 t9 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+Ascii()
+String(A)
+Enter()
+Wait(5,InputField)
+Ascii()
+String(1)
+Enter()
+Wait(5,InputField)
+Ascii()
+PF(4)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "9a admin menu renders" "TN3270 GATEWAY ADMIN" "$WORK/t9.out"
+# Admin menu option field at row 19 col 8 (same row as the service menu — both
+# are correct; the service menu also reports 19 8 in this run).
+check "9b admin/menu cursor on option field (19,8)" "I 2 24 80 19 8 " "$WORK/t9.out"
+# Users list: first CMD field at row 4 col 3 — produced only by the list.
+check "9c users list cursor on first CMD field (4,3)" "I 2 24 80 4 3 " "$WORK/t9.out"
+# Add-user form: first input at row 3 col 17. Login also reports 3 17, so assert
+# a 3 17 cursor line that appears AFTER the list's 4 3 line — that one is the
+# form, not the earlier login screen.
+if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' "$WORK/t9.out"; then
+  PASS=$((PASS+1)); echo "PASS: 9d add-user form cursor (3,17) after users list"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 9d add-user form cursor not at (3,17) after users list"
+fi
 
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
