@@ -34,6 +34,8 @@ go build -o bin/tn3270proxy ./cmd/tn3270proxy
 ./bin/tn3270proxy serve -db proxy.db -listen :2323            # run the proxy
 ./bin/tn3270proxy audit list -db proxy.db                      # query the audit trail
 ./bin/tn3270proxy audit prune -db proxy.db -older-than 90d     # retention cleanup
+
+.claude/skills/s3270-smoke-testing/smoke.sh    # automated 3270 protocol smoke test (s3270)
 ```
 
 Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
@@ -127,6 +129,10 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   negotiation is answered locally and never forwarded. Do NOT "simplify" it to `io.Copy`.
 - **Toolchain:** `modernc.org/sqlite` pulls Go ≥1.25 via the `go` directive; the toolchain
   auto-downloads. No cgo.
+- **`tn3270proxy.json` in the repo root is auto-loaded by `serve`** and enables a TLS
+  listener on :2324 — a second instance collides with a running one. `-listen` overrides
+  only the plain addr; pass `-config` with `"tls":{"enabled":false}` for throwaway
+  instances (smoke.sh does this).
 - Runtime `*.db` files and `/bin/` are gitignored — don't commit them.
 
 ## Verifying a change actually works
