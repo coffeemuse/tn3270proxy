@@ -541,6 +541,51 @@ func TestSessionAuditsBridgeLifecycle(t *testing.T) {
 	}
 }
 
+func TestSessionBridgeEndDetailOnDialError(t *testing.T) {
+	// Verifies that a CauseError bridge outcome with a non-nil error produces
+	// a bridge_end audit event whose Detail carries the error string and whose
+	// Service matches the selected service name.
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true}, // second login render after menu logoff
+		},
+		menuPicks: []menuResult{
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{quit: true},
+		},
+	}
+	b := &fakeBridger{
+		causes: []bridge.Cause{bridge.CauseError},
+		errs:   []error{errors.New("connection refused")},
+	}
+	s := newTestSession(t, p, b)
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	var bridgeEnd *store.AuditEvent
+	for i := range rec.events {
+		if rec.events[i].Kind == store.AuditBridgeEnd {
+			bridgeEnd = &rec.events[i]
+			break
+		}
+	}
+	if bridgeEnd == nil {
+		t.Fatal("no bridge_end event recorded")
+	}
+	if bridgeEnd.Detail != "error: connection refused" {
+		t.Errorf("bridge_end Detail = %q, want %q", bridgeEnd.Detail, "error: connection refused")
+	}
+	if bridgeEnd.Service != "PROD" {
+		t.Errorf("bridge_end Service = %q, want %q", bridgeEnd.Service, "PROD")
+	}
+}
+
 func TestCauseDetail(t *testing.T) {
 	cases := []struct {
 		c    bridge.Cause
