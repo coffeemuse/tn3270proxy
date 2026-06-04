@@ -30,16 +30,18 @@ const (
 	FieldError    = "errormsg"
 )
 
-// LoginScreen returns the login screen and its validation rules, sized for
-// geom (bottom rows anchored to the last screen rows). errMsg, if non-empty,
-// is shown on the error line (e.g. a generic "invalid credentials" message
-// after a failed sign-on). The caller drives it with go3270.HandleScreenAlt
-// using AIDEnter to submit and AIDPF3 to quit, with errorField = FieldError.
-func LoginScreen(geom Geometry, errMsg string) (go3270.Screen, go3270.Rules) {
+// LoginScreen returns the login screen, its validation rules, and the initial
+// cursor position (on the username field), sized for geom (bottom rows
+// anchored to the last screen rows). errMsg, if non-empty, is shown on the
+// error line (e.g. a generic "invalid credentials" message after a failed
+// sign-on). The caller drives it with go3270.HandleScreenAlt using AIDEnter
+// to submit and AIDPF3 to quit, with errorField = FieldError.
+func LoginScreen(geom Geometry, errMsg string) (go3270.Screen, go3270.Rules, Cursor) {
+	username := go3270.Field{Row: 3, Col: 16, Name: FieldUsername, Write: true, Highlighting: go3270.Underscore}
 	screen := go3270.Screen{
 		{Row: 0, Col: 27, Intense: true, Content: "TN3270 GATEWAY LOGIN"},
 		{Row: 3, Col: 2, Content: "Userid . . ."},
-		{Row: 3, Col: 16, Name: FieldUsername, Write: true, Highlighting: go3270.Underscore},
+		username,
 		{Row: 3, Col: 33}, // stop field: closes the username input
 		{Row: 5, Col: 2, Content: "Password . ."},
 		{Row: 5, Col: 16, Name: FieldPassword, Write: true, Hidden: true, Highlighting: go3270.Underscore},
@@ -50,5 +52,5 @@ func LoginScreen(geom Geometry, errMsg string) (go3270.Screen, go3270.Rules) {
 	rules := go3270.Rules{
 		FieldUsername: {Validator: go3270.NonBlank, ErrorText: "Userid is required"},
 	}
-	return screen, rules
+	return screen, rules, cursorAt(username)
 }

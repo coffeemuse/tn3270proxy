@@ -35,7 +35,7 @@ func fieldByName(s go3270.Screen, name string) (go3270.Field, bool) {
 }
 
 func TestLoginScreenFields(t *testing.T) {
-	screen, rules := LoginScreen(DefaultGeometry, "")
+	screen, rules, _ := LoginScreen(DefaultGeometry, "")
 
 	uf, ok := fieldByName(screen, FieldUsername)
 	if !ok {
@@ -64,7 +64,7 @@ func TestLoginScreenFields(t *testing.T) {
 }
 
 func TestLoginScreenShowsError(t *testing.T) {
-	screen, _ := LoginScreen(DefaultGeometry, "Invalid credentials")
+	screen, _, _ := LoginScreen(DefaultGeometry, "Invalid credentials")
 	f, ok := fieldByName(screen, FieldError)
 	if !ok {
 		t.Fatalf("missing error field")
@@ -82,7 +82,7 @@ func TestLoginScreenBottomAnchored(t *testing.T) {
 		{Rows: 27, Cols: 132},
 		{}, // zero value: must normalize to 24×80 (ErrorRow=21, HelpRow=23)
 	} {
-		screen, _ := LoginScreen(g, "err")
+		screen, _, _ := LoginScreen(g, "err")
 		f, ok := fieldByName(screen, FieldError)
 		if !ok || f.Row != g.ErrorRow() {
 			t.Errorf("%+v: error row = %d, want %d", g, f.Row, g.ErrorRow())
@@ -99,5 +99,16 @@ func TestLoginScreenBottomAnchored(t *testing.T) {
 		if !foundHelp {
 			t.Errorf("%+v: no help line on last row %d", g, g.HelpRow())
 		}
+	}
+}
+
+func TestLoginScreenCursor(t *testing.T) {
+	screen, _, cur := LoginScreen(DefaultGeometry, "")
+	uf, ok := fieldByName(screen, FieldUsername)
+	if !ok {
+		t.Fatalf("missing %q field", FieldUsername)
+	}
+	if want := cursorAt(uf); cur != want {
+		t.Errorf("login cursor = %+v, want %+v (username field row %d col %d)", cur, want, uf.Row, uf.Col)
 	}
 }
