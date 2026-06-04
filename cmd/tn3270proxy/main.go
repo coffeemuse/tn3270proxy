@@ -29,6 +29,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "audit" {
 		return runAudit(args[1:])
 	}
+	if len(args) > 0 && args[0] == "bootstrap" {
+		return runBootstrap(args[1:], os.Stdout)
+	}
 	if len(args) > 0 && args[0] == "serve" {
 		args = args[1:]
 	}
@@ -45,6 +48,8 @@ func runServe(args []string) error {
 		return err
 	}
 	defer st.Close()
+
+	warnIfNoAdmin(context.Background(), st, os.Stderr)
 
 	listeners, err := listen.Build(cfg)
 	if err != nil {
@@ -95,5 +100,6 @@ func runSeed(args []string) error {
 		return err
 	}
 	fmt.Println("seed applied")
+	warnIfNoAdmin(context.Background(), st, os.Stderr)
 	return nil
 }

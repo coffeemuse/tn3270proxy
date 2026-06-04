@@ -30,7 +30,8 @@ go test ./...                  # all tests
 go test ./... -race            # tests with race detector (bridge is concurrent — use this)
 go build -o bin/tn3270proxy ./cmd/tn3270proxy
 
-./bin/tn3270proxy seed -db proxy.db -file seed.example.json   # load users/groups/services
+./bin/tn3270proxy bootstrap -db proxy.db                      # create first admin (fresh system)
+./bin/tn3270proxy seed -db proxy.db -file seed.example.json   # optional: bulk-load users/groups/services
 ./bin/tn3270proxy serve -db proxy.db -listen :2323            # run the proxy
 ./bin/tn3270proxy audit list -db proxy.db                      # query the audit trail
 ./bin/tn3270proxy audit prune -db proxy.db -older-than 90d     # retention cleanup
@@ -43,7 +44,7 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 ## Architecture (package map)
 
 ```
-cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, and `audit list|prune`; wires everything
+cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, and `audit list|prune`; wires everything
 internal/config   Config{DBPath, Plain, TLS, Limits}; Load(args) merges defaults<file<flags.
                   Optional JSON file (tn3270proxy.json) defines plain+tls listeners and a
                   `limits` section (pre_auth_idle/idle as Go duration strings, max_conns,

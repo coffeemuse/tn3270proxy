@@ -8,11 +8,27 @@ to the selected service. See `docs/superpowers/specs/` for the design.
 
     go build -o bin/tn3270proxy ./cmd/tn3270proxy
 
-## Seed users / groups / services
+## Bootstrap (first admin account)
+
+A fresh database has no admin, so the admin UI (menu entry `A`) is unreachable. Create the
+first admin account with:
+
+    ./bin/tn3270proxy bootstrap -db proxy.db
+
+This prints a one-time password for user `ADMIN` (crypto/rand, never a fixed default). Log
+in as `ADMIN`, create your real admin account via the admin UI, then delete `ADMIN`. The
+command refuses with an error if any admin already exists, so it is safe to re-run; use the
+admin UI for all subsequent account management.
+
+## Seed users / groups / services (optional)
+
+Seeding is a convenience for bulk-loading initial data. It is not required — a fresh system
+is fully configurable from the admin UI after running `bootstrap`.
 
     ./bin/tn3270proxy seed -db proxy.db -file seed.example.json
 
-See `seed.example.json` for the format.
+See `seed.example.json` for the format. If the seed file contains no ZZADMIN member, `serve`
+and `seed` will both warn that the admin UI is unreachable and point at `bootstrap`.
 
 ## Run
 

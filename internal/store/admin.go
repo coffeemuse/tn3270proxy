@@ -215,6 +215,16 @@ func (s *Store) UnlinkGroupService(ctx context.Context, groupID, serviceID int64
 	return err
 }
 
+// CountAdminMembers returns the number of users in the AdminGroup (ZZADMIN).
+func (s *Store) CountAdminMembers(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user_groups ug
+		 JOIN groups g ON g.id = ug.group_id
+		 WHERE g.name = ?`, AdminGroup).Scan(&n)
+	return n, err
+}
+
 // CountGroupMembers returns how many users belong to the group.
 func (s *Store) CountGroupMembers(ctx context.Context, groupID int64) (int, error) {
 	return s.countRows(ctx, "SELECT COUNT(*) FROM user_groups WHERE group_id = ?", groupID)
