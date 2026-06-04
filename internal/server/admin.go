@@ -31,8 +31,8 @@ type AdminStore interface {
 
 	ListAllServices(ctx context.Context) ([]store.Service, error)
 	GetService(ctx context.Context, id int64) (store.Service, error)
-	CreateService(ctx context.Context, name, host string, port int, tls, verify bool) (int64, error)
-	UpdateService(ctx context.Context, id int64, name, host string, port int, tls, verify bool) error
+	CreateService(ctx context.Context, name, description, host string, port int, tls, verify bool) (int64, error)
+	UpdateService(ctx context.Context, id int64, name, description, host string, port int, tls, verify bool) error
 	DeleteService(ctx context.Context, serviceID int64) error
 	ListGroupsForService(ctx context.Context, serviceID int64) ([]store.Group, error)
 	LinkGroupService(ctx context.Context, groupID, serviceID int64) error

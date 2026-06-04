@@ -81,7 +81,7 @@ func newAdminFixture(t *testing.T, p *fakeAdminPresenter) (*adminFlow, map[strin
 	ids["ops"], _ = st.CreateGroup(ctx, "ops")
 	st.AddUserToGroup(ctx, ids["root"], ids["zzadmin"])
 	st.AddUserToGroup(ctx, ids["alice"], ids["ops"])
-	ids["prod"], _ = st.CreateService(ctx, "PROD", "h", 23, false, true)
+	ids["prod"], _ = st.CreateService(ctx, "PROD", "Production", "h", 23, false, true)
 	st.LinkGroupService(ctx, ids["ops"], ids["prod"])
 
 	f := &adminFlow{
@@ -508,7 +508,7 @@ func TestAdminServiceAdd(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{PF: 4}, {PF: 3}},
 		forms: []AdminFormAction{{Values: map[string]string{
-			screens.FieldName: "DEV", screens.FieldHost: "dev.example", screens.FieldPort: "992",
+			screens.FieldName: "DEV", screens.FieldDescription: "Dev environment", screens.FieldHost: "dev.example", screens.FieldPort: "992",
 			screens.FieldTLS: "y", screens.FieldVerify: "n", // case-insensitive Y/N
 		}}},
 	}
@@ -532,7 +532,7 @@ func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // edit PROD
 		forms: []AdminFormAction{{Values: map[string]string{
-			screens.FieldName: "PROD", screens.FieldHost: "h2", screens.FieldPort: "1023",
+			screens.FieldName: "PROD", screens.FieldDescription: "Production", screens.FieldHost: "h2", screens.FieldPort: "1023",
 			screens.FieldTLS: "Y", screens.FieldVerify: "Y",
 		}}},
 	}
@@ -542,7 +542,8 @@ func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	form := p.gotForms[0] // pre-filled from the existing service
-	if form.Fields[0].Value != "PROD" || form.Fields[1].Value != "h" || form.Fields[2].Value != "23" {
+	// Fields: 0=Name, 1=Description, 2=Host, 3=Port
+	if form.Fields[0].Value != "PROD" || form.Fields[1].Value != "Production" || form.Fields[2].Value != "h" || form.Fields[3].Value != "23" {
 		t.Errorf("pre-fill = %+v", form.Fields)
 	}
 	svc, _ := f.store.GetService(ctx, ids["prod"])
@@ -556,7 +557,7 @@ func TestAdminServicePortValidation(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{PF: 4}, {PF: 3}},
 		forms: []AdminFormAction{
-			{Values: map[string]string{screens.FieldName: "X", screens.FieldHost: "h",
+			{Values: map[string]string{screens.FieldName: "X", screens.FieldDescription: "Svc X", screens.FieldHost: "h",
 				screens.FieldPort: "70000", screens.FieldTLS: "N", screens.FieldVerify: "Y"}},
 			{Cancel: true},
 		},
@@ -573,7 +574,7 @@ func TestAdminServiceDuplicateName(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{PF: 4}, {PF: 3}},
 		forms: []AdminFormAction{
-			{Values: map[string]string{screens.FieldName: "PROD", screens.FieldHost: "h",
+			{Values: map[string]string{screens.FieldName: "PROD", screens.FieldDescription: "Production", screens.FieldHost: "h",
 				screens.FieldPort: "23", screens.FieldTLS: "N", screens.FieldVerify: "Y"}},
 			{Cancel: true},
 		},
@@ -630,7 +631,7 @@ func TestAdminServiceFormPreservesInputOnError(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{PF: 4}, {PF: 3}},
 		forms: []AdminFormAction{
-			{Values: map[string]string{screens.FieldName: "DEV", screens.FieldHost: "dev.example",
+			{Values: map[string]string{screens.FieldName: "DEV", screens.FieldDescription: "Dev environment", screens.FieldHost: "dev.example",
 				screens.FieldPort: "junk", screens.FieldTLS: "y", screens.FieldVerify: "n"}},
 			{Cancel: true},
 		},
@@ -641,7 +642,8 @@ func TestAdminServiceFormPreservesInputOnError(t *testing.T) {
 	if last.ErrMsg != "PORT MUST BE 1-65535" {
 		t.Errorf("errMsg = %q", last.ErrMsg)
 	}
-	wants := []string{"DEV", "dev.example", "junk", "Y", "N"} // Y/N canonicalized upper
+	// Fields: 0=Name, 1=Description, 2=Host, 3=Port, 4=TLS, 5=Verify; Y/N canonicalized upper
+	wants := []string{"DEV", "Dev environment", "dev.example", "junk", "Y", "N"}
 	for i, want := range wants {
 		if last.Fields[i].Value != want {
 			t.Errorf("field %d preserved = %q, want %q", i, last.Fields[i].Value, want)
@@ -772,5 +774,43 @@ func TestAdminAuditValidationFailureRecordsNothing(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("audit = %+v, want no events for a rejected create", got)
+	}
+}
+
+func TestServiceFormPersistsDescription(t *testing.T) {
+	// Drive the ADD-service path and assert the description is stored.
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 3}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{{Values: map[string]string{
+			screens.FieldName:        "prodcics",
+			screens.FieldDescription: "Production CICS",
+			screens.FieldHost:        "h",
+			screens.FieldPort:        "23",
+			screens.FieldTLS:         "N",
+			screens.FieldVerify:      "Y",
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	svcs, err := f.store.ListAllServices(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *store.Service
+	for i := range svcs {
+		if svcs[i].Name == "PRODCICS" {
+			found = &svcs[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("PRODCICS not found in services: %+v", svcs)
+	}
+	if found.Description != "Production CICS" {
+		t.Errorf("Description = %q, want %q", found.Description, "Production CICS")
 	}
 }
