@@ -532,7 +532,7 @@ func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
 		lists: []AdminListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // edit PROD
 		forms: []AdminFormAction{{Values: map[string]string{
-			screens.FieldName: "PROD", screens.FieldDescription: "Production", screens.FieldHost: "h2", screens.FieldPort: "1023",
+			screens.FieldName: "PROD", screens.FieldDescription: "Production v2", screens.FieldHost: "h2", screens.FieldPort: "1023",
 			screens.FieldTLS: "Y", screens.FieldVerify: "Y",
 		}}},
 	}
@@ -549,6 +549,9 @@ func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
 	svc, _ := f.store.GetService(ctx, ids["prod"])
 	if svc.Host != "h2" || svc.Port != 1023 || !svc.TLS || !svc.TLSVerify {
 		t.Errorf("updated = %+v", svc)
+	}
+	if svc.Description != "Production v2" {
+		t.Errorf("updated Description = %q, want %q", svc.Description, "Production v2")
 	}
 }
 
@@ -584,6 +587,68 @@ func TestAdminServiceDuplicateName(t *testing.T) {
 	if msg := p.gotForms[1].ErrMsg; msg != "'PROD' ALREADY EXISTS" {
 		t.Errorf("errMsg = %q", msg)
 	}
+}
+
+func TestAdminServiceNameAndDescriptionValidation(t *testing.T) {
+	t.Run("invalid name with space", func(t *testing.T) {
+		p := &fakeAdminPresenter{
+			menu:  []adminMenuStep{{choice: 3}, {back: true}},
+			lists: []AdminListAction{{PF: 4}, {PF: 3}},
+			forms: []AdminFormAction{
+				{Values: map[string]string{
+					screens.FieldName:        "BAD NAME",
+					screens.FieldDescription: "Valid description",
+					screens.FieldHost:        "h",
+					screens.FieldPort:        "23",
+					screens.FieldTLS:         "N",
+					screens.FieldVerify:      "Y",
+				}},
+				{Cancel: true},
+			},
+		}
+		f, _ := newAdminFixture(t, p)
+		ctx := context.Background()
+		f.Run(ctx, nil)
+		if msg := p.gotForms[1].ErrMsg; !strings.Contains(msg, "SERVICE NAME") {
+			t.Errorf("errMsg = %q, want message containing SERVICE NAME", msg)
+		}
+		svcs, _ := f.store.ListAllServices(ctx)
+		for _, s := range svcs {
+			if s.Name != "PROD" {
+				t.Errorf("unexpected service persisted: %+v", s)
+			}
+		}
+	})
+
+	t.Run("empty description", func(t *testing.T) {
+		p := &fakeAdminPresenter{
+			menu:  []adminMenuStep{{choice: 3}, {back: true}},
+			lists: []AdminListAction{{PF: 4}, {PF: 3}},
+			forms: []AdminFormAction{
+				{Values: map[string]string{
+					screens.FieldName:        "OK",
+					screens.FieldDescription: "",
+					screens.FieldHost:        "h",
+					screens.FieldPort:        "23",
+					screens.FieldTLS:         "N",
+					screens.FieldVerify:      "Y",
+				}},
+				{Cancel: true},
+			},
+		}
+		f, _ := newAdminFixture(t, p)
+		ctx := context.Background()
+		f.Run(ctx, nil)
+		if msg := p.gotForms[1].ErrMsg; !strings.Contains(msg, "DESCRIPTION") {
+			t.Errorf("errMsg = %q, want message containing DESCRIPTION", msg)
+		}
+		svcs, _ := f.store.ListAllServices(ctx)
+		for _, s := range svcs {
+			if s.Name != "PROD" {
+				t.Errorf("unexpected service persisted: %+v", s)
+			}
+		}
+	})
 }
 
 func TestAdminServiceDeleteCascades(t *testing.T) {

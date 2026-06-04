@@ -46,7 +46,7 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 		pageSvcs := svcs[start:end]
 		rows := make([]string, len(pageSvcs))
 		for i, s := range pageSvcs {
-			rows[i] = fmt.Sprintf("%-8s %-20.20s %-18s %-3s %s",
+			rows[i] = fmt.Sprintf("%-8s %-20.20s %-18.18s %-3s %s",
 				s.Name, s.Description, fmt.Sprintf("%s:%d", s.Host, s.Port), yn(s.TLS), yn(s.TLSVerify))
 		}
 		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
