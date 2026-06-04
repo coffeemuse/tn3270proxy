@@ -139,8 +139,10 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   auto-downloads. No cgo.
 - **`tn3270proxy.json` in the repo root is auto-loaded by `serve`** and enables a TLS
   listener on :2324 — a second instance collides with a running one. `-listen` overrides
-  only the plain addr; pass `-config` with `"tls":{"enabled":false}` for throwaway
-  instances (smoke.sh does this).
+  only the plain addr (when the plain listener is enabled); if a config file sets
+  `listeners.plain.enabled=false`, passing `-listen` is a fatal conflict error — it never
+  silently enables plaintext on a gateway that deliberately disabled it. Pass `-config`
+  with `"tls":{"enabled":false}` for throwaway instances (smoke.sh does this).
 - Runtime `*.db` files and `/bin/` are gitignored — don't commit them.
 
 ## Verifying a change actually works
