@@ -42,3 +42,53 @@ func TestRecordAndListAudit(t *testing.T) {
 		t.Errorf("SessionID/ID round-trip failed: %+v", got[0])
 	}
 }
+
+func TestListAuditFilters(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	t0 := time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)
+	seed := []AuditEvent{
+		{At: t0, SessionID: "s1", Kind: AuditAuthFail, Username: "mallory"},
+		{At: t0.Add(time.Minute), SessionID: "s2", Kind: AuditAuthOK, Username: "alice"},
+		{At: t0.Add(2 * time.Minute), SessionID: "s2", Kind: AuditBridgeStart, Username: "alice", Service: "PROD"},
+		{At: t0.Add(time.Hour), SessionID: "s3", Kind: AuditAuthFail, Username: "mallory"},
+	}
+	for _, ev := range seed {
+		if err := st.RecordAudit(ctx, ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cases := []struct {
+		name      string
+		f         AuditFilter
+		wantKinds []string
+	}{
+		{"by username", AuditFilter{Username: "alice"}, []string{AuditBridgeStart, AuditAuthOK}},
+		{"by kind", AuditFilter{Kind: AuditAuthFail}, []string{AuditAuthFail, AuditAuthFail}},
+		{"since cuts older", AuditFilter{Since: t0.Add(30 * time.Minute)}, []string{AuditAuthFail}},
+		{"combined AND", AuditFilter{Username: "mallory", Since: t0.Add(30 * time.Minute)}, []string{AuditAuthFail}},
+		{"limit", AuditFilter{Limit: 2}, []string{AuditAuthFail, AuditBridgeStart}},
+		{"no match", AuditFilter{Username: "nobody"}, nil},
+	}
+	for _, c := range cases {
+		got, err := st.ListAudit(ctx, c.f)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		kinds := make([]string, 0, len(got))
+		for _, ev := range got {
+			kinds = append(kinds, ev.Kind)
+		}
+		if len(kinds) != len(c.wantKinds) {
+			t.Errorf("%s: kinds = %v, want %v", c.name, kinds, c.wantKinds)
+			continue
+		}
+		for i := range kinds {
+			if kinds[i] != c.wantKinds[i] {
+				t.Errorf("%s: kinds = %v, want %v", c.name, kinds, c.wantKinds)
+				break
+			}
+		}
+	}
+}

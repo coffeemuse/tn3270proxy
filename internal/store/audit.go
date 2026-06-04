@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -50,15 +51,34 @@ type AuditFilter struct {
 	Limit    int
 }
 
-// ListAudit returns matching events, newest first.
+// ListAudit returns matching events, newest first. Filters AND-combine.
 func (s *Store) ListAudit(ctx context.Context, f AuditFilter) ([]AuditEvent, error) {
-	query := `SELECT id, at, session_id, kind, username, remote_addr, service, detail
-		FROM audit ORDER BY id DESC LIMIT ?`
+	var where []string
+	var args []any
+	if f.Username != "" {
+		where = append(where, "username = ?")
+		args = append(args, f.Username)
+	}
+	if f.Kind != "" {
+		where = append(where, "kind = ?")
+		args = append(args, f.Kind)
+	}
+	if !f.Since.IsZero() {
+		where = append(where, "at >= ?")
+		args = append(args, f.Since.UTC().Format(time.RFC3339))
+	}
+	query := `SELECT id, at, session_id, kind, username, remote_addr, service, detail FROM audit`
+	if len(where) > 0 {
+		query += " WHERE " + strings.Join(where, " AND ")
+	}
 	limit := f.Limit
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, query, limit)
+	query += " ORDER BY id DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
