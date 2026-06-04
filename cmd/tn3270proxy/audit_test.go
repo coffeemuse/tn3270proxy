@@ -96,6 +96,15 @@ func TestRunAuditPruneRequiresOlderThan(t *testing.T) {
 	}
 }
 
+func TestRunAuditPruneRejectsZeroDuration(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "p.db")
+	for _, zero := range []string{"0d", "0h"} {
+		if err := runAuditPrune([]string{"-db", db, "-older-than", zero}); err == nil {
+			t.Errorf("-older-than %q: want error, got nil (would delete all rows)", zero)
+		}
+	}
+}
+
 func TestRunAuditPruneDeletesOldRows(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "p.db")
 	st, err := store.Open(db)

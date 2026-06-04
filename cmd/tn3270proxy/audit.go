@@ -109,6 +109,9 @@ func runAuditPrune(args []string) error {
 	if err != nil {
 		return fmt.Errorf("audit prune: -older-than: %w", err)
 	}
+	if d == 0 {
+		return fmt.Errorf("audit prune: -older-than must be positive (got %q)", *olderThan)
+	}
 	st, err := store.Open(*dbPath)
 	if err != nil {
 		return err
