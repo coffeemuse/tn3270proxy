@@ -10,6 +10,7 @@ import (
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
+	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
@@ -602,5 +603,37 @@ func TestCauseDetail(t *testing.T) {
 		if got := causeDetail(c.c, c.err); got != c.want {
 			t.Errorf("causeDetail(%v, %v) = %q, want %q", c.c, c.err, got, c.want)
 		}
+	}
+}
+
+func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "root", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{{admin: true}, {quit: true}},
+	}
+	ap := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}}, // groups list: PF4 add, then back
+		forms: []AdminFormAction{{Values: map[string]string{screens.FieldName: "newgrp"}}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.AdminPresenter = ap
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	var admins []store.AuditEvent
+	for _, ev := range rec.events {
+		if ev.Kind == store.AuditAdmin {
+			admins = append(admins, ev)
+		}
+	}
+	if len(admins) != 1 || admins[0].Detail != "group create newgrp" ||
+		admins[0].Username != "root" || admins[0].SessionID == "" {
+		t.Errorf("admin events = %+v, want one 'group create newgrp' by root with a session id", admins)
 	}
 }

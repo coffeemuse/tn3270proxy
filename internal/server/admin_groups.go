@@ -61,6 +61,8 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 			case act.Cmd == 0 && act.PF == 0:
 				if err := f.store.DeleteGroup(ctx, target.ID); err != nil {
 					errMsg = logStoreErr("delete group", err)
+				} else {
+					f.recordAdmin(ctx, "group delete "+target.Name)
 				}
 				continue
 			case act.PF == 3:
@@ -168,6 +170,8 @@ func (f *adminFlow) groupMembers(ctx context.Context, conn net.Conn, g store.Gro
 			case 'A':
 				if err := f.store.AddUserToGroup(ctx, u.ID, g.ID); err != nil {
 					errMsg = logStoreErr("add membership", err)
+				} else {
+					f.recordAdmin(ctx, "group "+g.Name+" add-member "+u.Username)
 				}
 			case 'R':
 				if g.Name == store.AdminGroup && memberSet[u.ID] {
@@ -178,6 +182,8 @@ func (f *adminFlow) groupMembers(ctx context.Context, conn net.Conn, g store.Gro
 				}
 				if err := f.store.RemoveUserFromGroup(ctx, u.ID, g.ID); err != nil {
 					errMsg = logStoreErr("remove membership", err)
+				} else {
+					f.recordAdmin(ctx, "group "+g.Name+" remove-member "+u.Username)
 				}
 			default:
 				errMsg = "INVALID COMMAND: " + string(act.Cmd)
@@ -222,6 +228,7 @@ func (f *adminFlow) groupAdd(ctx context.Context, conn net.Conn) error {
 			errMsg = logStoreErr("create group", err)
 			continue
 		}
+		f.recordAdmin(ctx, "group create "+name)
 		return nil
 	}
 }
