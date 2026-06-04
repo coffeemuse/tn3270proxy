@@ -55,7 +55,7 @@ type AdminListView struct {
 // input for row i is named FieldCmdPrefix+i ("cmd0", "cmd1", ...). At most
 // geom.ListPageSize() rows fit; rows beyond that are truncated — callers
 // paginate via the same method.
-func AdminListScreen(geom Geometry, v AdminListView) go3270.Screen {
+func AdminListScreen(geom Geometry, v AdminListView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
 		{Row: 0, Col: 2, Intense: true, Content: v.Title},
 		{Row: 0, Col: 60, Content: v.RowInfo},
@@ -65,10 +65,15 @@ func AdminListScreen(geom Geometry, v AdminListView) go3270.Screen {
 	if size := geom.ListPageSize(); len(rows) > size {
 		rows = rows[:size]
 	}
+	cur := Cursor{Row: 0, Col: 0} // empty list: no input field, home the cursor
 	for i, r := range rows {
 		row := 4 + i
+		cmd := go3270.Field{Row: row, Col: 2, Name: fmt.Sprintf("%s%d", FieldCmdPrefix, i), Write: true, Highlighting: go3270.Underscore}
+		if i == 0 {
+			cur = cursorAt(cmd)
+		}
 		screen = append(screen,
-			go3270.Field{Row: row, Col: 2, Name: fmt.Sprintf("%s%d", FieldCmdPrefix, i), Write: true, Highlighting: go3270.Underscore},
+			cmd,
 			go3270.Field{Row: row, Col: 4}, // stop field: 1-char command input
 			go3270.Field{Row: row, Col: 7, Content: r},
 		)
@@ -81,7 +86,7 @@ func AdminListScreen(geom Geometry, v AdminListView) go3270.Screen {
 		go3270.Field{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
 		go3270.Field{Row: geom.HelpRow(), Col: 2, Content: v.PFHelp},
 	)
-	return screen
+	return screen, cur
 }
 
 // AdminFormField is one labeled input on an admin form.

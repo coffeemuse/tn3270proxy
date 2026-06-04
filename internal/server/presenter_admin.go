@@ -87,19 +87,13 @@ func (go3270Presenter) AdminMenu(conn net.Conn, term Term, errMsg string) (int, 
 }
 
 func (go3270Presenter) AdminList(conn net.Conn, term Term, v screens.AdminListView) (AdminListAction, error) {
-	screen := screens.AdminListScreen(term.Geometry(), v)
-	// cursor on the first CMD field (attribute col 2 → input col 3); no input
-	// fields exist on an empty list, so home the cursor there.
-	crow, ccol := 4, 3
-	if len(v.Rows) == 0 {
-		crow, ccol = 0, 0
-	}
+	screen, cur := screens.AdminListScreen(term.Geometry(), v)
 	resp, err := handleScreen(func() (go3270.Response, error) {
 		return go3270.HandleScreenAlt(
 			screen, nil, map[string]string{},
 			[]go3270.AID{go3270.AIDEnter},
 			withSilentExits(adminListExitKeys),
-			screens.FieldError, crow, ccol, conn, term.dev, term.codepage(),
+			screens.FieldError, cur.Row, cur.Col, conn, term.dev, term.codepage(),
 		)
 	})
 	if err != nil {
