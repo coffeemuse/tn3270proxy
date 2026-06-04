@@ -20,10 +20,78 @@
 package server
 
 import (
+	"errors"
 	"net"
+	"sync"
 	"testing"
 	"time"
 )
+
+// fakeAddr is a stand-in net.Addr for the fake listeners below.
+type fakeAddr struct{}
+
+func (fakeAddr) Network() string { return "fake" }
+func (fakeAddr) String() string  { return "fake" }
+
+// triggerListener fails on demand: Accept blocks until fail is closed, then
+// returns err (the genuine root-cause error). It models the one listener that
+// fails for a real reason.
+type triggerListener struct {
+	fail chan struct{}
+	err  error
+}
+
+func (l *triggerListener) Accept() (net.Conn, error) { <-l.fail; return nil, l.err }
+func (l *triggerListener) Close() error              { return nil }
+func (l *triggerListener) Addr() net.Addr            { return fakeAddr{} }
+
+// closeListener models a healthy listener: Accept blocks until Close wakes it,
+// then returns a benign "closed" error — the masking error in issue #13.
+type closeListener struct {
+	closed chan struct{}
+	once   sync.Once
+	err    error
+}
+
+func (l *closeListener) Accept() (net.Conn, error) { <-l.closed; return nil, l.err }
+func (l *closeListener) Close() error {
+	l.once.Do(func() { close(l.closed) })
+	return nil
+}
+func (l *closeListener) Addr() net.Addr { return fakeAddr{} }
+
+// TestServeAllReturnsGenuineErrorNotMaskingCloseError pins issue #13: when one
+// listener fails for a real reason, ServeAll must return that error, not the
+// benign "use of closed network connection" that closing the healthy listeners
+// produces. The benign error can only arise *after* closeAll runs, so a correct
+// ServeAll records the genuine error first and never lets the close error mask
+// it. This is a scheduling race in the buggy implementation, so the scenario is
+// stressed in a loop (and is meant to be run under -race).
+func TestServeAllReturnsGenuineErrorNotMaskingCloseError(t *testing.T) {
+	genuineErr := errors.New("genuine listener failure")
+	benignErr := errors.New("use of closed network connection")
+
+	for i := range 500 {
+		benign := &closeListener{closed: make(chan struct{}), err: benignErr}
+		genuine := &triggerListener{fail: make(chan struct{}), err: genuineErr}
+
+		done := make(chan error, 1)
+		go func() {
+			done <- ServeAll([]net.Listener{benign, genuine}, handlerFunc(func(net.Conn) {}), Limits{})
+		}()
+
+		close(genuine.fail) // trigger the real failure
+
+		select {
+		case err := <-done:
+			if !errors.Is(err, genuineErr) {
+				t.Fatalf("iter %d: ServeAll returned %v, want the genuine error %v (masking close error?)", i, err, genuineErr)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("iter %d: ServeAll did not return", i)
+		}
+	}
+}
 
 func TestServeAllDispatchesAcrossListeners(t *testing.T) {
 	ln1, err := net.Listen("tcp", "127.0.0.1:0")
