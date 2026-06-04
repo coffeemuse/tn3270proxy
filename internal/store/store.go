@@ -21,10 +21,13 @@ type Store struct {
 // Open opens (creating if necessary) the SQLite database at path and applies
 // the schema migration. The schema is idempotent.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	// DSN _pragma applies to every pooled connection; db.Exec("PRAGMA ...") would only configure one.
+	const pragmas = "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	db, err := sql.Open("sqlite", path+pragmas)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
+	db.SetMaxOpenConns(4) // WAL allows concurrent readers + one writer; 4 bounds pool without serializing.
 	st := &Store{db: db}
 	if err := st.migrate(); err != nil {
 		db.Close()

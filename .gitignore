@@ -35,8 +35,10 @@ go.work.sum
 /tn3270proxy
 /bin/
 
-# Runtime SQLite databases
+# Runtime SQLite databases (including WAL mode sidecar files)
 *.db
+*.db-wal
+*.db-shm
 
 # Local TLS certs/keys (self-signed for testing) and runtime config
 *.crt
