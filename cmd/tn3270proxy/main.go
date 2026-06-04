@@ -26,6 +26,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "seed" {
 		return runSeed(args[1:])
 	}
+	if len(args) > 0 && args[0] == "audit" {
+		return runAudit(args[1:])
+	}
 	if len(args) > 0 && args[0] == "serve" {
 		args = args[1:]
 	}
