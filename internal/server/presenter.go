@@ -94,13 +94,13 @@ func (go3270Presenter) Login(conn net.Conn, term Term, errMsg string) (string, s
 func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
 	geom := term.Geometry()
 	for {
-		screen, mapping := screens.MenuScreen(geom, svcs, admin, errMsg)
+		screen, mapping, cur := screens.MenuScreen(geom, svcs, admin, errMsg)
 		resp, err := handleScreen(func() (go3270.Response, error) {
 			return go3270.HandleScreenAlt(
 				screen, nil, map[string]string{},
 				[]go3270.AID{go3270.AIDEnter},
 				withSilentExits([]go3270.AID{go3270.AIDPF3}),
-				screens.FieldError, geom.InputRow(), 8, conn, term.dev, term.codepage(),
+				screens.FieldError, cur.Row, cur.Col, conn, term.dev, term.codepage(),
 			)
 		})
 		if err != nil {

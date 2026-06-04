@@ -32,7 +32,7 @@ func TestMenuScreenMapping(t *testing.T) {
 		{ID: 1, Name: "PROD CICS", Host: "prod", Port: 23},
 		{ID: 2, Name: "TEST CICS", Host: "test", Port: 992, TLS: true},
 	}
-	screen, mapping := MenuScreen(DefaultGeometry, svcs, false, "")
+	screen, mapping, _ := MenuScreen(DefaultGeometry, svcs, false, "")
 
 	if len(mapping) != 2 {
 		t.Fatalf("mapping has %d entries, want 2", len(mapping))
@@ -50,7 +50,7 @@ func TestMenuScreenMapping(t *testing.T) {
 }
 
 func TestMenuScreenEmpty(t *testing.T) {
-	screen, mapping := MenuScreen(DefaultGeometry, nil, false, "")
+	screen, mapping, _ := MenuScreen(DefaultGeometry, nil, false, "")
 	if len(mapping) != 0 {
 		t.Errorf("mapping should be empty, got %d", len(mapping))
 	}
@@ -60,7 +60,7 @@ func TestMenuScreenEmpty(t *testing.T) {
 }
 
 func TestMenuScreenShowsError(t *testing.T) {
-	screen, _ := MenuScreen(DefaultGeometry, nil, false, "Backend unreachable")
+	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, "Backend unreachable")
 	f, ok := fieldByName(screen, FieldError)
 	if !ok {
 		t.Fatalf("missing error field")
@@ -71,7 +71,7 @@ func TestMenuScreenShowsError(t *testing.T) {
 }
 
 func TestMenuScreenAdminEntry(t *testing.T) {
-	screen, mapping := MenuScreen(DefaultGeometry, nil, true, "")
+	screen, mapping, _ := MenuScreen(DefaultGeometry, nil, true, "")
 	if len(mapping) != 0 {
 		t.Errorf("mapping = %v, want empty (admin entry is not a service)", mapping)
 	}
@@ -83,7 +83,7 @@ func TestMenuScreenAdminEntry(t *testing.T) {
 		t.Errorf("selection field must accept 'A' for admins: %+v", f)
 	}
 
-	screen, _ = MenuScreen(DefaultGeometry, nil, false, "")
+	screen, _, _ = MenuScreen(DefaultGeometry, nil, false, "")
 	if screenContains(screen, "Administration") {
 		t.Errorf("non-admin must not see the admin entry")
 	}
@@ -98,7 +98,7 @@ func TestMenuScreenAdminEntryClampedWithManyServices(t *testing.T) {
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
 	}
-	screen, _ := MenuScreen(DefaultGeometry, svcs, true, "")
+	screen, _, _ := MenuScreen(DefaultGeometry, svcs, true, "")
 	for _, f := range screen {
 		if strings.Contains(f.Content, "Administration") && f.Row > 17 {
 			t.Errorf("admin entry at row %d would collide with the input line", f.Row)
@@ -107,7 +107,7 @@ func TestMenuScreenAdminEntryClampedWithManyServices(t *testing.T) {
 }
 
 func TestMenuScreenHelpSaysLogoff(t *testing.T) {
-	screen, _ := MenuScreen(DefaultGeometry, nil, false, "")
+	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, "")
 	if !screenContains(screen, "PF3 = logoff") {
 		t.Errorf("menu help should say PF3 = logoff")
 	}
@@ -115,7 +115,7 @@ func TestMenuScreenHelpSaysLogoff(t *testing.T) {
 
 func TestMenuScreenBottomAnchored(t *testing.T) {
 	for _, g := range []Geometry{{Rows: 24, Cols: 80}, {Rows: 32, Cols: 80}, {Rows: 43, Cols: 80}} {
-		screen, _ := MenuScreen(g, nil, false, "err")
+		screen, _, _ := MenuScreen(g, nil, false, "err")
 		sel, ok := fieldByName(screen, FieldSelection)
 		if !ok || sel.Row != g.InputRow() {
 			t.Errorf("%+v: selection row = %d, want %d", g, sel.Row, g.InputRow())
@@ -135,7 +135,7 @@ func TestMenuScreenCapacityGrowsAndTruncates(t *testing.T) {
 
 	// MOD 2: truncated to capacity; nothing may touch the input row or below.
 	g2 := Geometry{Rows: 24, Cols: 80}
-	screen, mapping := MenuScreen(g2, svcs, false, "")
+	screen, mapping, _ := MenuScreen(g2, svcs, false, "")
 	if len(mapping) != g2.MenuCapacity(false) {
 		t.Errorf("MOD 2 mapping = %d entries, want %d", len(mapping), g2.MenuCapacity(false))
 	}
@@ -147,7 +147,7 @@ func TestMenuScreenCapacityGrowsAndTruncates(t *testing.T) {
 
 	// MOD 3: more services fit.
 	g3 := Geometry{Rows: 32, Cols: 80}
-	_, mapping = MenuScreen(g3, svcs, false, "")
+	_, mapping, _ = MenuScreen(g3, svcs, false, "")
 	if len(mapping) != g3.MenuCapacity(false) {
 		t.Errorf("MOD 3 mapping = %d entries, want %d", len(mapping), g3.MenuCapacity(false))
 	}
@@ -157,7 +157,7 @@ func TestMenuRendersISPFStyleAndHidesHostPort(t *testing.T) {
 	svcs := []store.Service{
 		{Name: "PRODCICS", Description: "Production CICS Region", Host: "secret.internal", Port: 992},
 	}
-	screen, mapping := MenuScreen(DefaultGeometry, svcs, false, "")
+	screen, mapping, _ := MenuScreen(DefaultGeometry, svcs, false, "")
 	if _, ok := mapping["1"]; !ok {
 		t.Fatal("selection 1 not mapped")
 	}
@@ -175,13 +175,24 @@ func TestMenuRendersISPFStyleAndHidesHostPort(t *testing.T) {
 	}
 }
 
+func TestMenuScreenCursor(t *testing.T) {
+	screen, _, cur := MenuScreen(DefaultGeometry, nil, false, "")
+	sf, ok := fieldByName(screen, FieldSelection)
+	if !ok {
+		t.Fatalf("missing %q field", FieldSelection)
+	}
+	if want := cursorAt(sf); cur != want {
+		t.Errorf("menu cursor = %+v, want %+v (selection field row %d col %d)", cur, want, sf.Row, sf.Col)
+	}
+}
+
 func TestMenuScreenAdminEntryNeverCollidesWhenFull(t *testing.T) {
 	svcs := make([]store.Service, 32)
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
 	}
 	for _, g := range []Geometry{{Rows: 24, Cols: 80}, {Rows: 43, Cols: 80}} {
-		screen, mapping := MenuScreen(g, svcs, true, "")
+		screen, mapping, _ := MenuScreen(g, svcs, true, "")
 		if len(mapping) != g.MenuCapacity(true) { // one less: row reserved for A entry
 			t.Errorf("%+v: admin mapping = %d entries, want %d", g, len(mapping), g.MenuCapacity(true))
 		}
