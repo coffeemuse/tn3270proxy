@@ -508,3 +508,54 @@ func TestSessionAuditsAuthEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionAuditsBridgeLifecycle(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{quit: true},
+		},
+	}
+	b := &fakeBridger{causes: []bridge.Cause{bridge.CauseUserEscaped}}
+	s := newTestSession(t, p, b)
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	want := []string{store.AuditConnect, store.AuditAuthOK,
+		store.AuditBridgeStart, store.AuditBridgeEnd, store.AuditDisconnect}
+	if !slices.Equal(rec.kinds(), want) {
+		t.Fatalf("kinds = %v, want %v", rec.kinds(), want)
+	}
+	start, end := rec.events[2], rec.events[3]
+	if start.Service != "PROD" || start.Username != "alice" {
+		t.Errorf("bridge_start = %+v, want service PROD by alice", start)
+	}
+	if end.Service != "PROD" || end.Detail != "user_escaped" {
+		t.Errorf("bridge_end = %+v, want service PROD detail user_escaped", end)
+	}
+}
+
+func TestCauseDetail(t *testing.T) {
+	cases := []struct {
+		c    bridge.Cause
+		err  error
+		want string
+	}{
+		{bridge.CauseBackendClosed, nil, "backend_closed"},
+		{bridge.CauseClientClosed, nil, "client_closed"},
+		{bridge.CauseUserEscaped, nil, "user_escaped"},
+		{bridge.CauseError, errors.New("connection refused"), "error: connection refused"},
+		{bridge.CauseError, nil, "error"},
+	}
+	for _, c := range cases {
+		if got := causeDetail(c.c, c.err); got != c.want {
+			t.Errorf("causeDetail(%v, %v) = %q, want %q", c.c, c.err, got, c.want)
+		}
+	}
+}

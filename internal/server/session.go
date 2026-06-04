@@ -124,7 +124,12 @@ func (s *Session) Run(conn net.Conn) {
 
 			addr := net.JoinHostPort(selected.Host, strconv.Itoa(selected.Port))
 			btls := BackendTLS{Enabled: selected.TLS, Verify: selected.TLSVerify}
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditBridgeStart, Username: identity.Username, Service: selected.Name})
 			cause, berr := s.Bridger.Bridge(conn, addr, term.Type, s.EscapeAID, btls)
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditBridgeEnd, Username: identity.Username,
+				Service: selected.Name, Detail: causeDetail(cause, berr)})
 			switch cause {
 			case bridge.CauseClientClosed:
 				endDetail = "client closed during bridge"
@@ -164,4 +169,22 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		// Generic message — never reveals whether the username exists (spec §7).
 		errMsg = "Invalid userid or password"
 	}
+}
+
+// causeDetail renders a bridge outcome for the audit trail.
+func causeDetail(c bridge.Cause, err error) string {
+	switch c {
+	case bridge.CauseBackendClosed:
+		return "backend_closed"
+	case bridge.CauseClientClosed:
+		return "client_closed"
+	case bridge.CauseUserEscaped:
+		return "user_escaped"
+	case bridge.CauseError:
+		if err != nil {
+			return "error: " + err.Error()
+		}
+		return "error"
+	}
+	return "unknown"
 }
