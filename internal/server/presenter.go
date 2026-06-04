@@ -11,6 +11,35 @@ import (
 	"github.com/racingmars/go3270"
 )
 
+// menuChoice classifies what a menu submit should do.
+type menuChoice int
+
+const (
+	menuReprompt menuChoice = iota // invalid key, services available — show inline error
+	menuRequery                    // no selectable entries — return nil so session re-queries
+	menuAdmin                      // admin "A" entry selected
+	menuService                    // valid service key selected
+)
+
+// classifyMenuSubmit decides what a menu submit means given the current
+// (post-filter) service mapping and whether the admin entry is shown.
+// Admin check is evaluated first so "A" with admin=true routes correctly
+// even when the service list is empty.
+func classifyMenuSubmit(key string, mapping map[string]store.Service, admin bool) (menuChoice, store.Service) {
+	if admin && key == "A" {
+		return menuAdmin, store.Service{}
+	}
+	if svc, ok := mapping[key]; ok {
+		return menuService, svc
+	}
+	if len(mapping) == 0 {
+		// Nothing is selectable — re-prompting in place is futile; hand control
+		// back to Session.Run so it re-queries the store (honouring "try again").
+		return menuRequery, store.Service{}
+	}
+	return menuReprompt, store.Service{}
+}
+
 // go3270Presenter renders screens using the go3270 library over a raw conn.
 type go3270Presenter struct{}
 
@@ -58,13 +87,16 @@ func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admi
 			return nil, false, true, nil
 		}
 		key := strings.ToUpper(strings.TrimSpace(resp.Values[screens.FieldSelection]))
-		if admin && key == "A" {
+		switch choice, svc := classifyMenuSubmit(key, mapping, admin); choice {
+		case menuAdmin:
 			return nil, true, false, nil
-		}
-		if svc, ok := mapping[key]; ok {
+		case menuService:
 			return &svc, false, false, nil
+		case menuRequery:
+			return nil, false, false, nil
+		default: // menuReprompt
+			errMsg = "Invalid selection: " + key
 		}
-		errMsg = "Invalid selection: " + key
 	}
 }
 
