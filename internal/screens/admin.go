@@ -133,16 +133,17 @@ func AdminFormScreen(geom Geometry, v AdminFormView) go3270.Screen {
 // AdminMenuScreen renders the top-level admin menu sized for geom. The caller
 // drives it with HandleScreenAlt: AIDEnter submits, PF3 returns to the
 // service menu.
-func AdminMenuScreen(geom Geometry, errMsg string) go3270.Screen {
+func AdminMenuScreen(geom Geometry, errMsg string) (go3270.Screen, Cursor) {
+	option := go3270.Field{Row: geom.InputRow(), Col: 7, Name: FieldOption, Write: true, Highlighting: go3270.Underscore}
 	return go3270.Screen{
 		{Row: 0, Col: 27, Intense: true, Content: "TN3270 GATEWAY ADMIN"},
 		{Row: 3, Col: 4, Content: "1.  Users"},
 		{Row: 4, Col: 4, Content: "2.  Groups"},
 		{Row: 5, Col: 4, Content: "3.  Services"},
 		{Row: geom.InputRow(), Col: 2, Content: "===>"},
-		{Row: geom.InputRow(), Col: 7, Name: FieldOption, Write: true, Highlighting: go3270.Underscore},
+		option,
 		{Row: geom.InputRow(), Col: 11}, // stop field
 		{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
 		{Row: geom.HelpRow(), Col: 2, Content: "Enter = select    PF3 = main menu"},
-	}
+	}, cursorAt(option)
 }

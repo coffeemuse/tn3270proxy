@@ -37,7 +37,7 @@ func screenContains(s go3270.Screen, sub string) bool {
 }
 
 func TestAdminMenuScreenFields(t *testing.T) {
-	screen := AdminMenuScreen(DefaultGeometry, "boom")
+	screen, _ := AdminMenuScreen(DefaultGeometry, "boom")
 	f, ok := fieldByName(screen, FieldOption)
 	if !ok {
 		t.Errorf("missing %q field", FieldOption)
@@ -160,7 +160,7 @@ func TestAdminFormScreenFields(t *testing.T) {
 func TestAdminScreensBottomAnchored(t *testing.T) {
 	g := Geometry{Rows: 32, Cols: 80}
 
-	menu := AdminMenuScreen(g, "boom")
+	menu, _ := AdminMenuScreen(g, "boom")
 	opt, _ := fieldByName(menu, FieldOption)
 	if opt.Row != g.InputRow() {
 		t.Errorf("admin menu option row = %d, want %d", opt.Row, g.InputRow())
@@ -197,6 +197,17 @@ func TestAdminScreensBottomAnchored(t *testing.T) {
 	}
 	if !formHelpOK {
 		t.Errorf("form: no help line on last row %d", g.HelpRow())
+	}
+}
+
+func TestAdminMenuScreenCursor(t *testing.T) {
+	screen, cur := AdminMenuScreen(DefaultGeometry, "")
+	of, ok := fieldByName(screen, FieldOption)
+	if !ok {
+		t.Fatalf("missing %q field", FieldOption)
+	}
+	if want := cursorAt(of); cur != want {
+		t.Errorf("admin menu cursor = %+v, want %+v (option field row %d col %d)", cur, want, of.Row, of.Col)
 	}
 }
 
