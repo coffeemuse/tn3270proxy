@@ -27,6 +27,7 @@ import (
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
 // isReservedGroup reports whether name is in the app-dictated ZZ* namespace
@@ -37,224 +38,145 @@ func isReservedGroup(name string) bool {
 
 // groups drives the group list and the add-group form.
 func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
-	page, errMsg := 0, ""
-	var pendingDelete *store.Group
-	for {
-		groups, err := f.store.ListGroups(ctx)
-		if err != nil {
-			errMsg = logStoreErr("list groups", err)
-			groups = nil
-			pendingDelete = nil // confirm lost; user must re-initiate D
-		}
-		var start, end int
-		var rowInfo string
-		page, start, end, rowInfo = f.pageBounds(page, len(groups))
-		pageGroups := groups[start:end]
-		rows := make([]string, len(pageGroups))
-		for i, g := range pageGroups {
-			members, merr := f.store.CountGroupMembers(ctx, g.ID)
-			services, serr := f.store.CountGroupServices(ctx, g.ID)
-			if merr != nil || serr != nil {
-				members, services = 0, 0
+	r := f.renderer(conn)
+	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.Group]{
+		Title:  "TN3270 GATEWAY ADMIN: GROUPS",
+		Header: "CMD  GROUP                MEMBERS  SERVICES",
+		Legend: "M = members   D = delete   PF4 = add group",
+		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = admin menu",
+		Rows:   f.term.Rows,
+		Fetch: func(ctx context.Context) ([]ui3270.Row[store.Group], string) {
+			groups, err := f.store.ListGroups(ctx)
+			if err != nil {
+				return nil, logStoreErr("list groups", err)
 			}
-			rows[i] = fmt.Sprintf("%-20s %7d  %8d", g.Name, members, services)
-		}
-		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
-			Title:   "TN3270 GATEWAY ADMIN: GROUPS",
-			RowInfo: rowInfo,
-			Header:  "CMD  GROUP                MEMBERS  SERVICES",
-			Rows:    rows,
-			Legend:  "M = members   D = delete   PF4 = add group",
-			ErrMsg:  errMsg,
-			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = admin menu",
-		})
-		if err != nil {
-			return err
-		}
-		errMsg = ""
-
-		if pendingDelete != nil {
-			target := *pendingDelete
-			pendingDelete = nil
-			switch {
-			case act.Cmd == 0 && act.PF == 0:
-				if err := f.store.DeleteGroup(ctx, target.ID); err != nil {
-					errMsg = logStoreErr("delete group", err)
-				} else {
-					f.recordAdmin(ctx, "group delete "+target.Name)
+			rows := make([]ui3270.Row[store.Group], len(groups))
+			for i, g := range groups {
+				members, merr := f.store.CountGroupMembers(ctx, g.ID)
+				services, serr := f.store.CountGroupServices(ctx, g.ID)
+				if merr != nil || serr != nil {
+					members, services = 0, 0
 				}
-				continue
-			case act.PF == 3:
-				continue
-			}
-		}
-
-		switch {
-		case act.PF == 3:
-			return nil
-		case act.PF == 4:
-			if err := f.groupAdd(ctx, conn); err != nil {
-				return err
-			}
-		case act.PF == 7:
-			page--
-		case act.PF == 8:
-			if end < len(groups) {
-				page++
-			}
-		case act.Cmd != 0:
-			if act.Row >= len(pageGroups) {
-				continue
-			}
-			g := pageGroups[act.Row]
-			switch act.Cmd {
-			case 'M':
-				if err := f.groupMembers(ctx, conn, g); err != nil {
-					return err
+				rows[i] = ui3270.Row[store.Group]{
+					Display: fmt.Sprintf("%-20s %7d  %8d", g.Name, members, services), Item: g,
 				}
-			case 'D':
-				if isReservedGroup(g.Name) {
-					errMsg = "ZZ* GROUP NAMES ARE RESERVED"
-					continue
-				}
-				pendingDelete = &g
-				errMsg = fmt.Sprintf("ENTER = CONFIRM DELETE OF '%s', PF3 = CANCEL", g.Name)
-			default:
-				errMsg = "INVALID COMMAND: " + string(act.Cmd)
 			}
-		}
-	}
+			return rows, ""
+		},
+		Add: func(ctx context.Context, r ui3270.Renderer) (string, error) { return "", f.groupAdd(ctx, r) },
+		Cmds: []ui3270.Command[store.Group]{
+			{Key: 'M', Commit: func(ctx context.Context, r ui3270.Renderer, g store.Group) (string, error) {
+				return "", f.groupMembers(ctx, r, g)
+			}},
+			{Key: 'D',
+				Confirm: func(g store.Group) (string, string) {
+					if isReservedGroup(g.Name) {
+						return "", "ZZ* GROUP NAMES ARE RESERVED"
+					}
+					return fmt.Sprintf("ENTER = CONFIRM DELETE OF '%s', PF3 = CANCEL", g.Name), ""
+				},
+				Commit: func(ctx context.Context, _ ui3270.Renderer, g store.Group) (string, error) {
+					if err := f.store.DeleteGroup(ctx, g.ID); err != nil {
+						return logStoreErr("delete group", err), nil
+					}
+					f.recordAdmin(ctx, "group delete "+g.Name)
+					return "", nil
+				}},
+		},
+	})
 }
 
 // groupMembers shows every user with an X membership marker for g; line
 // command A adds the user to the group, R removes (guarded for the last
 // ZZADMIN member). Membership is manageable from either side: this is the
 // group-side mirror of userGroups.
-func (f *adminFlow) groupMembers(ctx context.Context, conn net.Conn, g store.Group) error {
-	page, errMsg := 0, ""
-	for {
-		users, err := f.store.ListUsers(ctx)
-		if err != nil {
-			errMsg = logStoreErr("list users", err)
-			users = nil
-		}
-		members, err := f.store.ListUsersInGroup(ctx, g.ID)
-		if err != nil {
-			errMsg = logStoreErr("list group members", err)
-		}
-		memberSet := make(map[int64]bool, len(members))
-		for _, m := range members {
-			memberSet[m.ID] = true
-		}
-		var start, end int
-		var rowInfo string
-		page, start, end, rowInfo = f.pageBounds(page, len(users))
-		pageUsers := users[start:end]
-		rows := make([]string, len(pageUsers))
-		for i, u := range pageUsers {
-			marker := ""
-			if memberSet[u.ID] {
-				marker = "X"
+func (f *adminFlow) groupMembers(ctx context.Context, r ui3270.Renderer, g store.Group) error {
+	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.User]{
+		Title:  "TN3270 GATEWAY ADMIN: MEMBERS OF " + g.Name,
+		Header: "CMD  USERNAME         MEMBER",
+		Legend: "A = add to group   R = remove from group",
+		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = back",
+		Rows:   f.term.Rows,
+		Fetch: func(ctx context.Context) ([]ui3270.Row[store.User], string) {
+			users, err := f.store.ListUsers(ctx)
+			if err != nil {
+				return nil, logStoreErr("list users", err)
 			}
-			rows[i] = fmt.Sprintf("%-16s %s", u.Username, marker)
-		}
-		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
-			Title:   "TN3270 GATEWAY ADMIN: MEMBERS OF " + g.Name,
-			RowInfo: rowInfo,
-			Header:  "CMD  USERNAME         MEMBER",
-			Rows:    rows,
-			Legend:  "A = add to group   R = remove from group",
-			ErrMsg:  errMsg,
-			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = back",
-		})
-		if err != nil {
-			return err
-		}
-		errMsg = ""
-		switch {
-		case act.PF == 3:
-			return nil
-		case act.PF == 7:
-			page--
-		case act.PF == 8:
-			if end < len(users) {
-				page++
+			members, merr := f.store.ListUsersInGroup(ctx, g.ID)
+			errMsg := ""
+			if merr != nil {
+				errMsg = logStoreErr("list group members", merr)
 			}
-		case act.Cmd != 0:
-			if act.Row >= len(pageUsers) {
-				continue
+			memberSet := make(map[int64]bool, len(members))
+			for _, m := range members {
+				memberSet[m.ID] = true
 			}
-			u := pageUsers[act.Row]
-			switch act.Cmd {
-			case 'A':
-				if err := f.store.AddUserToGroup(ctx, u.ID, g.ID); err != nil {
-					errMsg = logStoreErr("add membership", err)
-				} else {
-					f.recordAdmin(ctx, "group "+g.Name+" add-member "+u.Username)
+			rows := make([]ui3270.Row[store.User], len(users))
+			for i, u := range users {
+				marker := ""
+				if memberSet[u.ID] {
+					marker = "X"
 				}
-			case 'R':
-				if g.Name == store.AdminGroup && memberSet[u.ID] {
+				rows[i] = ui3270.Row[store.User]{Display: fmt.Sprintf("%-16s %s", u.Username, marker), Item: u}
+			}
+			return rows, errMsg
+		},
+		Cmds: []ui3270.Command[store.User]{
+			{Key: 'A', Commit: func(ctx context.Context, _ ui3270.Renderer, u store.User) (string, error) {
+				if err := f.store.AddUserToGroup(ctx, u.ID, g.ID); err != nil {
+					return logStoreErr("add membership", err), nil
+				}
+				f.recordAdmin(ctx, "group "+g.Name+" add-member "+u.Username)
+				return "", nil
+			}},
+			{Key: 'R', Commit: func(ctx context.Context, _ ui3270.Renderer, u store.User) (string, error) {
+				if g.Name == store.AdminGroup {
 					// Last-admin guard first: a sole admin self-removing gets the
 					// more informative "last admin" message; the self-demotion
 					// guard then catches the ≥2-admins fat-finger case.
 					if msg := f.guardLastAdmin(ctx); msg != "" {
-						errMsg = msg
-						continue
+						return msg, nil
 					}
 					if u.ID == f.identity.UserID {
-						errMsg = "CANNOT REMOVE YOUR OWN ADMIN MEMBERSHIP"
-						continue
+						return "CANNOT REMOVE YOUR OWN ADMIN MEMBERSHIP", nil
 					}
 				}
 				if err := f.store.RemoveUserFromGroup(ctx, u.ID, g.ID); err != nil {
-					errMsg = logStoreErr("remove membership", err)
-				} else {
-					f.recordAdmin(ctx, "group "+g.Name+" remove-member "+u.Username)
+					return logStoreErr("remove membership", err), nil
 				}
-			default:
-				errMsg = "INVALID COMMAND: " + string(act.Cmd)
-			}
-		}
-	}
+				f.recordAdmin(ctx, "group "+g.Name+" remove-member "+u.Username)
+				return "", nil
+			}},
+		},
+	})
 }
 
-func (f *adminFlow) groupAdd(ctx context.Context, conn net.Conn) error {
-	name, errMsg := "", ""
-	for {
-		act, err := f.presenter.AdminForm(conn, f.term, screens.AdminFormView{
-			Title: "TN3270 GATEWAY ADMIN: ADD GROUP",
-			Fields: []screens.AdminFormField{
-				{Name: screens.FieldName, Label: "Group name .", Value: name, Length: 32},
-			},
-			ErrMsg: errMsg,
-		})
-		if err != nil {
-			return err
-		}
-		if act.Cancel {
-			return nil
-		}
-		name = act.Values[screens.FieldName]
-		if name == "" {
-			errMsg = "GROUP NAME IS REQUIRED"
-			continue
-		}
-		if isReservedGroup(name) {
-			errMsg = "ZZ* GROUP NAMES ARE RESERVED"
-			continue
-		}
-		if _, exists, err := f.groupIDByName(ctx, name); err != nil {
-			errMsg = logStoreErr("check group", err)
-			continue
-		} else if exists {
-			errMsg = "'" + name + "' ALREADY EXISTS"
-			continue
-		}
-		if _, err := f.store.CreateGroup(ctx, name); err != nil {
-			errMsg = logStoreErr("create group", err)
-			continue
-		}
-		f.recordAdmin(ctx, "group create "+name)
-		return nil
-	}
+func (f *adminFlow) groupAdd(ctx context.Context, r ui3270.Renderer) error {
+	// fields is declared as a local variable so a rejected submit re-seeds the
+	// typed group name on the next render (RunForm re-sends the same slice each loop).
+	fields := []ui3270.FormField{{Name: screens.FieldName, Label: "Group name .", Length: 32}}
+	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
+		Title:  "TN3270 GATEWAY ADMIN: ADD GROUP",
+		Fields: fields,
+		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
+			name := vals[screens.FieldName]
+			fields[0].Value = name // preserve typed input on re-render
+			if name == "" {
+				return "GROUP NAME IS REQUIRED", nil
+			}
+			if isReservedGroup(name) {
+				return "ZZ* GROUP NAMES ARE RESERVED", nil
+			}
+			if _, exists, err := f.groupIDByName(ctx, name); err != nil {
+				return logStoreErr("check group", err), nil
+			} else if exists {
+				return "'" + name + "' ALREADY EXISTS", nil
+			}
+			if _, err := f.store.CreateGroup(ctx, name); err != nil {
+				return logStoreErr("create group", err), nil
+			}
+			f.recordAdmin(ctx, "group create "+name)
+			return "", nil
+		},
+	})
 }

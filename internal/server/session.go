@@ -33,6 +33,7 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
 // Presenter renders the proxy's own 3270 screens to the client. The real
@@ -71,6 +72,9 @@ type Session struct {
 	// AdminPresenter renders the admin screens. When nil (or the user is not
 	// in store.AdminGroup) the menu shows no admin entry.
 	AdminPresenter AdminPresenter
+	// AdminRenderer builds the ui3270.Renderer that drives the admin list/form
+	// flow. Nil selects the production go3270 renderer; tests inject a fake.
+	AdminRenderer func(conn net.Conn, term Term) ui3270.Renderer
 	// Auditor records the session's audit trail; nil disables auditing.
 	Auditor Auditor
 	// PreAuthIdle/Idle are the idle windows applied to conns that implement
@@ -166,7 +170,14 @@ func (s *Session) Run(conn net.Conn) {
 			}
 			errMsg = ""
 			if adminSel && isAdmin {
+				renderer := func(conn net.Conn) ui3270.Renderer {
+					if s.AdminRenderer != nil {
+						return s.AdminRenderer(conn, term)
+					}
+					return ui3270.NewGo3270Renderer(conn, term.dev, term.codepage(), term.Rows)
+				}
 				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter,
+					renderer: renderer,
 					identity: identity, term: term, audit: aud.record}
 				if aerr := flow.Run(ctx, conn); aerr != nil {
 					log.Printf("admin flow for %s ended: %v", identity.Username, aerr)

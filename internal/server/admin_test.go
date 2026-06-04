@@ -30,6 +30,7 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
 // --- fakes ---
@@ -43,12 +44,12 @@ type adminMenuStep struct {
 // to render, so tests can assert on error lines and row content.
 type fakeAdminPresenter struct {
 	menu  []adminMenuStep
-	lists []AdminListAction
-	forms []AdminFormAction
+	lists []ui3270.ListAction
+	forms []ui3270.FormAction
 
 	gotMenuErrs []string
-	gotLists    []screens.AdminListView
-	gotForms    []screens.AdminFormView
+	gotLists    []ui3270.ListView
+	gotForms    []ui3270.FormView
 }
 
 func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, _ Term, errMsg string) (int, bool, error) {
@@ -61,20 +62,23 @@ func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, _ Term, errMsg string) (int, 
 	return s.choice, s.back, nil
 }
 
-func (f *fakeAdminPresenter) AdminList(_ net.Conn, _ Term, v screens.AdminListView) (AdminListAction, error) {
+func (f *fakeAdminPresenter) List(v ui3270.ListView) (ui3270.ListAction, error) {
 	f.gotLists = append(f.gotLists, v)
 	if len(f.lists) == 0 {
-		panic("unexpected AdminList call")
+		panic("unexpected List call")
 	}
 	a := f.lists[0]
 	f.lists = f.lists[1:]
 	return a, nil
 }
 
-func (f *fakeAdminPresenter) AdminForm(_ net.Conn, _ Term, v screens.AdminFormView) (AdminFormAction, error) {
+func (f *fakeAdminPresenter) Form(v ui3270.FormView) (ui3270.FormAction, error) {
+	// Snapshot Fields: glue may re-seed the same backing slice between renders
+	// to preserve typed-but-rejected input, so capture a copy per render.
+	v.Fields = append([]ui3270.FormField(nil), v.Fields...)
 	f.gotForms = append(f.gotForms, v)
 	if len(f.forms) == 0 {
-		panic("unexpected AdminForm call")
+		panic("unexpected Form call")
 	}
 	a := f.forms[0]
 	f.forms = f.forms[1:]
@@ -105,7 +109,8 @@ func newAdminFixture(t *testing.T, p *fakeAdminPresenter) (*adminFlow, map[strin
 
 	f := &adminFlow{
 		store:     st,
-		presenter: p,
+		presenter: p, // AdminMenu only
+		renderer:  func(net.Conn) ui3270.Renderer { return p },
 		identity:  auth.Identity{UserID: ids["root"], Username: "root", Groups: []string{store.AdminGroup}},
 		term:      Term{Type: "IBM-3278-2", Rows: 24, Cols: 80},
 	}
@@ -113,7 +118,7 @@ func newAdminFixture(t *testing.T, p *fakeAdminPresenter) (*adminFlow, map[strin
 }
 
 // lastList returns the most recently captured list view.
-func lastList(t *testing.T, p *fakeAdminPresenter) screens.AdminListView {
+func lastList(t *testing.T, p *fakeAdminPresenter) ui3270.ListView {
 	t.Helper()
 	if len(p.gotLists) == 0 {
 		t.Fatal("no list views captured")
@@ -131,46 +136,11 @@ func TestAdminFlowMenuBack(t *testing.T) {
 	}
 }
 
-func TestPageBounds(t *testing.T) {
-	cases := []struct {
-		page, total            int
-		wantPage, wantS, wantE int
-		wantInfo               string
-	}{
-		{0, 0, 0, 0, 0, "ROW 0 OF 0"},
-		{0, 3, 0, 0, 3, "ROW 1 TO 3 OF 3"},
-		{-1, 3, 0, 0, 3, "ROW 1 TO 3 OF 3"}, // PF7 on page 0 underflows; clamp
-		{0, 20, 0, 0, 14, "ROW 1 TO 14 OF 20"},
-		{1, 20, 1, 14, 20, "ROW 15 TO 20 OF 20"},
-		{5, 20, 1, 14, 20, "ROW 15 TO 20 OF 20"}, // clamped after deletions
-	}
-	f := &adminFlow{term: Term{Rows: 24, Cols: 80}}
-	for _, c := range cases {
-		page, s, e, info := f.pageBounds(c.page, c.total)
-		if page != c.wantPage || s != c.wantS || e != c.wantE || info != c.wantInfo {
-			t.Errorf("pageBounds(%d,%d) = %d,%d,%d,%q want %d,%d,%d,%q",
-				c.page, c.total, page, s, e, info, c.wantPage, c.wantS, c.wantE, c.wantInfo)
-		}
-	}
-}
-
-func TestPageBoundsGrowsWithTerminalRows(t *testing.T) {
-	f := &adminFlow{term: Term{Rows: 32, Cols: 80}} // page size 22
-	page, s, e, info := f.pageBounds(0, 30)
-	if page != 0 || s != 0 || e != 22 || info != "ROW 1 TO 22 OF 30" {
-		t.Errorf("MOD 3 pageBounds(0,30) = %d,%d,%d,%q", page, s, e, info)
-	}
-	page, s, e, info = f.pageBounds(1, 30)
-	if page != 1 || s != 22 || e != 30 || info != "ROW 23 TO 30 OF 30" {
-		t.Errorf("MOD 3 pageBounds(1,30) = %d,%d,%d,%q", page, s, e, info)
-	}
-}
-
 func TestAdminUserAddHappyPath(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{{Values: map[string]string{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{{Values: map[string]string{
 			screens.FieldUsername: "carol",
 			screens.FieldPassword: "pw",
 			screens.FieldRetype:   "pw",
@@ -197,8 +167,8 @@ func TestAdminUserAddHappyPath(t *testing.T) {
 func TestAdminUserAddDuplicatePreservesInput(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
 			{Values: map[string]string{screens.FieldUsername: "alice", screens.FieldPassword: "pw", screens.FieldRetype: "pw"}},
 			{Cancel: true},
 		},
@@ -219,8 +189,8 @@ func TestAdminUserAddDuplicatePreservesInput(t *testing.T) {
 func TestAdminUserAddPasswordMismatch(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
 			{Values: map[string]string{screens.FieldUsername: "carol", screens.FieldPassword: "a", screens.FieldRetype: "b"}},
 			{Cancel: true},
 		},
@@ -239,8 +209,8 @@ func TestAdminUserAddPasswordTooLong(t *testing.T) {
 	long := strings.Repeat("a", 73) // > bcrypt's 72-byte limit
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
 			{Values: map[string]string{screens.FieldUsername: "dave", screens.FieldPassword: long, screens.FieldRetype: long}},
 			{Cancel: true},
 		},
@@ -258,8 +228,8 @@ func TestAdminUserAddPasswordTooLong(t *testing.T) {
 func TestAdminSetPassword(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // S on alice
-		forms: []AdminFormAction{{Values: map[string]string{
+		lists: []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // S on alice
+		forms: []ui3270.FormAction{{Values: map[string]string{
 			screens.FieldPassword: "newpw", screens.FieldRetype: "newpw",
 		}}},
 	}
@@ -276,7 +246,7 @@ func TestAdminSetPassword(t *testing.T) {
 func TestAdminDeleteUserConfirmFlow(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}}, // D alice, Enter confirms
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}}, // D alice, Enter confirms
 	}
 	f, _ := newAdminFixture(t, p)
 	if err := f.Run(context.Background(), nil); err != nil {
@@ -293,7 +263,7 @@ func TestAdminDeleteUserConfirmFlow(t *testing.T) {
 func TestAdminDeleteUserCancel(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 3}, {PF: 3}}, // PF3 cancels, stays
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {PF: 3}, {PF: 3}}, // PF3 cancels, stays
 	}
 	f, _ := newAdminFixture(t, p)
 	f.Run(context.Background(), nil)
@@ -305,7 +275,7 @@ func TestAdminDeleteUserCancel(t *testing.T) {
 func TestAdminDeleteOwnAccountBlocked(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {}, {PF: 3}}, // D on root (self)
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 1}, {}, {PF: 3}}, // D on root (self)
 	}
 	f, _ := newAdminFixture(t, p)
 	f.Run(context.Background(), nil)
@@ -320,7 +290,7 @@ func TestAdminDeleteOwnAccountBlocked(t *testing.T) {
 func TestAdminDeleteLastAdminBlocked(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {}, {PF: 3}}, // alice deletes root
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 1}, {}, {PF: 3}}, // alice deletes root
 	}
 	f, ids := newAdminFixture(t, p)
 	f.identity = auth.Identity{UserID: ids["alice"], Username: "alice", Groups: []string{store.AdminGroup}}
@@ -336,7 +306,7 @@ func TestAdminDeleteLastAdminBlocked(t *testing.T) {
 func TestAdminUserListPaging(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{PF: 8}, {PF: 7}, {PF: 3}},
+		lists: []ui3270.ListAction{{PF: 8}, {PF: 7}, {PF: 3}},
 	}
 	f, _ := newAdminFixture(t, p)
 	ctx := context.Background()
@@ -361,7 +331,7 @@ func TestAdminDeleteUserOtherActionCancelsConfirm(t *testing.T) {
 	// D on alice, then PF8 (page): confirm silently cancelled, no delete.
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 8}, {PF: 3}},
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {PF: 8}, {PF: 3}},
 	}
 	f, _ := newAdminFixture(t, p)
 	if err := f.Run(context.Background(), nil); err != nil {
@@ -376,7 +346,7 @@ func TestAdminUserGroupsToggle(t *testing.T) {
 	// Group rows sort OPS(0), ZZADMIN(1) (all uppercase, lexicographic). Add alice to ZZADMIN, remove from OPS.
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'G', Row: 0}, // users list: G on alice
 			{Cmd: 'A', Row: 1}, // add ZZADMIN (row 1)
 			{Cmd: 'R', Row: 0}, // remove OPS (row 0)
@@ -404,7 +374,7 @@ func TestAdminRemoveLastAdminMembershipBlocked(t *testing.T) {
 	// Group rows sort OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'G', Row: 1}, // users list: G on root
 			{Cmd: 'R', Row: 1}, // remove ZZADMIN (row 1) — blocked
 			{PF: 3}, {PF: 3},
@@ -425,8 +395,8 @@ func TestAdminRemoveLastAdminMembershipBlocked(t *testing.T) {
 func TestAdminGroupAddAndCounts(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{{Values: map[string]string{screens.FieldName: "dev"}}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{{Values: map[string]string{screens.FieldName: "dev"}}},
 	}
 	f, _ := newAdminFixture(t, p)
 	ctx := context.Background()
@@ -448,8 +418,8 @@ func TestAdminGroupAddAndCounts(t *testing.T) {
 func TestAdminGroupAddReservedBlocked(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
 			{Values: map[string]string{screens.FieldName: "zzNew"}}, // prefix check is case-insensitive
 			{Cancel: true},
 		},
@@ -464,8 +434,8 @@ func TestAdminGroupAddReservedBlocked(t *testing.T) {
 func TestAdminGroupAddDuplicateBlocked(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
 			{Values: map[string]string{screens.FieldName: "ops"}},
 			{Cancel: true},
 		},
@@ -477,11 +447,36 @@ func TestAdminGroupAddDuplicateBlocked(t *testing.T) {
 	}
 }
 
+func TestAdminGroupAddReSeedsInputOnError(t *testing.T) {
+	// Submit a reserved group name; the form should re-render with the typed
+	// name pre-filled in the name field (gotForms[1].Fields[0].Value == "zzbad").
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
+			{Values: map[string]string{screens.FieldName: "zzbad"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if len(p.gotForms) < 2 {
+		t.Fatalf("expected at least 2 form renders, got %d", len(p.gotForms))
+	}
+	second := p.gotForms[1]
+	if second.ErrMsg != "ZZ* GROUP NAMES ARE RESERVED" {
+		t.Errorf("errMsg = %q, want ZZ* GROUP NAMES ARE RESERVED", second.ErrMsg)
+	}
+	if second.Fields[0].Value != "zzbad" {
+		t.Errorf("name field not re-seeded: got %q, want %q", second.Fields[0].Value, "zzbad")
+	}
+}
+
 func TestAdminGroupDeleteReservedBlocked(t *testing.T) {
 	// Group rows sort OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {PF: 3}}, // D on ZZADMIN (row 1) — no confirm offered
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 1}, {PF: 3}}, // D on ZZADMIN (row 1) — no confirm offered
 	}
 	f, _ := newAdminFixture(t, p)
 	f.Run(context.Background(), nil)
@@ -497,7 +492,7 @@ func TestAdminGroupDeleteCascades(t *testing.T) {
 	// Group rows sort OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}}, // D OPS (row 0), Enter confirms
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}}, // D OPS (row 0), Enter confirms
 	}
 	f, ids := newAdminFixture(t, p)
 	ctx := context.Background()
@@ -516,7 +511,7 @@ func TestAdminGroupDeleteOtherActionCancelsConfirm(t *testing.T) {
 	// D on ops, then PF8 (page): confirm silently cancelled, no delete.
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {PF: 8}, {PF: 3}},
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 1}, {PF: 8}, {PF: 3}},
 	}
 	f, _ := newAdminFixture(t, p)
 	if err := f.Run(context.Background(), nil); err != nil {
@@ -531,7 +526,7 @@ func TestAdminGroupDeleteCancel(t *testing.T) {
 	// D on ops, then PF3: confirm cancelled, stays on list, no delete.
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 1}, {PF: 3}, {PF: 3}},
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 1}, {PF: 3}, {PF: 3}},
 	}
 	f, _ := newAdminFixture(t, p)
 	if err := f.Run(context.Background(), nil); err != nil {
@@ -545,8 +540,8 @@ func TestAdminGroupDeleteCancel(t *testing.T) {
 func TestAdminServiceAdd(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{{Values: map[string]string{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{{Values: map[string]string{
 			screens.FieldName: "DEV", screens.FieldDescription: "Dev environment", screens.FieldHost: "dev.example", screens.FieldPort: "992",
 			screens.FieldTLS: "y", screens.FieldVerify: "n", // case-insensitive Y/N
 		}}},
@@ -569,8 +564,8 @@ func TestAdminServiceAdd(t *testing.T) {
 func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // edit PROD
-		forms: []AdminFormAction{{Values: map[string]string{
+		lists: []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // edit PROD
+		forms: []ui3270.FormAction{{Values: map[string]string{
 			screens.FieldName: "PROD", screens.FieldDescription: "Production v2", screens.FieldHost: "h2", screens.FieldPort: "1023",
 			screens.FieldTLS: "Y", screens.FieldVerify: "Y",
 		}}},
@@ -597,8 +592,8 @@ func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
 func TestAdminServicePortValidation(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
 			{Values: map[string]string{screens.FieldName: "X", screens.FieldDescription: "Svc X", screens.FieldHost: "h",
 				screens.FieldPort: "70000", screens.FieldTLS: "N", screens.FieldVerify: "Y"}},
 			{Cancel: true},
@@ -614,8 +609,8 @@ func TestAdminServicePortValidation(t *testing.T) {
 func TestAdminServiceDuplicateName(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
 			{Values: map[string]string{screens.FieldName: "PROD", screens.FieldDescription: "Production", screens.FieldHost: "h",
 				screens.FieldPort: "23", screens.FieldTLS: "N", screens.FieldVerify: "Y"}},
 			{Cancel: true},
@@ -632,8 +627,8 @@ func TestAdminServiceNameAndDescriptionValidation(t *testing.T) {
 	t.Run("invalid name with space", func(t *testing.T) {
 		p := &fakeAdminPresenter{
 			menu:  []adminMenuStep{{choice: 3}, {back: true}},
-			lists: []AdminListAction{{PF: 4}, {PF: 3}},
-			forms: []AdminFormAction{
+			lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+			forms: []ui3270.FormAction{
 				{Values: map[string]string{
 					screens.FieldName:        "BAD NAME",
 					screens.FieldDescription: "Valid description",
@@ -662,8 +657,8 @@ func TestAdminServiceNameAndDescriptionValidation(t *testing.T) {
 	t.Run("empty description", func(t *testing.T) {
 		p := &fakeAdminPresenter{
 			menu:  []adminMenuStep{{choice: 3}, {back: true}},
-			lists: []AdminListAction{{PF: 4}, {PF: 3}},
-			forms: []AdminFormAction{
+			lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+			forms: []ui3270.FormAction{
 				{Values: map[string]string{
 					screens.FieldName:        "OK",
 					screens.FieldDescription: "",
@@ -693,7 +688,7 @@ func TestAdminServiceNameAndDescriptionValidation(t *testing.T) {
 func TestAdminServiceDeleteCascades(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}}, // D PROD, Enter confirms
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}}, // D PROD, Enter confirms
 	}
 	f, ids := newAdminFixture(t, p)
 	ctx := context.Background()
@@ -708,7 +703,7 @@ func TestAdminServiceDeleteCascades(t *testing.T) {
 func TestAdminServiceDeleteCancel(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 3}, {PF: 3}},
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {PF: 3}, {PF: 3}},
 	}
 	f, ids := newAdminFixture(t, p)
 	f.Run(context.Background(), nil)
@@ -720,7 +715,7 @@ func TestAdminServiceDeleteCancel(t *testing.T) {
 func TestAdminServiceDeleteOtherActionCancelsConfirm(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{{Cmd: 'D', Row: 0}, {PF: 8}, {PF: 3}},
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {PF: 8}, {PF: 3}},
 	}
 	f, ids := newAdminFixture(t, p)
 	f.Run(context.Background(), nil)
@@ -733,8 +728,8 @@ func TestAdminServiceFormPreservesInputOnError(t *testing.T) {
 	// Bad port: every other typed value must come back pre-filled.
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
 			{Values: map[string]string{screens.FieldName: "DEV", screens.FieldDescription: "Dev environment", screens.FieldHost: "dev.example",
 				screens.FieldPort: "junk", screens.FieldTLS: "y", screens.FieldVerify: "n"}},
 			{Cancel: true},
@@ -759,7 +754,7 @@ func TestAdminServiceGroupsToggle(t *testing.T) {
 	// Group rows sort OPS(0), ZZADMIN(1). Grant ZZADMIN access to PROD, revoke OPS.
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'G', Row: 0}, // services list: G on PROD
 			{Cmd: 'A', Row: 1}, // grant ZZADMIN (row 1)
 			{Cmd: 'R', Row: 0}, // revoke OPS (row 0)
@@ -787,7 +782,7 @@ func TestAdminGroupMembersToggle(t *testing.T) {
 	// M on OPS, add ROOT, remove ALICE.
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'M', Row: 0}, // groups list: M on OPS (row 0)
 			{Cmd: 'A', Row: 1}, // add ROOT (row 1)
 			{Cmd: 'R', Row: 0}, // remove ALICE (row 0)
@@ -823,7 +818,7 @@ func TestAdminGroupMembersLastAdminGuard(t *testing.T) {
 	// Group rows sort OPS(0), ZZADMIN(1); user rows sort ALICE(0), ROOT(1).
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'M', Row: 1}, // groups list: M on ZZADMIN (row 1)
 			{Cmd: 'R', Row: 1}, // user rows ALICE(0), ROOT(1): remove ROOT — blocked
 			{PF: 3}, {PF: 3},
@@ -846,7 +841,7 @@ func TestAdminGroupMembersLastAdminGuard(t *testing.T) {
 func TestAdminSelfRemoveAdminGroupBlockedUserGroups(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'G', Row: 1}, // users list: G on root (row 1, alice is row 0)
 			{Cmd: 'R', Row: 1}, // groups: remove ZZADMIN (row 1, ops is row 0) — blocked
 			{PF: 3}, {PF: 3},
@@ -870,7 +865,7 @@ func TestAdminSelfRemoveAdminGroupBlockedUserGroups(t *testing.T) {
 func TestAdminRemoveOtherAdminAllowedUserGroups(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'G', Row: 0}, // users list: G on alice (row 0)
 			{Cmd: 'R', Row: 1}, // groups: remove ZZADMIN (row 1, ops is row 0) from alice — allowed
 			{PF: 3}, {PF: 3},
@@ -898,7 +893,7 @@ func TestAdminRemoveOtherAdminAllowedUserGroups(t *testing.T) {
 func TestAdminSelfRemoveNonAdminGroupAllowed(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 1}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'G', Row: 1}, // users list: G on root (row 1)
 			{Cmd: 'R', Row: 0}, // groups: remove OPS (row 0, zzadmin is row 1) from root — allowed
 			{PF: 3}, {PF: 3},
@@ -927,7 +922,7 @@ func TestAdminSelfRemoveAdminGroupBlockedGroupMembers(t *testing.T) {
 	// user rows ALICE(0), ROOT(1); group rows OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'M', Row: 1}, // groups list: M on ZZADMIN (row 1, ops is row 0)
 			{Cmd: 'R', Row: 1}, // members: remove ROOT (row 1) — blocked
 			{PF: 3}, {PF: 3},
@@ -955,7 +950,7 @@ func TestAdminRemoveOtherAdminAllowedGroupMembers(t *testing.T) {
 	// user rows ALICE(0), ROOT(1); group rows OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{
+		lists: []ui3270.ListAction{
 			{Cmd: 'M', Row: 1}, // groups list: M on ZZADMIN (row 1, ops is row 0)
 			{Cmd: 'R', Row: 0}, // members: remove ALICE (row 0) — allowed
 			{PF: 3}, {PF: 3},
@@ -979,7 +974,7 @@ func TestAdminRemoveOtherAdminAllowedGroupMembers(t *testing.T) {
 }
 
 func TestAdminAuditUserCreate(t *testing.T) {
-	p := &fakeAdminPresenter{forms: []AdminFormAction{{Values: map[string]string{
+	p := &fakeAdminPresenter{forms: []ui3270.FormAction{{Values: map[string]string{
 		screens.FieldUsername: "newbie",
 		screens.FieldPassword: "pw",
 		screens.FieldRetype:   "pw",
@@ -988,7 +983,7 @@ func TestAdminAuditUserCreate(t *testing.T) {
 	var got []store.AuditEvent
 	f.audit = func(_ context.Context, ev store.AuditEvent) { got = append(got, ev) }
 
-	if err := f.userAdd(context.Background(), nil); err != nil {
+	if err := f.userAdd(context.Background(), p); err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].Kind != store.AuditAdmin ||
@@ -999,7 +994,7 @@ func TestAdminAuditUserCreate(t *testing.T) {
 
 func TestAdminAuditValidationFailureRecordsNothing(t *testing.T) {
 	// A rejected form (duplicate user) must not produce an audit event.
-	p := &fakeAdminPresenter{forms: []AdminFormAction{
+	p := &fakeAdminPresenter{forms: []ui3270.FormAction{
 		{Values: map[string]string{
 			screens.FieldUsername: "alice", // already exists in the fixture
 			screens.FieldPassword: "pw",
@@ -1011,7 +1006,7 @@ func TestAdminAuditValidationFailureRecordsNothing(t *testing.T) {
 	var got []store.AuditEvent
 	f.audit = func(_ context.Context, ev store.AuditEvent) { got = append(got, ev) }
 
-	if err := f.userAdd(context.Background(), nil); err != nil {
+	if err := f.userAdd(context.Background(), p); err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 0 {
@@ -1023,8 +1018,8 @@ func TestServiceFormPersistsDescription(t *testing.T) {
 	// Drive the ADD-service path and assert the description is stored.
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 3}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}},
-		forms: []AdminFormAction{{Values: map[string]string{
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{{Values: map[string]string{
 			screens.FieldName:        "prodcics",
 			screens.FieldDescription: "Production CICS",
 			screens.FieldHost:        "h",

@@ -21,13 +21,13 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net"
 	"strings"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
 // AdminStore is the slice of *store.Store the admin flow needs.
@@ -69,7 +69,8 @@ const msgTempError = "TEMPORARY ERROR; TRY AGAIN"
 // store stays mechanical.
 type adminFlow struct {
 	store     AdminStore
-	presenter AdminPresenter
+	presenter AdminPresenter // now only AdminMenu
+	renderer  func(conn net.Conn) ui3270.Renderer
 	identity  auth.Identity
 	term      Term // negotiated client terminal; drives page size + screen rendering
 	// audit records admin CRUD events; nil (direct tests) disables auditing.
@@ -102,26 +103,6 @@ func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 			return err
 		}
 	}
-}
-
-// pageBounds clamps page to the data and returns the slice bounds plus the
-// row indicator. The page size follows the client terminal's row count.
-// Clamping matters after deletions shrink the list.
-func (f *adminFlow) pageBounds(page, total int) (clamped, start, end int, info string) {
-	if total == 0 {
-		return 0, 0, 0, "ROW 0 OF 0"
-	}
-	size := f.term.Geometry().ListPageSize()
-	maxPage := (total - 1) / size
-	if page > maxPage {
-		page = maxPage
-	}
-	if page < 0 {
-		page = 0
-	}
-	start = page * size
-	end = min(start+size, total)
-	return page, start, end, fmt.Sprintf("ROW %d TO %d OF %d", start+1, end, total)
 }
 
 // groupIDByName resolves a group name via ListGroups (small N; no extra store

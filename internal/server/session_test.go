@@ -31,6 +31,7 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
 	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
 // --- fakes ---
@@ -748,11 +749,12 @@ func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
 	}
 	ap := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},
-		lists: []AdminListAction{{PF: 4}, {PF: 3}}, // groups list: PF4 add, then back
-		forms: []AdminFormAction{{Values: map[string]string{screens.FieldName: "newgrp"}}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}}, // groups list: PF4 add, then back
+		forms: []ui3270.FormAction{{Values: map[string]string{screens.FieldName: "newgrp"}}},
 	}
 	s := newTestSession(t, p, &fakeBridger{})
 	s.AdminPresenter = ap
+	s.AdminRenderer = func(net.Conn, Term) ui3270.Renderer { return ap }
 	rec := &recordingAuditor{}
 	s.Auditor = rec
 
