@@ -51,6 +51,8 @@ type Session struct {
 	// AdminPresenter renders the admin screens. When nil (or the user is not
 	// in store.AdminGroup) the menu shows no admin entry.
 	AdminPresenter AdminPresenter
+	// Auditor records the session's audit trail; nil disables auditing.
+	Auditor Auditor
 }
 
 // Run executes the session state machine for one connection. It returns when
@@ -58,10 +60,20 @@ type Session struct {
 // (the caller owns it).
 func (s *Session) Run(conn net.Conn) {
 	ctx := context.Background()
+	aud := s.newAuditTrail(conn)
+
+	aud.record(ctx, store.AuditEvent{Kind: store.AuditConnect})
+	endDetail := "client disconnected"
+	currentUser := ""
+	defer func() {
+		aud.record(ctx, store.AuditEvent{
+			Kind: store.AuditDisconnect, Username: currentUser, Detail: endDetail})
+	}()
 
 	term, err := s.Presenter.Negotiate(conn)
 	if err != nil {
 		log.Printf("telnet negotiation failed: %v", err)
+		endDetail = "negotiation failed"
 		return
 	}
 
@@ -72,8 +84,10 @@ func (s *Session) Run(conn net.Conn) {
 	for {
 		identity, ok := s.doLogin(ctx, conn, term)
 		if !ok {
+			endDetail = "quit at login"
 			return
 		}
+		currentUser = identity.Username
 
 		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
 		errMsg := ""
@@ -87,9 +101,11 @@ func (s *Session) Run(conn net.Conn) {
 			}
 			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, errMsg)
 			if err != nil {
+				endDetail = "menu render error"
 				return
 			}
 			if quit {
+				currentUser = ""
 				break menu // logoff: back to the login screen
 			}
 			errMsg = ""
@@ -97,6 +113,7 @@ func (s *Session) Run(conn net.Conn) {
 				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter, identity: identity, term: term}
 				if aerr := flow.Run(ctx, conn); aerr != nil {
 					log.Printf("admin flow for %s ended: %v", identity.Username, aerr)
+					endDetail = "admin flow error"
 					return
 				}
 				continue // re-render the menu: fresh service list shows admin edits
@@ -110,6 +127,7 @@ func (s *Session) Run(conn net.Conn) {
 			cause, berr := s.Bridger.Bridge(conn, addr, term.Type, s.EscapeAID, btls)
 			switch cause {
 			case bridge.CauseClientClosed:
+				endDetail = "client closed during bridge"
 				return
 			case bridge.CauseError:
 				log.Printf("bridge error to %s (%s): %v", selected.Name, addr, berr)

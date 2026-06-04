@@ -385,3 +385,50 @@ func TestSessionThreadsTermToScreens(t *testing.T) {
 		}
 	}
 }
+
+// recordingAuditor captures every audit event for sequence assertions.
+type recordingAuditor struct {
+	events []store.AuditEvent
+}
+
+func (r *recordingAuditor) Record(_ context.Context, ev store.AuditEvent) {
+	r.events = append(r.events, ev)
+}
+
+func (r *recordingAuditor) kinds() []string {
+	out := make([]string, len(r.events))
+	for i, ev := range r.events {
+		out[i] = ev.Kind
+	}
+	return out
+}
+
+func TestSessionAuditsConnectAndDisconnect(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{quit: true}}, // user quits at login
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	kinds := rec.kinds()
+	if len(kinds) != 2 || kinds[0] != store.AuditConnect || kinds[1] != store.AuditDisconnect {
+		t.Fatalf("kinds = %v, want [connect disconnect]", kinds)
+	}
+	for _, ev := range rec.events {
+		if len(ev.SessionID) != 16 {
+			t.Errorf("%s: session id %q, want 16 hex chars", ev.Kind, ev.SessionID)
+		}
+		if ev.RemoteAddr == "" {
+			t.Errorf("%s: empty remote addr", ev.Kind)
+		}
+	}
+	if rec.events[0].SessionID != rec.events[1].SessionID {
+		t.Error("session ids differ within one connection")
+	}
+}
