@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -84,5 +86,47 @@ func TestPrintAuditEventsEmpty(t *testing.T) {
 	printAuditEvents(&buf, nil)
 	if got := buf.String(); got != "no audit events\n" {
 		t.Errorf("printAuditEvents(nil) = %q, want %q", got, "no audit events\n")
+	}
+}
+
+func TestRunAuditPruneRequiresOlderThan(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "p.db")
+	if err := runAuditPrune([]string{"-db", db}); err == nil {
+		t.Error("missing -older-than: want error (no default that silently deletes)")
+	}
+}
+
+func TestRunAuditPruneDeletesOldRows(t *testing.T) {
+	db := filepath.Join(t.TempDir(), "p.db")
+	st, err := store.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	old := store.AuditEvent{At: time.Now().Add(-100 * 24 * time.Hour), SessionID: "old", Kind: store.AuditConnect}
+	fresh := store.AuditEvent{At: time.Now(), SessionID: "new", Kind: store.AuditConnect}
+	if err := st.RecordAudit(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.RecordAudit(ctx, fresh); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	if err := runAuditPrune([]string{"-db", db, "-older-than", "90d"}); err != nil {
+		t.Fatalf("runAuditPrune: %v", err)
+	}
+
+	st2, err := store.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st2.Close()
+	got, err := st2.ListAudit(ctx, store.AuditFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].SessionID != "new" {
+		t.Errorf("remaining = %+v, want only session 'new'", got)
 	}
 }

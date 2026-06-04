@@ -95,7 +95,29 @@ func printAuditEvents(w io.Writer, events []store.AuditEvent) {
 	}
 }
 
-// runAuditPrune is implemented in a later task.
 func runAuditPrune(args []string) error {
-	return fmt.Errorf("audit prune: not implemented")
+	fs := flag.NewFlagSet("audit prune", flag.ContinueOnError)
+	dbPath := fs.String("db", "tn3270proxy.db", "path to SQLite database file")
+	olderThan := fs.String("older-than", "", "delete events older than this age (e.g. 90d; required)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *olderThan == "" {
+		return fmt.Errorf("audit prune: -older-than is required")
+	}
+	d, err := parseDuration(*olderThan)
+	if err != nil {
+		return fmt.Errorf("audit prune: -older-than: %w", err)
+	}
+	st, err := store.Open(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	n, err := st.PruneAudit(context.Background(), time.Now().Add(-d))
+	if err != nil {
+		return err
+	}
+	fmt.Printf("pruned %d audit rows\n", n)
+	return nil
 }
