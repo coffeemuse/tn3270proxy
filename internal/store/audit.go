@@ -98,3 +98,13 @@ func (s *Store) ListAudit(ctx context.Context, f AuditFilter) ([]AuditEvent, err
 	}
 	return out, rows.Err()
 }
+
+// PruneAudit deletes events strictly older than before; returns rows deleted.
+func (s *Store) PruneAudit(ctx context.Context, before time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		"DELETE FROM audit WHERE at < ?", before.UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}

@@ -92,3 +92,39 @@ func TestListAuditFilters(t *testing.T) {
 		}
 	}
 }
+
+func TestPruneAudit(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	t0 := time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)
+	for _, ev := range []AuditEvent{
+		{At: t0.Add(-100 * 24 * time.Hour), SessionID: "old", Kind: AuditConnect},
+		{At: t0.Add(-91 * 24 * time.Hour), SessionID: "old2", Kind: AuditDisconnect},
+		{At: t0, SessionID: "new", Kind: AuditConnect},
+	} {
+		if err := st.RecordAudit(ctx, ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n, err := st.PruneAudit(ctx, t0.Add(-90*24*time.Hour))
+	if err != nil {
+		t.Fatalf("PruneAudit: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("pruned = %d, want 2", n)
+	}
+	got, err := st.ListAudit(ctx, AuditFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].SessionID != "new" {
+		t.Errorf("remaining = %+v, want only session 'new'", got)
+	}
+
+	// Pruning again is a no-op.
+	n, err = st.PruneAudit(ctx, t0.Add(-90*24*time.Hour))
+	if err != nil || n != 0 {
+		t.Errorf("second prune = (%d, %v), want (0, nil)", n, err)
+	}
+}
