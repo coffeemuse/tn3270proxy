@@ -9,11 +9,10 @@ existing code, design considerations, a suggested approach, and dependencies.
 implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
 
-**Progress:** Milestones **1, 2, 3, 3.5, and 7 are complete**, all merged to `main`, and
+**Progress:** Milestones **1, 2, 3, 3.5, 5, and 7 are complete**, all merged to `main`, and
 **all live smoke tests have passed** (#3 and #7 on 2026-06-03; #2 and #3.5 confirmed
-2026-06-03). Remaining order: **5 → 4 → 6** — audit logging first (still wanted before
-going public), then protocol breadth, scale.
-**Next up: #5 (audit logging).**
+2026-06-03). Remaining order: **4 → 6** — TN3270E support next, then scale.
+**Next up: #4 (TN3270E support).**
 
 ---
 
@@ -220,7 +219,19 @@ its own design doc on the data-stream header handling in the bridge.
 
 ---
 
-## 5. Audit logging
+## 5. Audit logging  ✅ **DONE** *(merged)*
+
+> **Completed.** Spec: `docs/superpowers/specs/2026-06-03-audit-logging-design.md`;
+> plan: `docs/superpowers/plans/2026-06-03-audit-logging.md`. Delivered: `audit` table
+> (UTC RFC3339 timestamps, session-correlated) + `store.RecordAudit`/`ListAudit`/`PruneAudit`;
+> `Auditor` seam (best-effort, nil = disabled) + per-connection `auditTrail`; events:
+> connect / auth_ok / auth_fail / bridge_start / bridge_end (cause detail) / admin /
+> disconnect (end detail); admin CRUD auditing at all 14 mutation sites; `audit list` /
+> `audit prune` CLI (prune requires positive `-older-than`; durations support a `d` day
+> suffix). Note: membership changes are phrased from the screen they were made on
+> (`user X add-group G` from the user screen vs `group G add-member X` from the group
+> screen) — grep both phrasings when auditing membership events. The historical notes
+> below are retained for reference.
 
 **Goal:** Durable, queryable record of who connected, when, from where, which service they
 reached, and session outcomes — important for a public-facing access gateway.
@@ -339,6 +350,6 @@ slotted after audit since it's UX polish rather than edge-hardening.
 | Configurable escape key | `Session.EscapeAID` / `bridge.EscapeAIDPA3` (hard-coded to PA3 at wiring) |
 | Alternate transport (TLS in) | ✅ done — `internal/listen.Build` + `server.ServeAll`; `Server` stayed `net.Listener`-based |
 | Admin via 3270 | ✅ done — `A` menu entry + adminFlow; see `internal/server/admin*.go` |
-| Audit | `Session.Run` sees Identity + service + bridge Cause; add an `Auditor` seam |
+| Audit | ✅ done — `Auditor` seam + `storeAuditor`; `audit` table in store; `audit list`/`prune` CLI |
 | Pluggable identity source | `auth.UserStore` interface already abstracts the store (LDAP later = new impl) |
 | Larger terminals (MOD 3/4/5) | ✅ done — screens take Geometry; server.Term threads DevInfo+codepage; HandleScreenAlt |

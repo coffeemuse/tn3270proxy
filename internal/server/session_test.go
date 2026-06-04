@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"net"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
+	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
@@ -383,5 +386,254 @@ func TestSessionThreadsTermToScreens(t *testing.T) {
 		if term.Type != "IBM-3278-4" || term.Rows != 43 || term.Cols != 80 {
 			t.Errorf("call %d: term = %+v, want IBM-3278-4 43x80", i, term)
 		}
+	}
+}
+
+// recordingAuditor captures every audit event for sequence assertions.
+type recordingAuditor struct {
+	events []store.AuditEvent
+}
+
+func (r *recordingAuditor) Record(_ context.Context, ev store.AuditEvent) {
+	r.events = append(r.events, ev)
+}
+
+func (r *recordingAuditor) kinds() []string {
+	out := make([]string, len(r.events))
+	for i, ev := range r.events {
+		out[i] = ev.Kind
+	}
+	return out
+}
+
+func TestSessionAuditsConnectAndDisconnect(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{quit: true}}, // user quits at login
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	kinds := rec.kinds()
+	if len(kinds) != 2 || kinds[0] != store.AuditConnect || kinds[1] != store.AuditDisconnect {
+		t.Fatalf("kinds = %v, want [connect disconnect]", kinds)
+	}
+	for _, ev := range rec.events {
+		if len(ev.SessionID) != 16 {
+			t.Errorf("%s: session id %q, want 16 hex chars", ev.Kind, ev.SessionID)
+		}
+		if ev.RemoteAddr == "" {
+			t.Errorf("%s: empty remote addr", ev.Kind)
+		}
+	}
+	if rec.events[0].SessionID != rec.events[1].SessionID {
+		t.Error("session ids differ within one connection")
+	}
+	disc := rec.events[1]
+	if disc.Detail != "quit at login" {
+		t.Errorf("disconnect detail = %q, want %q", disc.Detail, "quit at login")
+	}
+	if disc.Username != "" {
+		t.Errorf("disconnect username = %q, want empty (quit before login)", disc.Username)
+	}
+}
+
+func TestSessionAuditsDisconnectAfterClientClosed(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "alice", pass: "good"}},
+		menuPicks: []menuResult{{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}}},
+	}
+	b := &fakeBridger{causes: []bridge.Cause{bridge.CauseClientClosed}}
+	s := newTestSession(t, p, b)
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if b.calls != 1 {
+		t.Errorf("bridge calls = %d, want 1", b.calls)
+	}
+	kinds := rec.kinds()
+	if len(kinds) == 0 || kinds[len(kinds)-1] != store.AuditDisconnect {
+		t.Fatalf("last event kind = %v, want disconnect", kinds)
+	}
+	disc := rec.events[len(rec.events)-1]
+	if disc.Detail != "client closed during bridge" {
+		t.Errorf("disconnect detail = %q, want %q", disc.Detail, "client closed during bridge")
+	}
+	if disc.Username != "alice" {
+		t.Errorf("disconnect username = %q, want %q", disc.Username, "alice")
+	}
+}
+
+func TestSessionAuditsAuthEvents(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "sw0rdf1sh-wrong"},
+			{user: "alice", pass: "good"},
+			{quit: true}, // second login render after menu logoff
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	want := []string{store.AuditConnect, store.AuditAuthFail, store.AuditAuthOK, store.AuditDisconnect}
+	if !slices.Equal(rec.kinds(), want) {
+		t.Fatalf("kinds = %v, want %v", rec.kinds(), want)
+	}
+	fail := rec.events[1]
+	if fail.Username != "alice" {
+		t.Errorf("auth_fail username = %q, want the attempted username", fail.Username)
+	}
+	// The password must not appear in ANY field of ANY event.
+	for _, ev := range rec.events {
+		for _, field := range []string{ev.SessionID, ev.Kind, ev.Username, ev.RemoteAddr, ev.Service, ev.Detail} {
+			if strings.Contains(field, "sw0rdf1sh-wrong") || strings.Contains(field, "good") {
+				t.Errorf("credential leaked into audit event %+v", ev)
+			}
+		}
+	}
+}
+
+func TestSessionAuditsBridgeLifecycle(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{quit: true},
+		},
+	}
+	b := &fakeBridger{causes: []bridge.Cause{bridge.CauseUserEscaped}}
+	s := newTestSession(t, p, b)
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	want := []string{store.AuditConnect, store.AuditAuthOK,
+		store.AuditBridgeStart, store.AuditBridgeEnd, store.AuditDisconnect}
+	if !slices.Equal(rec.kinds(), want) {
+		t.Fatalf("kinds = %v, want %v", rec.kinds(), want)
+	}
+	start, end := rec.events[2], rec.events[3]
+	if start.Service != "PROD" || start.Username != "alice" {
+		t.Errorf("bridge_start = %+v, want service PROD by alice", start)
+	}
+	if end.Service != "PROD" || end.Detail != "user_escaped" {
+		t.Errorf("bridge_end = %+v, want service PROD detail user_escaped", end)
+	}
+}
+
+func TestSessionBridgeEndDetailOnDialError(t *testing.T) {
+	// Verifies that a CauseError bridge outcome with a non-nil error produces
+	// a bridge_end audit event whose Detail carries the error string and whose
+	// Service matches the selected service name.
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true}, // second login render after menu logoff
+		},
+		menuPicks: []menuResult{
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{quit: true},
+		},
+	}
+	b := &fakeBridger{
+		causes: []bridge.Cause{bridge.CauseError},
+		errs:   []error{errors.New("connection refused")},
+	}
+	s := newTestSession(t, p, b)
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	var bridgeEnd *store.AuditEvent
+	for i := range rec.events {
+		if rec.events[i].Kind == store.AuditBridgeEnd {
+			bridgeEnd = &rec.events[i]
+			break
+		}
+	}
+	if bridgeEnd == nil {
+		t.Fatal("no bridge_end event recorded")
+	}
+	if bridgeEnd.Detail != "error: connection refused" {
+		t.Errorf("bridge_end Detail = %q, want %q", bridgeEnd.Detail, "error: connection refused")
+	}
+	if bridgeEnd.Service != "PROD" {
+		t.Errorf("bridge_end Service = %q, want %q", bridgeEnd.Service, "PROD")
+	}
+}
+
+func TestCauseDetail(t *testing.T) {
+	cases := []struct {
+		c    bridge.Cause
+		err  error
+		want string
+	}{
+		{bridge.CauseBackendClosed, nil, "backend_closed"},
+		{bridge.CauseClientClosed, nil, "client_closed"},
+		{bridge.CauseUserEscaped, nil, "user_escaped"},
+		{bridge.CauseError, errors.New("connection refused"), "error: connection refused"},
+		{bridge.CauseError, nil, "error"},
+	}
+	for _, c := range cases {
+		if got := causeDetail(c.c, c.err); got != c.want {
+			t.Errorf("causeDetail(%v, %v) = %q, want %q", c.c, c.err, got, c.want)
+		}
+	}
+}
+
+func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "root", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{{admin: true}, {quit: true}},
+	}
+	ap := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}}, // groups list: PF4 add, then back
+		forms: []AdminFormAction{{Values: map[string]string{screens.FieldName: "newgrp"}}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.AdminPresenter = ap
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	var admins []store.AuditEvent
+	for _, ev := range rec.events {
+		if ev.Kind == store.AuditAdmin {
+			admins = append(admins, ev)
+		}
+	}
+	if len(admins) != 1 || admins[0].Detail != "group create newgrp" ||
+		admins[0].Username != "root" || admins[0].SessionID == "" {
+		t.Errorf("admin events = %+v, want one 'group create newgrp' by root with a session id", admins)
 	}
 }

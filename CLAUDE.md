@@ -32,6 +32,8 @@ go build -o bin/tn3270proxy ./cmd/tn3270proxy
 
 ./bin/tn3270proxy seed -db proxy.db -file seed.example.json   # load users/groups/services
 ./bin/tn3270proxy serve -db proxy.db -listen :2323            # run the proxy
+./bin/tn3270proxy audit list -db proxy.db                      # query the audit trail
+./bin/tn3270proxy audit prune -db proxy.db -older-than 90d     # retention cleanup
 ```
 
 Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
@@ -39,12 +41,14 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 ## Architecture (package map)
 
 ```
-cmd/tn3270proxy   main: subcommands `serve` (default) and `seed`; wires everything
+cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, and `audit list|prune`; wires everything
 internal/config   Config{DBPath, Plain, TLS}; Load(args) merges defaults<file<flags.
                   Optional JSON file (tn3270proxy.json) defines plain+tls listeners.
 internal/listen   Build(cfg) → []net.Listener (plaintext + tls.NewListener, immediate TLS).
 internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + group-gated
                   ListServicesForGroups. All Create* are idempotent (INSERT OR IGNORE).
+                  Audit trail: `audit` table (UTC RFC3339, session-correlated) +
+                  RecordAudit/ListAudit/PruneAudit.
 internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,Username,Groups}.
                   bcrypt; uniform ErrInvalidCredentials (no username-enumeration leak).
 internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(svcs, errMsg).
@@ -70,6 +74,8 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   rendering uses HandleScreenAlt (nil dev → 24×80 fallback).
                   adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go)
                   behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
+                  Auditor seam (best-effort store-backed auditing; nil disables) +
+                  storeAuditor + per-connection auditTrail record session lifecycle events.
 ```
 
 Data flow: `main → Server.Serve` (accept) → `Session.Run` → `Presenter` (go3270 screens) /

@@ -729,3 +729,44 @@ func TestAdminGroupMembersLastAdminGuard(t *testing.T) {
 		t.Errorf("ZZADMIN members = %+v, want just root", members)
 	}
 }
+
+func TestAdminAuditUserCreate(t *testing.T) {
+	p := &fakeAdminPresenter{forms: []AdminFormAction{{Values: map[string]string{
+		screens.FieldUsername: "newbie",
+		screens.FieldPassword: "pw",
+		screens.FieldRetype:   "pw",
+	}}}}
+	f, _ := newAdminFixture(t, p)
+	var got []store.AuditEvent
+	f.audit = func(_ context.Context, ev store.AuditEvent) { got = append(got, ev) }
+
+	if err := f.userAdd(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Kind != store.AuditAdmin ||
+		got[0].Detail != "user create newbie" || got[0].Username != "root" {
+		t.Errorf("audit = %+v, want one admin 'user create newbie' by root", got)
+	}
+}
+
+func TestAdminAuditValidationFailureRecordsNothing(t *testing.T) {
+	// A rejected form (duplicate user) must not produce an audit event.
+	p := &fakeAdminPresenter{forms: []AdminFormAction{
+		{Values: map[string]string{
+			screens.FieldUsername: "alice", // already exists in the fixture
+			screens.FieldPassword: "pw",
+			screens.FieldRetype:   "pw",
+		}},
+		{Cancel: true},
+	}}
+	f, _ := newAdminFixture(t, p)
+	var got []store.AuditEvent
+	f.audit = func(_ context.Context, ev store.AuditEvent) { got = append(got, ev) }
+
+	if err := f.userAdd(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Errorf("audit = %+v, want no events for a rejected create", got)
+	}
+}

@@ -70,6 +70,8 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 			case act.Cmd == 0 && act.PF == 0:
 				if err := f.store.DeleteService(ctx, target.ID); err != nil {
 					errMsg = logStoreErr("delete service", err)
+				} else {
+					f.recordAdmin(ctx, "service delete "+target.Name)
 				}
 				continue
 			case act.PF == 3:
@@ -171,9 +173,12 @@ func (f *adminFlow) serviceForm(ctx context.Context, conn net.Conn, existing *st
 					errMsg = logStoreErr("create service", err)
 					continue
 				}
+				f.recordAdmin(ctx, "service create "+name)
 			} else if err := f.store.UpdateService(ctx, existing.ID, name, host, p, tlsB, verifyB); err != nil {
 				errMsg = logStoreErr("update service", err)
 				continue
+			} else {
+				f.recordAdmin(ctx, "service update "+name)
 			}
 			return nil
 		}
@@ -258,10 +263,14 @@ func (f *adminFlow) serviceGroups(ctx context.Context, conn net.Conn, svc store.
 			case 'A':
 				if err := f.store.LinkGroupService(ctx, g.ID, svc.ID); err != nil {
 					errMsg = logStoreErr("grant access", err)
+				} else {
+					f.recordAdmin(ctx, "service "+svc.Name+" grant "+g.Name)
 				}
 			case 'R':
 				if err := f.store.UnlinkGroupService(ctx, g.ID, svc.ID); err != nil {
 					errMsg = logStoreErr("revoke access", err)
+				} else {
+					f.recordAdmin(ctx, "service "+svc.Name+" revoke "+g.Name)
 				}
 			default:
 				errMsg = "INVALID COMMAND: " + string(act.Cmd)

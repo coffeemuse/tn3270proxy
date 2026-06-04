@@ -52,6 +52,8 @@ type adminFlow struct {
 	presenter AdminPresenter
 	identity  auth.Identity
 	term      Term // negotiated client terminal; drives page size + screen rendering
+	// audit records admin CRUD events; nil (direct tests) disables auditing.
+	audit func(ctx context.Context, ev store.AuditEvent)
 }
 
 // Run loops on the admin menu until the user leaves via PF3 (back to the
@@ -122,6 +124,16 @@ func (f *adminFlow) groupIDByName(ctx context.Context, name string) (int64, bool
 func logStoreErr(op string, err error) string {
 	log.Printf("admin: %s failed: %v", op, err)
 	return msgTempError
+}
+
+// recordAdmin emits one admin audit event ("who changed what"). Call it only
+// after the store mutation has succeeded, so the trail reflects reality.
+func (f *adminFlow) recordAdmin(ctx context.Context, detail string) {
+	if f.audit == nil {
+		return
+	}
+	f.audit(ctx, store.AuditEvent{
+		Kind: store.AuditAdmin, Username: f.identity.Username, Detail: detail})
 }
 
 // users is implemented in admin_users.go (Task 11).

@@ -58,6 +58,7 @@ func (h sessionHandler) Handle(conn net.Conn) {
 		Bridger:        realBridger{},
 		EscapeAID:      h.escapeAID,
 		AdminPresenter: go3270Presenter{},
+		Auditor:        storeAuditor{store: h.store},
 	}
 	s.Run(conn)
 }

@@ -51,6 +51,8 @@ type Session struct {
 	// AdminPresenter renders the admin screens. When nil (or the user is not
 	// in store.AdminGroup) the menu shows no admin entry.
 	AdminPresenter AdminPresenter
+	// Auditor records the session's audit trail; nil disables auditing.
+	Auditor Auditor
 }
 
 // Run executes the session state machine for one connection. It returns when
@@ -58,10 +60,20 @@ type Session struct {
 // (the caller owns it).
 func (s *Session) Run(conn net.Conn) {
 	ctx := context.Background()
+	aud := s.newAuditTrail(conn)
+
+	aud.record(ctx, store.AuditEvent{Kind: store.AuditConnect})
+	endDetail := "client disconnected"
+	currentUser := ""
+	defer func() {
+		aud.record(ctx, store.AuditEvent{
+			Kind: store.AuditDisconnect, Username: currentUser, Detail: endDetail})
+	}()
 
 	term, err := s.Presenter.Negotiate(conn)
 	if err != nil {
 		log.Printf("telnet negotiation failed: %v", err)
+		endDetail = "negotiation failed"
 		return
 	}
 
@@ -70,10 +82,12 @@ func (s *Session) Run(conn net.Conn) {
 	// Re-login re-evaluates groups, so a demoted admin loses the A entry at
 	// logoff.
 	for {
-		identity, ok := s.doLogin(ctx, conn, term)
+		identity, ok := s.doLogin(ctx, conn, term, aud)
 		if !ok {
+			endDetail = "quit at login"
 			return
 		}
+		currentUser = identity.Username
 
 		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
 		errMsg := ""
@@ -87,16 +101,20 @@ func (s *Session) Run(conn net.Conn) {
 			}
 			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, errMsg)
 			if err != nil {
+				endDetail = "menu render error"
 				return
 			}
 			if quit {
+				currentUser = ""
 				break menu // logoff: back to the login screen
 			}
 			errMsg = ""
 			if adminSel && isAdmin {
-				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter, identity: identity, term: term}
+				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter,
+					identity: identity, term: term, audit: aud.record}
 				if aerr := flow.Run(ctx, conn); aerr != nil {
 					log.Printf("admin flow for %s ended: %v", identity.Username, aerr)
+					endDetail = "admin flow error"
 					return
 				}
 				continue // re-render the menu: fresh service list shows admin edits
@@ -107,9 +125,15 @@ func (s *Session) Run(conn net.Conn) {
 
 			addr := net.JoinHostPort(selected.Host, strconv.Itoa(selected.Port))
 			btls := BackendTLS{Enabled: selected.TLS, Verify: selected.TLSVerify}
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditBridgeStart, Username: identity.Username, Service: selected.Name})
 			cause, berr := s.Bridger.Bridge(conn, addr, term.Type, s.EscapeAID, btls)
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditBridgeEnd, Username: identity.Username,
+				Service: selected.Name, Detail: causeDetail(cause, berr)})
 			switch cause {
 			case bridge.CauseClientClosed:
+				endDetail = "client closed during bridge"
 				return
 			case bridge.CauseError:
 				log.Printf("bridge error to %s (%s): %v", selected.Name, addr, berr)
@@ -126,7 +150,7 @@ func (s *Session) Run(conn net.Conn) {
 
 // doLogin loops the login screen until success, or returns ok=false if the
 // user quits.
-func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term) (auth.Identity, bool) {
+func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *auditTrail) (auth.Identity, bool) {
 	errMsg := ""
 	for {
 		user, pass, quit, err := s.Presenter.Login(conn, term, errMsg)
@@ -135,12 +159,33 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term) (auth.I
 		}
 		identity, err := s.Authenticate(ctx, s.Store, user, pass)
 		if err == nil {
+			aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthOK, Username: identity.Username})
 			return identity, true
 		}
 		if !errors.Is(err, auth.ErrInvalidCredentials) {
 			return auth.Identity{}, false
 		}
+		// Attempted username only — never the password (CLAUDE.md hard rule).
+		aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthFail, Username: user})
 		// Generic message — never reveals whether the username exists (spec §7).
 		errMsg = "Invalid userid or password"
 	}
+}
+
+// causeDetail renders a bridge outcome for the audit trail.
+func causeDetail(c bridge.Cause, err error) string {
+	switch c {
+	case bridge.CauseBackendClosed:
+		return "backend_closed"
+	case bridge.CauseClientClosed:
+		return "client_closed"
+	case bridge.CauseUserEscaped:
+		return "user_escaped"
+	case bridge.CauseError:
+		if err != nil {
+			return "error: " + err.Error()
+		}
+		return "error"
+	}
+	return "unknown"
 }

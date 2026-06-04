@@ -64,6 +64,18 @@ CREATE TABLE IF NOT EXISTS group_services (
 	service_id INTEGER NOT NULL REFERENCES services(id),
 	PRIMARY KEY (group_id, service_id)
 );
+CREATE TABLE IF NOT EXISTS audit (
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	at          TEXT NOT NULL,
+	session_id  TEXT NOT NULL,
+	kind        TEXT NOT NULL,
+	username    TEXT NOT NULL DEFAULT '',
+	remote_addr TEXT NOT NULL DEFAULT '',
+	service     TEXT NOT NULL DEFAULT '',
+	detail      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS audit_at ON audit(at);
+CREATE INDEX IF NOT EXISTS audit_username ON audit(username);
 `
 
 func (s *Store) migrate() error {
