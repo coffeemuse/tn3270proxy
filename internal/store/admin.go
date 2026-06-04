@@ -133,7 +133,7 @@ func (s *Store) UpdateService(ctx context.Context, id int64, name, description, 
 	if err != nil {
 		return err
 	}
-	if err := validateDescription(description); err != nil {
+	if err := ValidateDescription(description); err != nil {
 		return err
 	}
 	tlsInt, verifyInt := 0, 0

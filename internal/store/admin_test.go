@@ -151,6 +151,15 @@ func TestUpdateService(t *testing.T) {
 	if err := st.UpdateService(ctx, 99999, "X", "Some Desc", "h", 23, false, true); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing service err = %v, want ErrNotFound", err)
 	}
+
+	// Validation rejection: invalid name (contains a space).
+	if err := st.UpdateService(ctx, sid, "bad name", "Valid Desc", "h2", 23, false, true); err == nil {
+		t.Error("UpdateService with invalid name: expected error, got nil")
+	}
+	// Validation rejection: empty description.
+	if err := st.UpdateService(ctx, sid, "PROD2", "", "h2", 23, false, true); err == nil {
+		t.Error("UpdateService with empty description: expected error, got nil")
+	}
 }
 
 // seedTriangle creates user alice in group ops with service PROD linked to ops,

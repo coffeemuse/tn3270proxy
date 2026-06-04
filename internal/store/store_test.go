@@ -79,6 +79,50 @@ func TestMigrateAddsVerifyToLegacyDB(t *testing.T) {
 	}
 }
 
+func TestMigrateAddsDescriptionToLegacyDB(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy_desc.db")
+
+	// Simulate a pre-description database: services table WITHOUT the column.
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = raw.Exec(`CREATE TABLE services (
+		id   INTEGER PRIMARY KEY,
+		name TEXT UNIQUE NOT NULL,
+		host TEXT NOT NULL,
+		port INTEGER NOT NULL,
+		tls  INTEGER NOT NULL DEFAULT 0,
+		tls_verify INTEGER NOT NULL DEFAULT 1
+	);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Open through the store: migrate() must ALTER in description (default '').
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open legacy db: %v", err)
+	}
+	defer st.Close()
+
+	ops, _ := st.CreateGroup(ctx, "ops")
+	sid, _ := st.CreateService(ctx, "SEC", "Secure Host", "sec.example", 992, true, true)
+	st.LinkGroupService(ctx, ops, sid)
+
+	svcs, err := st.ListServicesForGroups(ctx, []string{"ops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svcs) != 1 || svcs[0].Description != "Secure Host" {
+		t.Fatalf("legacy migration: want Description 'Secure Host', got %+v", svcs)
+	}
+}
+
 func TestOpenCreatesTables(t *testing.T) {
 	st := newTestStore(t)
 	want := []string{"users", "groups", "user_groups", "services", "group_services"}

@@ -265,10 +265,12 @@ func NormalizeServiceName(name string) (string, error) {
 	return n, nil
 }
 
-func validateDescription(desc string) error {
+// ValidateDescription enforces a required, length-bounded service label.
+func ValidateDescription(desc string) error {
 	if desc == "" {
 		return errors.New("description is required")
 	}
+	// len counts bytes; descriptions are expected to be ASCII (EBCDIC display context).
 	if len(desc) > MaxDescriptionLen {
 		return errors.New("description must be 40 characters or fewer")
 	}
@@ -281,7 +283,7 @@ func (s *Store) CreateService(ctx context.Context, name, description, host strin
 	if err != nil {
 		return 0, err
 	}
-	if err := validateDescription(description); err != nil {
+	if err := ValidateDescription(description); err != nil {
 		return 0, err
 	}
 	tlsInt := 0
