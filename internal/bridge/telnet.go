@@ -23,6 +23,11 @@ const (
 // aidPA3 is the 3270 AID byte for the PA3 key — the gateway's escape key.
 const aidPA3 = 0x6B
 
+// maxSubnegLen caps the subnegotiation payload buffer. Legitimate TN3270
+// subnegotiations (e.g. TERMINAL-TYPE SEND) are tens of bytes; 1 KB is
+// generous while preventing unbounded heap growth from a malicious peer.
+const maxSubnegLen = 1024
+
 // EscapeAIDPA3 is the exported escape AID (PA3) for callers wiring the server.
 const EscapeAIDPA3 = aidPA3
 
@@ -54,10 +59,11 @@ type telnetProcessor struct {
 	termType  string
 	escapeAID byte
 
-	state      pstate
-	optCmd     byte   // pending WILL/WONT/DO/DONT command
-	subneg     []byte // collected subnegotiation payload
-	atRecStart bool   // next data byte begins a 3270 record
+	state          pstate
+	optCmd         byte   // pending WILL/WONT/DO/DONT command
+	subneg         []byte // collected subnegotiation payload
+	subnegOverflow bool   // true when subneg payload exceeded maxSubnegLen
+	atRecStart     bool   // next data byte begins a 3270 record
 }
 
 func newProcessor(r role, termType string, escapeAID byte) *telnetProcessor {
@@ -110,6 +116,7 @@ func (p *telnetProcessor) process(in []byte) (forward, reply []byte, escaped boo
 				p.state = stOption
 			case cSB:
 				p.subneg = p.subneg[:0]
+				p.subnegOverflow = false
 				p.state = stSubData
 			default:
 				p.state = stData // other commands (e.g. NOP) ignored
@@ -122,16 +129,28 @@ func (p *telnetProcessor) process(in []byte) (forward, reply []byte, escaped boo
 		case stSubData:
 			if b == cIAC {
 				p.state = stSubIAC
-			} else {
-				p.subneg = append(p.subneg, b)
+			} else if !p.subnegOverflow {
+				if len(p.subneg) < maxSubnegLen {
+					p.subneg = append(p.subneg, b)
+				} else {
+					p.subnegOverflow = true
+				}
 			}
 
 		case stSubIAC:
 			if b == cSE {
-				reply = append(reply, p.subnegReply()...)
+				if !p.subnegOverflow {
+					reply = append(reply, p.subnegReply()...)
+				}
 				p.state = stData
 			} else if b == cIAC {
-				p.subneg = append(p.subneg, cIAC)
+				if !p.subnegOverflow {
+					if len(p.subneg) < maxSubnegLen {
+						p.subneg = append(p.subneg, cIAC)
+					} else {
+						p.subnegOverflow = true
+					}
+				}
 				p.state = stSubData
 			} else {
 				p.state = stData
