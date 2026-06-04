@@ -134,6 +134,28 @@ func TestMenuScreenCapacityGrowsAndTruncates(t *testing.T) {
 	}
 }
 
+func TestMenuRendersISPFStyleAndHidesHostPort(t *testing.T) {
+	svcs := []store.Service{
+		{Name: "PRODCICS", Description: "Production CICS Region", Host: "secret.internal", Port: 992},
+	}
+	screen, mapping := MenuScreen(DefaultGeometry, svcs, false, "")
+	if _, ok := mapping["1"]; !ok {
+		t.Fatal("selection 1 not mapped")
+	}
+	var found bool
+	for _, f := range screen {
+		if strings.Contains(f.Content, "PRODCICS") && strings.Contains(f.Content, "Production CICS Region") {
+			found = true
+		}
+		if strings.Contains(f.Content, "secret.internal") || strings.Contains(f.Content, "992") {
+			t.Errorf("menu leaks host/port: %q", f.Content)
+		}
+	}
+	if !found {
+		t.Error("expected an ISPF-style row with NAME and Description")
+	}
+}
+
 func TestMenuScreenAdminEntryNeverCollidesWhenFull(t *testing.T) {
 	svcs := make([]store.Service, 32)
 	for i := range svcs {
