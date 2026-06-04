@@ -221,8 +221,9 @@ func (f *adminFlow) userGroups(ctx context.Context, r ui3270.Renderer, u store.U
 				return nil, logStoreErr("list groups", err)
 			}
 			memberOf, gerr := f.store.GetUserGroups(ctx, u.ID)
+			errMsg := ""
 			if gerr != nil {
-				return nil, logStoreErr("get user groups", gerr)
+				errMsg = logStoreErr("get user groups", gerr)
 			}
 			member := make(map[string]bool, len(memberOf))
 			for _, name := range memberOf {
@@ -236,7 +237,7 @@ func (f *adminFlow) userGroups(ctx context.Context, r ui3270.Renderer, u store.U
 				}
 				rows[i] = ui3270.Row[store.Group]{Display: fmt.Sprintf("%-20s %s", g.Name, marker), Item: g}
 			}
-			return rows, ""
+			return rows, errMsg
 		},
 		Cmds: []ui3270.Command[store.Group]{
 			{Key: 'A', Commit: func(ctx context.Context, _ ui3270.Renderer, g store.Group) (string, error) {

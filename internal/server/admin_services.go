@@ -197,8 +197,9 @@ func (f *adminFlow) serviceGroups(ctx context.Context, r ui3270.Renderer, svc st
 				return nil, logStoreErr("list groups", err)
 			}
 			linked, lerr := f.store.ListGroupsForService(ctx, svc.ID)
+			errMsg := ""
 			if lerr != nil {
-				return nil, logStoreErr("list service groups", lerr)
+				errMsg = logStoreErr("list service groups", lerr)
 			}
 			linkSet := make(map[int64]bool, len(linked))
 			for _, g := range linked {
@@ -212,7 +213,7 @@ func (f *adminFlow) serviceGroups(ctx context.Context, r ui3270.Renderer, svc st
 				}
 				rows[i] = ui3270.Row[store.Group]{Display: fmt.Sprintf("%-20s %s", g.Name, marker), Item: g}
 			}
-			return rows, ""
+			return rows, errMsg
 		},
 		Cmds: []ui3270.Command[store.Group]{
 			{Key: 'A', Commit: func(ctx context.Context, _ ui3270.Renderer, g store.Group) (string, error) {

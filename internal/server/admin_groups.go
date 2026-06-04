@@ -103,8 +103,9 @@ func (f *adminFlow) groupMembers(ctx context.Context, r ui3270.Renderer, g store
 				return nil, logStoreErr("list users", err)
 			}
 			members, merr := f.store.ListUsersInGroup(ctx, g.ID)
+			errMsg := ""
 			if merr != nil {
-				return nil, logStoreErr("list group members", merr)
+				errMsg = logStoreErr("list group members", merr)
 			}
 			memberSet := make(map[int64]bool, len(members))
 			for _, m := range members {
@@ -118,7 +119,7 @@ func (f *adminFlow) groupMembers(ctx context.Context, r ui3270.Renderer, g store
 				}
 				rows[i] = ui3270.Row[store.User]{Display: fmt.Sprintf("%-16s %s", u.Username, marker), Item: u}
 			}
-			return rows, ""
+			return rows, errMsg
 		},
 		Cmds: []ui3270.Command[store.User]{
 			{Key: 'A', Commit: func(ctx context.Context, _ ui3270.Renderer, u store.User) (string, error) {
@@ -151,11 +152,15 @@ func (f *adminFlow) groupMembers(ctx context.Context, r ui3270.Renderer, g store
 }
 
 func (f *adminFlow) groupAdd(ctx context.Context, r ui3270.Renderer) error {
+	// fields is declared as a local variable so a rejected submit re-seeds the
+	// typed group name on the next render (RunForm re-sends the same slice each loop).
+	fields := []ui3270.FormField{{Name: screens.FieldName, Label: "Group name .", Length: 32}}
 	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
 		Title:  "TN3270 GATEWAY ADMIN: ADD GROUP",
-		Fields: []ui3270.FormField{{Name: screens.FieldName, Label: "Group name .", Length: 32}},
+		Fields: fields,
 		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
 			name := vals[screens.FieldName]
+			fields[0].Value = name // preserve typed input on re-render
 			if name == "" {
 				return "GROUP NAME IS REQUIRED", nil
 			}

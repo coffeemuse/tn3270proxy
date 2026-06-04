@@ -447,6 +447,31 @@ func TestAdminGroupAddDuplicateBlocked(t *testing.T) {
 	}
 }
 
+func TestAdminGroupAddReSeedsInputOnError(t *testing.T) {
+	// Submit a reserved group name; the form should re-render with the typed
+	// name pre-filled in the name field (gotForms[1].Fields[0].Value == "zzbad").
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
+			{Values: map[string]string{screens.FieldName: "zzbad"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if len(p.gotForms) < 2 {
+		t.Fatalf("expected at least 2 form renders, got %d", len(p.gotForms))
+	}
+	second := p.gotForms[1]
+	if second.ErrMsg != "ZZ* GROUP NAMES ARE RESERVED" {
+		t.Errorf("errMsg = %q, want ZZ* GROUP NAMES ARE RESERVED", second.ErrMsg)
+	}
+	if second.Fields[0].Value != "zzbad" {
+		t.Errorf("name field not re-seeded: got %q, want %q", second.Fields[0].Value, "zzbad")
+	}
+}
+
 func TestAdminGroupDeleteReservedBlocked(t *testing.T) {
 	// Group rows sort OPS(0), ZZADMIN(1).
 	p := &fakeAdminPresenter{
