@@ -51,11 +51,19 @@ internal/config   Config{DBPath, Plain, TLS, Limits}; Load(args) merges defaults
 internal/listen   Build(cfg) → []net.Listener (plaintext + tls.NewListener, immediate TLS).
 internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + group-gated
                   ListServicesForGroups. All Create* are idempotent (INSERT OR IGNORE).
+                  Names are canonical UPPERCASE: usernames, group names, and service
+                  NAMEs fold to upper on create/lookup (the single choke point) and the
+                  UNIQUE columns are COLLATE NOCASE. A service has a short uppercase
+                  NAME identifier (A-Z/0-9, ≤8, dedup key — NormalizeServiceName) plus a
+                  required mixed-case `description` label (≤40 — ValidateDescription);
+                  hosts and passwords are NOT normalized.
                   Audit trail: `audit` table (UTC RFC3339, session-correlated) +
                   RecordAudit/ListAudit/PruneAudit.
 internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,Username,Groups}.
                   bcrypt; uniform ErrInvalidCredentials (no username-enumeration leak).
-internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(svcs, errMsg).
+internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, svcs,
+                  admin, errMsg). The user menu renders ISPF-style `NN NAME Description`
+                  rows and deliberately hides backend host/port (admin-only).
                   All builders take a Geometry (first param; self-normalizing to 24×80)
                   with formula methods for the bottom-anchored rows (HelpRow, ErrorRow,
                   etc.), list page size, form capacity, and menu capacity.
@@ -105,6 +113,12 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   can't create/delete `ZZ*` groups, only manage membership. Guardrails: no self-delete, never
   empty ZZADMIN. Admin changes apply at the next menu render/login — live sessions are not
   re-evaluated.
+- **Canonical uppercase names.** Usernames, group names, and service NAMEs are folded to
+  uppercase in the store layer (the single choke point) so case-insensitive compares done
+  Go-side (`slices.Contains(identity.Groups, store.AdminGroup)`) are correct as written.
+  Service NAMEs are validated (A-Z/0-9, ≤8); `description` is the user-facing label.
+  Passwords and service hosts are never normalized. Pre-prod: schema edited directly, no
+  data migration (closed GH #9).
 - **No credential logging, ever.** Lifecycle logging uses stdlib `log`; usernames are OK to
   log, passwords/Login() contents are not; `auth.HashPassword` is the single bcrypt path
   (seed + admin UI).
