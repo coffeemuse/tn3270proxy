@@ -22,7 +22,7 @@ package ui3270
 import "testing"
 
 func TestBuildListScreenCursorPopulated(t *testing.T) {
-	_, cur := buildListScreen(24, 80, ListView{Rows: []string{"alice", "bob"}})
+	_, cur := buildListScreen(24, ListView{Rows: []string{"alice", "bob"}})
 	// first CMD field is attribute byte at (4,2); input one col right.
 	if cur != (Cursor{Row: 4, Col: 3}) {
 		t.Errorf("cursor = %+v, want {4,3}", cur)
@@ -30,14 +30,14 @@ func TestBuildListScreenCursorPopulated(t *testing.T) {
 }
 
 func TestBuildListScreenEmptyHomes(t *testing.T) {
-	_, cur := buildListScreen(24, 80, ListView{})
+	_, cur := buildListScreen(24, ListView{})
 	if cur != (Cursor{Row: 0, Col: 0}) {
 		t.Errorf("cursor = %+v, want {0,0}", cur)
 	}
 }
 
 func TestBuildFormScreenCursor(t *testing.T) {
-	_, cur := buildFormScreen(24, 80, FormView{Fields: []FormField{{Name: "x", Length: 8}}})
+	_, cur := buildFormScreen(24, FormView{Fields: []FormField{{Name: "x", Length: 8}}})
 	// first input attribute byte at (3,16); input one col right.
 	if cur != (Cursor{Row: 3, Col: 17}) {
 		t.Errorf("cursor = %+v, want {3,17}", cur)

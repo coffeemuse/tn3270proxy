@@ -57,16 +57,16 @@ func present(fn func() (go3270.Response, error)) (go3270.Response, error) {
 }
 
 type go3270Renderer struct {
-	conn       net.Conn
-	dev        go3270.DevInfo
-	codepage   go3270.Codepage
-	rows, cols int
+	conn     net.Conn
+	dev      go3270.DevInfo
+	codepage go3270.Codepage
+	rows     int
 }
 
 // NewGo3270Renderer returns a Renderer that paints via go3270 over conn. dev
 // and codepage come from the negotiated terminal (dev nil => 24x80 fallback).
-func NewGo3270Renderer(conn net.Conn, dev go3270.DevInfo, codepage go3270.Codepage, rows, cols int) Renderer {
-	return &go3270Renderer{conn: conn, dev: dev, codepage: codepage, rows: rows, cols: cols}
+func NewGo3270Renderer(conn net.Conn, dev go3270.DevInfo, codepage go3270.Codepage, rows int) Renderer {
+	return &go3270Renderer{conn: conn, dev: dev, codepage: codepage, rows: rows}
 }
 
 func (g *go3270Renderer) call(screen go3270.Screen, exit []go3270.AID, cur Cursor) (go3270.Response, error) {
@@ -81,7 +81,7 @@ func (g *go3270Renderer) call(screen go3270.Screen, exit []go3270.AID, cur Curso
 }
 
 func (g *go3270Renderer) List(v ListView) (ListAction, error) {
-	screen, cur := buildListScreen(g.rows, g.cols, v)
+	screen, cur := buildListScreen(g.rows, v)
 	resp, err := g.call(screen, listExitKeys, cur)
 	if err != nil {
 		return ListAction{}, err
@@ -90,7 +90,7 @@ func (g *go3270Renderer) List(v ListView) (ListAction, error) {
 }
 
 func (g *go3270Renderer) Form(v FormView) (FormAction, error) {
-	screen, cur := buildFormScreen(g.rows, g.cols, v)
+	screen, cur := buildFormScreen(g.rows, v)
 	resp, err := g.call(screen, []go3270.AID{go3270.AIDPF3}, cur)
 	if err != nil {
 		return FormAction{}, err

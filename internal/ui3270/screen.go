@@ -32,7 +32,7 @@ const (
 
 // buildListScreen renders v at the given terminal size and returns the initial
 // cursor (first CMD field, or home for an empty list).
-func buildListScreen(rows, cols int, v ListView) (go3270.Screen, Cursor) {
+func buildListScreen(rows int, v ListView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
 		{Row: 0, Col: 2, Intense: true, Content: v.Title},
 		{Row: 0, Col: 60, Content: v.RowInfo},
@@ -68,7 +68,7 @@ func buildListScreen(rows, cols int, v ListView) (go3270.Screen, Cursor) {
 
 // buildFormScreen renders v and returns the initial cursor (first input, or
 // home if there are no fields).
-func buildFormScreen(rows, cols int, v FormView) (go3270.Screen, Cursor) {
+func buildFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
 		{Row: 0, Col: 2, Intense: true, Content: v.Title},
 	}

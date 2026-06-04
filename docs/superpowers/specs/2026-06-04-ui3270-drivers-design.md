@@ -189,7 +189,7 @@ stays in glue methods. The store and the `screens.Field*` constants stay
 server-side (the glue passes field-name strings into `ui3270` as data).
 Sub-screens compose by recursion. `adminFlow` gains a `renderer(conn)` helper
 returning `ui3270.NewGo3270Renderer(conn, f.term.dev, f.term.codepage(),
-f.term.Rows, f.term.Cols)` in production; tests inject a fake `ui3270.Renderer`.
+f.term.Rows)` in production; tests inject a fake `ui3270.Renderer`.
 
 ### What moves, what stays
 
@@ -197,7 +197,10 @@ f.term.Rows, f.term.Cols)` in production; tests inject a fake `ui3270.Renderer`.
   `AdminFormScreen` builders (as the renderer's private helpers), the
   page-size/anchored-row formulas (re-expressed as small unexported functions of
   `(rows, cols)` — minor, accepted duplication of `screens.Geometry`'s math),
-  and the `HandleScreenAlt` wrapper.
+  and the `HandleScreenAlt` wrapper. The silent-AID present-loop helpers
+  (`silentAIDs`/`withSilentExits`/`present`) are likewise necessarily duplicated
+  between `server/handle_screen.go` (login/menu/AdminMenu path) and
+  `ui3270/renderer.go` (list/form path), since `ui3270` cannot import `server`.
 - **Stays in `screens`:** `LoginScreen`, `MenuScreen`, `AdminMenuScreen`, and
   the app field-name constants (`FieldUsername`, `FieldHost`, …), which are also
   used by the login/menu screens.

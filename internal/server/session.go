@@ -174,7 +174,7 @@ func (s *Session) Run(conn net.Conn) {
 					if s.AdminRenderer != nil {
 						return s.AdminRenderer(conn, term)
 					}
-					return ui3270.NewGo3270Renderer(conn, term.dev, term.codepage(), term.Rows, term.Cols)
+					return ui3270.NewGo3270Renderer(conn, term.dev, term.codepage(), term.Rows)
 				}
 				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter,
 					renderer: renderer,
