@@ -41,12 +41,14 @@ func (go3270Presenter) AdminMenu(conn net.Conn, term Term, errMsg string) (int, 
 	geom := term.Geometry()
 	for {
 		screen := screens.AdminMenuScreen(geom, errMsg)
-		resp, err := go3270.HandleScreenAlt(
-			screen, nil, map[string]string{},
-			[]go3270.AID{go3270.AIDEnter},
-			[]go3270.AID{go3270.AIDPF3},
-			screens.FieldError, geom.InputRow(), 8, conn, term.dev, term.codepage(),
-		)
+		resp, err := handleScreen(func() (go3270.Response, error) {
+			return go3270.HandleScreenAlt(
+				screen, nil, map[string]string{},
+				[]go3270.AID{go3270.AIDEnter},
+				withSilentExits([]go3270.AID{go3270.AIDPF3}),
+				screens.FieldError, geom.InputRow(), 8, conn, term.dev, term.codepage(),
+			)
+		})
 		if err != nil {
 			return 0, false, err
 		}
@@ -73,12 +75,14 @@ func (go3270Presenter) AdminList(conn net.Conn, term Term, v screens.AdminListVi
 	if len(v.Rows) == 0 {
 		crow, ccol = 0, 0
 	}
-	resp, err := go3270.HandleScreenAlt(
-		screen, nil, map[string]string{},
-		[]go3270.AID{go3270.AIDEnter},
-		adminListExitKeys,
-		screens.FieldError, crow, ccol, conn, term.dev, term.codepage(),
-	)
+	resp, err := handleScreen(func() (go3270.Response, error) {
+		return go3270.HandleScreenAlt(
+			screen, nil, map[string]string{},
+			[]go3270.AID{go3270.AIDEnter},
+			withSilentExits(adminListExitKeys),
+			screens.FieldError, crow, ccol, conn, term.dev, term.codepage(),
+		)
+	})
 	if err != nil {
 		return AdminListAction{}, err
 	}
@@ -87,12 +91,14 @@ func (go3270Presenter) AdminList(conn net.Conn, term Term, v screens.AdminListVi
 
 func (go3270Presenter) AdminForm(conn net.Conn, term Term, v screens.AdminFormView) (AdminFormAction, error) {
 	screen := screens.AdminFormScreen(term.Geometry(), v)
-	resp, err := go3270.HandleScreenAlt(
-		screen, nil, map[string]string{},
-		[]go3270.AID{go3270.AIDEnter},
-		[]go3270.AID{go3270.AIDPF3},
-		screens.FieldError, 3, 17, conn, term.dev, term.codepage(),
-	)
+	resp, err := handleScreen(func() (go3270.Response, error) {
+		return go3270.HandleScreenAlt(
+			screen, nil, map[string]string{},
+			[]go3270.AID{go3270.AIDEnter},
+			withSilentExits([]go3270.AID{go3270.AIDPF3}),
+			screens.FieldError, 3, 17, conn, term.dev, term.codepage(),
+		)
+	})
 	if err != nil {
 		return AdminFormAction{}, err
 	}
