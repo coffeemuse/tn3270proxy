@@ -30,95 +30,56 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
 // users drives the user list and its sub-screens.
 func (f *adminFlow) users(ctx context.Context, conn net.Conn) error {
-	page, errMsg := 0, ""
-	var pendingDelete *store.User
-	for {
-		users, err := f.store.ListUsers(ctx)
-		if err != nil {
-			errMsg = logStoreErr("list users", err)
-			users = nil
-			pendingDelete = nil // confirm lost; user must re-initiate D
-		}
-		var start, end int
-		var rowInfo string
-		page, start, end, rowInfo = f.pageBounds(page, len(users))
-		pageUsers := users[start:end]
-		rows := make([]string, len(pageUsers))
-		for i, u := range pageUsers {
-			groups, gerr := f.store.GetUserGroups(ctx, u.ID)
-			if gerr != nil {
-				groups = nil
-			}
-			rows[i] = fmt.Sprintf("%-16s %s", u.Username, strings.Join(groups, ","))
-		}
-		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
-			Title:   "TN3270 GATEWAY ADMIN: USERS",
-			RowInfo: rowInfo,
-			Header:  "CMD  USERNAME         GROUPS",
-			Rows:    rows,
-			Legend:  "S = set password   G = groups   D = delete   PF4 = add user",
-			ErrMsg:  errMsg,
-			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = admin menu",
-		})
-		if err != nil {
-			return err
-		}
-		errMsg = ""
+	r := f.renderer(conn)
+	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.User]{
+		Title:  "TN3270 GATEWAY ADMIN: USERS",
+		Header: "CMD  USERNAME         GROUPS",
+		Legend: "S = set password   G = groups   D = delete   PF4 = add user",
+		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = admin menu",
+		Rows:   f.term.Rows,
+		Fetch:  f.fetchUsers,
+		Add:    func(ctx context.Context, r ui3270.Renderer) (string, error) { return "", f.userAdd(ctx, r) },
+		Cmds: []ui3270.Command[store.User]{
+			{Key: 'S', Commit: func(ctx context.Context, r ui3270.Renderer, u store.User) (string, error) {
+				return "", f.setPassword(ctx, r, u)
+			}},
+			{Key: 'G', Commit: func(ctx context.Context, r ui3270.Renderer, u store.User) (string, error) {
+				return "", f.userGroups(ctx, r, u)
+			}},
+			{Key: 'D',
+				Confirm: func(u store.User) (string, string) {
+					return fmt.Sprintf("ENTER = CONFIRM DELETE OF '%s', PF3 = CANCEL", u.Username), ""
+				},
+				Commit: func(ctx context.Context, _ ui3270.Renderer, u store.User) (string, error) {
+					return f.deleteUser(ctx, u), nil
+				}},
+		},
+	})
+}
 
-		// A pending delete is resolved by the very next action: plain Enter
-		// confirms, PF3 cancels (stays on the list), anything else cancels and
-		// is processed normally.
-		if pendingDelete != nil {
-			target := *pendingDelete
-			pendingDelete = nil
-			switch {
-			case act.Cmd == 0 && act.PF == 0:
-				errMsg = f.deleteUser(ctx, target)
-				continue
-			case act.PF == 3:
-				continue
-			}
+// fetchUsers maps store users → display rows (username + comma-joined groups).
+func (f *adminFlow) fetchUsers(ctx context.Context) ([]ui3270.Row[store.User], string) {
+	users, err := f.store.ListUsers(ctx)
+	if err != nil {
+		return nil, logStoreErr("list users", err)
+	}
+	rows := make([]ui3270.Row[store.User], len(users))
+	for i, u := range users {
+		groups, gerr := f.store.GetUserGroups(ctx, u.ID)
+		if gerr != nil {
+			groups = nil
 		}
-
-		switch {
-		case act.PF == 3:
-			return nil
-		case act.PF == 4:
-			if err := f.userAdd(ctx, conn); err != nil {
-				return err
-			}
-		case act.PF == 7:
-			page--
-		case act.PF == 8:
-			if end < len(users) {
-				page++
-			}
-		case act.Cmd != 0:
-			if act.Row >= len(pageUsers) {
-				continue
-			}
-			u := pageUsers[act.Row]
-			switch act.Cmd {
-			case 'S':
-				if err := f.setPassword(ctx, conn, u); err != nil {
-					return err
-				}
-			case 'G':
-				if err := f.userGroups(ctx, conn, u); err != nil {
-					return err
-				}
-			case 'D':
-				pendingDelete = &u
-				errMsg = fmt.Sprintf("ENTER = CONFIRM DELETE OF '%s', PF3 = CANCEL", u.Username)
-			default:
-				errMsg = "INVALID COMMAND: " + string(act.Cmd)
-			}
+		rows[i] = ui3270.Row[store.User]{
+			Display: fmt.Sprintf("%-16s %s", u.Username, strings.Join(groups, ",")),
+			Item:    u,
 		}
 	}
+	return rows, ""
 }
 
 // deleteUser applies the lockout guardrails, then deletes. Returns the
@@ -180,178 +141,129 @@ func passwordFromForm(values map[string]string) (string, string) {
 	return pass, ""
 }
 
-func (f *adminFlow) userAdd(ctx context.Context, conn net.Conn) error {
-	username, errMsg := "", ""
-	for {
-		act, err := f.presenter.AdminForm(conn, f.term, screens.AdminFormView{
-			Title: "TN3270 GATEWAY ADMIN: ADD USER",
-			Fields: []screens.AdminFormField{
-				{Name: screens.FieldUsername, Label: "Userid . . .", Value: username, Length: 32},
-				{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
-				{Name: screens.FieldRetype, Label: "Retype . . .", Hidden: true, Length: 32},
-			},
-			ErrMsg: errMsg,
-		})
-		if err != nil {
-			return err
-		}
-		if act.Cancel {
-			return nil
-		}
-		username = act.Values[screens.FieldUsername]
-		if username == "" {
-			errMsg = "USERID IS REQUIRED"
-			continue
-		}
-		pass, msg := passwordFromForm(act.Values)
-		if msg != "" {
-			errMsg = msg
-			continue
-		}
-		// Pre-check: CreateUser is INSERT OR IGNORE and would silently no-op.
-		if _, err := f.store.GetUserByUsername(ctx, username); err == nil {
-			errMsg = "'" + username + "' ALREADY EXISTS"
-			continue
-		} else if !errors.Is(err, store.ErrNotFound) {
-			errMsg = logStoreErr("check user", err)
-			continue
-		}
-		hash, err := auth.HashPassword(pass)
-		if err != nil {
-			errMsg = logStoreErr("hash password", err)
-			continue
-		}
-		if _, err := f.store.CreateUser(ctx, username, hash); err != nil {
-			errMsg = logStoreErr("create user", err)
-			continue
-		}
-		f.recordAdmin(ctx, "user create "+username)
-		return nil
+func (f *adminFlow) userAdd(ctx context.Context, r ui3270.Renderer) error {
+	// fields is rebuilt-by-reference so a rejected submit re-seeds the typed
+	// username on the next render (RunForm re-sends the same slice each loop).
+	fields := []ui3270.FormField{
+		{Name: screens.FieldUsername, Label: "Userid . . .", Length: 32},
+		{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
+		{Name: screens.FieldRetype, Label: "Retype . . .", Hidden: true, Length: 32},
 	}
+	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
+		Title:  "TN3270 GATEWAY ADMIN: ADD USER",
+		Fields: fields,
+		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
+			username := vals[screens.FieldUsername]
+			fields[0].Value = username // preserve typed input on re-render
+			if username == "" {
+				return "USERID IS REQUIRED", nil
+			}
+			pass, msg := passwordFromForm(vals)
+			if msg != "" {
+				return msg, nil
+			}
+			// Pre-check: CreateUser is INSERT OR IGNORE and would silently no-op.
+			if _, err := f.store.GetUserByUsername(ctx, username); err == nil {
+				return "'" + username + "' ALREADY EXISTS", nil
+			} else if !errors.Is(err, store.ErrNotFound) {
+				return logStoreErr("check user", err), nil
+			}
+			hash, err := auth.HashPassword(pass)
+			if err != nil {
+				return logStoreErr("hash password", err), nil
+			}
+			if _, err := f.store.CreateUser(ctx, username, hash); err != nil {
+				return logStoreErr("create user", err), nil
+			}
+			f.recordAdmin(ctx, "user create "+username)
+			return "", nil
+		},
+	})
 }
 
-func (f *adminFlow) setPassword(ctx context.Context, conn net.Conn, u store.User) error {
-	errMsg := ""
-	for {
-		act, err := f.presenter.AdminForm(conn, f.term, screens.AdminFormView{
-			Title: "TN3270 GATEWAY ADMIN: SET PASSWORD FOR " + u.Username,
-			Fields: []screens.AdminFormField{
-				{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
-				{Name: screens.FieldRetype, Label: "Retype . . .", Hidden: true, Length: 32},
-			},
-			ErrMsg: errMsg,
-		})
-		if err != nil {
-			return err
-		}
-		if act.Cancel {
-			return nil
-		}
-		pass, msg := passwordFromForm(act.Values)
-		if msg != "" {
-			errMsg = msg
-			continue
-		}
-		hash, err := auth.HashPassword(pass)
-		if err != nil {
-			errMsg = logStoreErr("hash password", err)
-			continue
-		}
-		if err := f.store.SetPassword(ctx, u.ID, hash); err != nil {
-			errMsg = logStoreErr("set password", err)
-			continue
-		}
-		f.recordAdmin(ctx, "user set-password "+u.Username)
-		return nil
-	}
+func (f *adminFlow) setPassword(ctx context.Context, r ui3270.Renderer, u store.User) error {
+	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
+		Title: "TN3270 GATEWAY ADMIN: SET PASSWORD FOR " + u.Username,
+		Fields: []ui3270.FormField{
+			{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
+			{Name: screens.FieldRetype, Label: "Retype . . .", Hidden: true, Length: 32},
+		},
+		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
+			pass, msg := passwordFromForm(vals)
+			if msg != "" {
+				return msg, nil
+			}
+			hash, err := auth.HashPassword(pass)
+			if err != nil {
+				return logStoreErr("hash password", err), nil
+			}
+			if err := f.store.SetPassword(ctx, u.ID, hash); err != nil {
+				return logStoreErr("set password", err), nil
+			}
+			f.recordAdmin(ctx, "user set-password "+u.Username)
+			return "", nil
+		},
+	})
 }
 
 // userGroups shows every group with an X membership marker; line command A
 // adds the user, R removes (guarded for the last ZZADMIN member).
-func (f *adminFlow) userGroups(ctx context.Context, conn net.Conn, u store.User) error {
-	page, errMsg := 0, ""
-	for {
-		groups, err := f.store.ListGroups(ctx)
-		if err != nil {
-			errMsg = logStoreErr("list groups", err)
-			groups = nil
-		}
-		memberOf, err := f.store.GetUserGroups(ctx, u.ID)
-		if err != nil {
-			errMsg = logStoreErr("get user groups", err)
-		}
-		member := make(map[string]bool, len(memberOf))
-		for _, name := range memberOf {
-			member[name] = true
-		}
-		var start, end int
-		var rowInfo string
-		page, start, end, rowInfo = f.pageBounds(page, len(groups))
-		pageGroups := groups[start:end]
-		rows := make([]string, len(pageGroups))
-		for i, g := range pageGroups {
-			marker := ""
-			if member[g.Name] {
-				marker = "X"
+func (f *adminFlow) userGroups(ctx context.Context, r ui3270.Renderer, u store.User) error {
+	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.Group]{
+		Title:  "TN3270 GATEWAY ADMIN: GROUPS FOR " + u.Username,
+		Header: "CMD  GROUP                MEMBER",
+		Legend: "A = add to group   R = remove from group",
+		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = back",
+		Rows:   f.term.Rows,
+		Fetch: func(ctx context.Context) ([]ui3270.Row[store.Group], string) {
+			groups, err := f.store.ListGroups(ctx)
+			if err != nil {
+				return nil, logStoreErr("list groups", err)
 			}
-			rows[i] = fmt.Sprintf("%-20s %s", g.Name, marker)
-		}
-		act, err := f.presenter.AdminList(conn, f.term, screens.AdminListView{
-			Title:   "TN3270 GATEWAY ADMIN: GROUPS FOR " + u.Username,
-			RowInfo: rowInfo,
-			Header:  "CMD  GROUP                MEMBER",
-			Rows:    rows,
-			Legend:  "A = add to group   R = remove from group",
-			ErrMsg:  errMsg,
-			PFHelp:  "Enter = process   PF7/PF8 = page   PF3 = back",
-		})
-		if err != nil {
-			return err
-		}
-		errMsg = ""
-		switch {
-		case act.PF == 3:
-			return nil
-		case act.PF == 7:
-			page--
-		case act.PF == 8:
-			if end < len(groups) {
-				page++
+			memberOf, gerr := f.store.GetUserGroups(ctx, u.ID)
+			if gerr != nil {
+				return nil, logStoreErr("get user groups", gerr)
 			}
-		case act.Cmd != 0:
-			if act.Row >= len(pageGroups) {
-				continue
+			member := make(map[string]bool, len(memberOf))
+			for _, name := range memberOf {
+				member[name] = true
 			}
-			g := pageGroups[act.Row]
-			switch act.Cmd {
-			case 'A':
-				if err := f.store.AddUserToGroup(ctx, u.ID, g.ID); err != nil {
-					errMsg = logStoreErr("add membership", err)
-				} else {
-					f.recordAdmin(ctx, "user "+u.Username+" add-group "+g.Name)
+			rows := make([]ui3270.Row[store.Group], len(groups))
+			for i, g := range groups {
+				marker := ""
+				if member[g.Name] {
+					marker = "X"
 				}
-			case 'R':
-				if g.Name == store.AdminGroup && member[g.Name] {
+				rows[i] = ui3270.Row[store.Group]{Display: fmt.Sprintf("%-20s %s", g.Name, marker), Item: g}
+			}
+			return rows, ""
+		},
+		Cmds: []ui3270.Command[store.Group]{
+			{Key: 'A', Commit: func(ctx context.Context, _ ui3270.Renderer, g store.Group) (string, error) {
+				if err := f.store.AddUserToGroup(ctx, u.ID, g.ID); err != nil {
+					return logStoreErr("add membership", err), nil
+				}
+				f.recordAdmin(ctx, "user "+u.Username+" add-group "+g.Name)
+				return "", nil
+			}},
+			{Key: 'R', Commit: func(ctx context.Context, _ ui3270.Renderer, g store.Group) (string, error) {
+				if g.Name == store.AdminGroup {
 					// Last-admin guard first: a sole admin self-removing gets the
 					// more informative "last admin" message; the self-demotion
 					// guard then catches the ≥2-admins fat-finger case.
 					if msg := f.guardLastAdmin(ctx); msg != "" {
-						errMsg = msg
-						continue
+						return msg, nil
 					}
 					if u.ID == f.identity.UserID {
-						errMsg = "CANNOT REMOVE YOUR OWN ADMIN MEMBERSHIP"
-						continue
+						return "CANNOT REMOVE YOUR OWN ADMIN MEMBERSHIP", nil
 					}
 				}
 				if err := f.store.RemoveUserFromGroup(ctx, u.ID, g.ID); err != nil {
-					errMsg = logStoreErr("remove membership", err)
-				} else {
-					f.recordAdmin(ctx, "user "+u.Username+" remove-group "+g.Name)
+					return logStoreErr("remove membership", err), nil
 				}
-			default:
-				errMsg = "INVALID COMMAND: " + string(act.Cmd)
-			}
-		}
-	}
+				f.recordAdmin(ctx, "user "+u.Username+" remove-group "+g.Name)
+				return "", nil
+			}},
+		},
+	})
 }

@@ -48,8 +48,6 @@ type AdminPresenter interface {
 	// AdminMenu returns choice 1/2/3 (users/groups/services) or back (PF3,
 	// to the service menu). It loops internally on invalid input.
 	AdminMenu(conn net.Conn, term Term, errMsg string) (choice int, back bool, err error)
-	AdminList(conn net.Conn, term Term, v screens.AdminListView) (AdminListAction, error)
-	AdminForm(conn net.Conn, term Term, v screens.AdminFormView) (AdminFormAction, error)
 }
 
 var adminListExitKeys = []go3270.AID{
