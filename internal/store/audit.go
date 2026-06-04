@@ -11,6 +11,7 @@ const (
 	AuditConnect     = "connect"      // TCP session began
 	AuditAuthOK      = "auth_ok"      // login success
 	AuditAuthFail    = "auth_fail"    // login failure (attempted username, never the password)
+	AuditAuthError   = "auth_error"   // infrastructure error during authentication (detail = error text)
 	AuditBridgeStart = "bridge_start" // service selected, backend dial begins
 	AuditBridgeEnd   = "bridge_end"   // bridge returned (detail = cause)
 	AuditAdmin       = "admin"        // admin CRUD mutation (detail = change description)

@@ -591,6 +591,117 @@ func TestSessionBridgeEndDetailOnDialError(t *testing.T) {
 	}
 }
 
+func TestSessionAuthInfraErrorRepresentsLoginScreen(t *testing.T) {
+	// A non-credential error from Authenticate must NOT disconnect the client.
+	// The login screen is re-presented with a temporary-error message, an
+	// auth_error event is audited with the username and error text, and the
+	// session ultimately ends normally (not with "quit at login").
+	infraErr := errors.New("database unavailable")
+	callCount := 0
+	authWithTransient := func(ctx context.Context, st auth.UserStore, user, pass string) (auth.Identity, error) {
+		callCount++
+		if callCount == 1 {
+			return auth.Identity{}, infraErr
+		}
+		return authStub(ctx, st, user, pass)
+	}
+
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"}, // first attempt → infra error
+			{user: "alice", pass: "good"}, // retry → success
+			{quit: true},                  // after menu logoff
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+	s.Authenticate = authWithTransient
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	// Retry render must carry a temp-error message (not the credential-failure msg).
+	if len(p.loginErrors) < 2 {
+		t.Fatalf("expected at least 2 login renders, got %d", len(p.loginErrors))
+	}
+	if p.loginErrors[0] != "" {
+		t.Errorf("first login render errMsg = %q, want empty", p.loginErrors[0])
+	}
+	if p.loginErrors[1] == "" {
+		t.Errorf("retry login render should show a temporary-error message")
+	}
+	if strings.Contains(p.loginErrors[1], "Invalid") {
+		t.Errorf("retry message must not reuse the credential-failure text, got %q", p.loginErrors[1])
+	}
+
+	// Audit trail must contain an auth_error event.
+	kinds := rec.kinds()
+	if !slices.Contains(kinds, store.AuditAuthError) {
+		t.Errorf("kinds = %v, want an %s event", kinds, store.AuditAuthError)
+	}
+
+	// auth_error event must carry the username and error text; never the password.
+	var authErrEv *store.AuditEvent
+	for i := range rec.events {
+		if rec.events[i].Kind == store.AuditAuthError {
+			authErrEv = &rec.events[i]
+			break
+		}
+	}
+	if authErrEv == nil {
+		t.Fatal("no auth_error event recorded")
+	}
+	if authErrEv.Username != "alice" {
+		t.Errorf("auth_error username = %q, want alice", authErrEv.Username)
+	}
+	if !strings.Contains(authErrEv.Detail, "database unavailable") {
+		t.Errorf("auth_error detail = %q, want error text included", authErrEv.Detail)
+	}
+
+	// The infra error must not have aborted the session: the retry login
+	// succeeds, so an auth_ok event must follow the auth_error (rather than the
+	// session disconnecting at the first error, as it did before the fix).
+	errIdx := slices.IndexFunc(rec.events, func(e store.AuditEvent) bool {
+		return e.Kind == store.AuditAuthError
+	})
+	okIdx := slices.IndexFunc(rec.events, func(e store.AuditEvent) bool {
+		return e.Kind == store.AuditAuthOK
+	})
+	if okIdx < 0 {
+		t.Errorf("kinds = %v, want an %s event after the infra error", kinds, store.AuditAuthOK)
+	} else if okIdx < errIdx {
+		t.Errorf("auth_ok (idx %d) should follow auth_error (idx %d)", okIdx, errIdx)
+	}
+}
+
+func TestSessionLoginRenderErrorHasDistinctDetail(t *testing.T) {
+	// A Presenter.Login error must yield "login render error" in the disconnect
+	// event, not "quit at login".
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{err: errors.New("render failed")}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	disc := rec.events[len(rec.events)-1]
+	if disc.Kind != store.AuditDisconnect {
+		t.Fatalf("last event kind = %q, want disconnect", disc.Kind)
+	}
+	if disc.Detail != "login render error" {
+		t.Errorf("disconnect detail = %q, want %q", disc.Detail, "login render error")
+	}
+}
+
 func TestCauseDetail(t *testing.T) {
 	cases := []struct {
 		c    bridge.Cause

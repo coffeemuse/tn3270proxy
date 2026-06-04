@@ -114,12 +114,9 @@ func (s *Session) Run(conn net.Conn) {
 	// Re-login re-evaluates groups, so a demoted admin loses the A entry at
 	// logoff.
 	for {
-		identity, ok, lerr := s.doLogin(ctx, conn, term, aud)
+		identity, ok, loginDetail := s.doLogin(ctx, conn, term, aud)
 		if !ok {
-			endDetail = "quit at login"
-			if isTimeoutErr(lerr) {
-				endDetail = "idle timeout"
-			}
+			endDetail = loginDetail
 			return
 		}
 		currentUser = identity.Username
@@ -191,23 +188,36 @@ func (s *Session) Run(conn net.Conn) {
 	}
 }
 
-// doLogin loops the login screen until success, or returns ok=false if the
-// user quits or a render/auth error ends the session (the error, if any, is
-// returned so the caller can audit timeouts distinctly).
-func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *auditTrail) (auth.Identity, bool, error) {
+// doLogin loops the login screen until success, or returns ok=false when the
+// user quits or a render error occurs. The third return value is the
+// disconnect audit detail (only meaningful when ok=false); an idle-timeout
+// render error is classified here so the caller audits it distinctly.
+func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *auditTrail) (auth.Identity, bool, string) {
 	errMsg := ""
 	for {
 		user, pass, quit, err := s.Presenter.Login(conn, term, errMsg)
-		if err != nil || quit {
-			return auth.Identity{}, false, err
+		if err != nil {
+			if isTimeoutErr(err) {
+				return auth.Identity{}, false, "idle timeout"
+			}
+			return auth.Identity{}, false, "login render error"
+		}
+		if quit {
+			return auth.Identity{}, false, "quit at login"
 		}
 		identity, err := s.Authenticate(ctx, s.Store, user, pass)
 		if err == nil {
 			aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthOK, Username: identity.Username})
-			return identity, true, nil
+			return identity, true, ""
 		}
 		if !errors.Is(err, auth.ErrInvalidCredentials) {
-			return auth.Identity{}, false, err
+			// Infrastructure error (e.g. transient DB failure): log it, audit
+			// it, and re-present the login screen. Do not disconnect.
+			log.Printf("auth infrastructure error for user %q: %v", user, err)
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditAuthError, Username: user, Detail: err.Error()})
+			errMsg = "Temporary error; try again"
+			continue
 		}
 		// Attempted username only — never the password (CLAUDE.md hard rule).
 		aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthFail, Username: user})
