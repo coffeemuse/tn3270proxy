@@ -39,6 +39,15 @@ type SeedData struct {
 // memberships and access. It is idempotent: re-applying the same data does not
 // create duplicates.
 func Apply(ctx context.Context, st *store.Store, data SeedData) error {
+	// Pre-validate every password before any writes: Apply is non-transactional,
+	// so a password rejected mid-run (e.g. bcrypt's 72-byte limit) would leave
+	// earlier users already committed. Failing up front keeps the store clean.
+	for _, u := range data.Users {
+		if err := auth.ValidatePassword(u.Password); err != nil {
+			return fmt.Errorf("user %q: %w", u.Username, err)
+		}
+	}
+
 	groupID := make(map[string]int64)
 	ensureGroup := func(name string) (int64, error) {
 		if id, ok := groupID[name]; ok {

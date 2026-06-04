@@ -11,10 +11,11 @@ const (
 	tEOR = 0xEF
 )
 
-func TestProcessForwardsDataAndDetectsPA3(t *testing.T) {
+func TestProcessDetectsPA3AndSuppressesEscapeRecord(t *testing.T) {
 	p := newProcessor(roleServer, "", aidPA3)
 	// A 3270 inbound record beginning with PA3 (0x6B), then some data,
-	// terminated by IAC EOR.
+	// terminated by IAC EOR. The escape record (and its trailing bytes)
+	// must NOT be forwarded to the backend — the user is leaving the session.
 	in := []byte{aidPA3, 0x01, 0x02, tIAC, tEOR}
 	fwd, reply, escaped := p.process(in)
 
@@ -24,9 +25,40 @@ func TestProcessForwardsDataAndDetectsPA3(t *testing.T) {
 	if len(reply) != 0 {
 		t.Errorf("reply = %v, want none", reply)
 	}
-	want := []byte{aidPA3, 0x01, 0x02, tIAC, tEOR}
+	if len(fwd) != 0 {
+		t.Errorf("fwd = % x, want none (escape record must be suppressed)", fwd)
+	}
+}
+
+func TestProcessForwardsPreEscapeRecordThenSuppressesEscape(t *testing.T) {
+	p := newProcessor(roleServer, "", aidPA3)
+	// A legitimate Enter record, then a PA3 escape record, both in one chunk.
+	// The pre-escape record must reach the backend; the escape record and
+	// everything after it must be dropped.
+	in := []byte{0x7D, 0x40, 0x40, tIAC, tEOR, aidPA3, 0x01, tIAC, tEOR}
+	fwd, _, escaped := p.process(in)
+
+	if !escaped {
+		t.Errorf("expected escape detection for PA3 record")
+	}
+	want := []byte{0x7D, 0x40, 0x40, tIAC, tEOR}
 	if !bytes.Equal(fwd, want) {
 		t.Errorf("fwd = % x, want % x", fwd, want)
+	}
+}
+
+func TestProcessSuppressesTrailingBytesAfterEscape(t *testing.T) {
+	p := newProcessor(roleServer, "", aidPA3)
+	// Bytes following the escape AID in the same chunk — including a fresh
+	// record after IAC EOR — must all be discarded once escape fires.
+	in := []byte{aidPA3, 0x40, tIAC, tEOR, 0x7D, 0x41, tIAC, tEOR}
+	fwd, _, escaped := p.process(in)
+
+	if !escaped {
+		t.Errorf("expected escape detection for PA3 at record start")
+	}
+	if len(fwd) != 0 {
+		t.Errorf("fwd = % x, want none (all post-escape bytes suppressed)", fwd)
 	}
 }
 
@@ -129,9 +161,11 @@ func TestProcessSplitChunks(t *testing.T) {
 			t.Errorf("call 2: reply = % x, want none", reply2)
 		}
 
-		// The forwarded bytes across both calls reconstruct the full stream.
+		// The forwarded bytes across both calls reconstruct the pre-escape
+		// stream: the completed Enter record. The PA3 escape byte that begins
+		// the next record is suppressed (the user is leaving the session).
 		combined := append(fwd1, fwd2...)
-		wantCombined := []byte{0x7D, 0x40, cIAC, cEOR, aidPA3}
+		wantCombined := []byte{0x7D, 0x40, cIAC, cEOR}
 		if !bytes.Equal(combined, wantCombined) {
 			t.Errorf("combined fwd = % x, want % x", combined, wantCombined)
 		}
@@ -153,4 +187,96 @@ func TestProcessSplitChunks(t *testing.T) {
 			t.Errorf("call 2: reply = % x, want % x", reply2, wantReply)
 		}
 	})
+}
+
+// TestSubnegOverflowCapPlainPayload feeds IAC SB followed by more than
+// maxSubnegLen plain bytes and asserts the buffer never grows past the cap.
+func TestSubnegOverflowCapPlainPayload(t *testing.T) {
+	p := newProcessor(roleClient, "IBM-3279-2-E", 0)
+
+	// Begin subnegotiation.
+	p.process([]byte{cIAC, cSB})
+
+	// Feed 2*maxSubnegLen bytes of plain payload in one chunk.
+	payload := bytes.Repeat([]byte{0x42}, 2*maxSubnegLen)
+	p.process(payload)
+
+	if len(p.subneg) > maxSubnegLen {
+		t.Errorf("subneg buffer = %d bytes, want at most %d", len(p.subneg), maxSubnegLen)
+	}
+
+	// Close the subnegotiation; reply must be empty (overflow → discard).
+	_, reply, _ := p.process([]byte{cIAC, cSE})
+	if len(reply) != 0 {
+		t.Errorf("reply = % x, want none for overflowed subneg", reply)
+	}
+}
+
+// TestSubnegOverflowCapIACIACEscapes is the same scenario but the payload
+// is delivered via repeated IAC IAC sequences (escaped literal 0xFF bytes).
+func TestSubnegOverflowCapIACIACEscapes(t *testing.T) {
+	p := newProcessor(roleClient, "IBM-3279-2-E", 0)
+
+	// Begin subnegotiation.
+	p.process([]byte{cIAC, cSB})
+
+	// Feed 2*maxSubnegLen escaped 0xFF bytes; each pair contributes one byte
+	// to p.subneg.
+	escapedFF := bytes.Repeat([]byte{cIAC, cIAC}, 2*maxSubnegLen)
+	p.process(escapedFF)
+
+	if len(p.subneg) > maxSubnegLen {
+		t.Errorf("subneg buffer = %d bytes, want at most %d", len(p.subneg), maxSubnegLen)
+	}
+
+	// Close the subnegotiation; reply must be empty.
+	_, reply, _ := p.process([]byte{cIAC, cSE})
+	if len(reply) != 0 {
+		t.Errorf("reply = % x, want none for overflowed subneg", reply)
+	}
+}
+
+// TestSubnegOverflowNoReply confirms that an overflowed subnegotiation
+// produces no reply even when the payload starts with a valid TERMTYPE SEND
+// header — truncation must not be parsed.
+func TestSubnegOverflowNoReply(t *testing.T) {
+	p := newProcessor(roleClient, "IBM-3279-2-E", 0)
+
+	// Build a subneg that starts with optTERMTYPE + ttSEND but then runs past
+	// maxSubnegLen so the processor must discard it without replying.
+	in := []byte{cIAC, cSB, optTERMTYPE, ttSEND}
+	in = append(in, bytes.Repeat([]byte{0x41}, maxSubnegLen+1)...)
+	in = append(in, cIAC, cSE)
+
+	_, reply, _ := p.process(in)
+	if len(reply) != 0 {
+		t.Errorf("reply = % x, want none: overflowed subneg must not generate a TERMTYPE IS response", reply)
+	}
+}
+
+// TestSubnegOverflowStateRecovery verifies that after an overflowed (discarded)
+// subnegotiation the processor fully resets so a subsequent valid TERMTYPE SEND
+// subneg still receives the correct IS reply.
+func TestSubnegOverflowStateRecovery(t *testing.T) {
+	p := newProcessor(roleClient, "IBM-3279-2-E", 0)
+
+	// First subneg: flood it past the cap (reply must be empty).
+	flood := []byte{cIAC, cSB}
+	flood = append(flood, bytes.Repeat([]byte{0x41}, maxSubnegLen+1)...)
+	flood = append(flood, cIAC, cSE)
+	_, reply1, _ := p.process(flood)
+	if len(reply1) != 0 {
+		t.Fatalf("overflowed subneg: reply = % x, want none", reply1)
+	}
+
+	// Second subneg: well-formed TERMTYPE SEND — must get the correct IS reply.
+	valid := []byte{cIAC, cSB, optTERMTYPE, ttSEND, cIAC, cSE}
+	_, reply2, _ := p.process(valid)
+
+	want := []byte{cIAC, cSB, optTERMTYPE, ttIS}
+	want = append(want, []byte("IBM-3279-2-E")...)
+	want = append(want, cIAC, cSE)
+	if !bytes.Equal(reply2, want) {
+		t.Errorf("recovered subneg reply = % x, want % x", reply2, want)
+	}
 }

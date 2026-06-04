@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -55,6 +56,28 @@ func TestAuthenticateUnknownUserSameError(t *testing.T) {
 	_, err := Authenticate(context.Background(), st, "nobody", "whatever")
 	if !errors.Is(err, ErrInvalidCredentials) {
 		t.Errorf("err = %v, want ErrInvalidCredentials (no user-existence leak)", err)
+	}
+}
+
+func TestValidatePassword(t *testing.T) {
+	if err := ValidatePassword("s3cret"); err != nil {
+		t.Errorf("ValidatePassword(short) = %v, want nil", err)
+	}
+	atMax := strings.Repeat("a", MaxPasswordLen)
+	if err := ValidatePassword(atMax); err != nil {
+		t.Errorf("ValidatePassword(72 bytes) = %v, want nil", err)
+	}
+	tooLong := strings.Repeat("a", MaxPasswordLen+1)
+	if err := ValidatePassword(tooLong); !errors.Is(err, ErrPasswordTooLong) {
+		t.Errorf("ValidatePassword(73 bytes) = %v, want ErrPasswordTooLong", err)
+	}
+}
+
+func TestValidatePasswordCountsBytesNotRunes(t *testing.T) {
+	// 37 two-byte runes = 74 bytes > 72, even though only 37 characters.
+	multibyte := strings.Repeat("é", 37)
+	if err := ValidatePassword(multibyte); !errors.Is(err, ErrPasswordTooLong) {
+		t.Errorf("ValidatePassword(74 bytes / 37 runes) = %v, want ErrPasswordTooLong", err)
 	}
 }
 

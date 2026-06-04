@@ -262,6 +262,34 @@ func TestRemoveUserFromGroupAndUnlink(t *testing.T) {
 	}
 }
 
+func TestCountAdminMembers(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+
+	// Fresh DB: ZZADMIN exists but has no members.
+	n, err := st.CountAdminMembers(ctx)
+	if err != nil {
+		t.Fatalf("CountAdminMembers: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("fresh DB: admin members = %d, want 0", n)
+	}
+
+	// Add a member and recount.
+	uid, _ := st.CreateUser(ctx, "sysadmin", "hash")
+	gid, _ := st.CreateGroup(ctx, AdminGroup) // idempotent
+	if err := st.AddUserToGroup(ctx, uid, gid); err != nil {
+		t.Fatalf("AddUserToGroup: %v", err)
+	}
+	n, err = st.CountAdminMembers(ctx)
+	if err != nil {
+		t.Fatalf("CountAdminMembers after add: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("after adding member: admin members = %d, want 1", n)
+	}
+}
+
 func TestGroupCounts(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)

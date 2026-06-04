@@ -216,6 +216,26 @@ func TestAdminUserAddPasswordMismatch(t *testing.T) {
 	}
 }
 
+func TestAdminUserAddPasswordTooLong(t *testing.T) {
+	long := strings.Repeat("a", 73) // > bcrypt's 72-byte limit
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{{PF: 4}, {PF: 3}},
+		forms: []AdminFormAction{
+			{Values: map[string]string{screens.FieldUsername: "dave", screens.FieldPassword: long, screens.FieldRetype: long}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	if msg := p.gotForms[len(p.gotForms)-1].ErrMsg; msg != "PASSWORD TOO LONG (MAX 72 BYTES)" {
+		t.Errorf("errMsg = %q", msg)
+	}
+	if _, err := f.store.GetUserByUsername(context.Background(), "dave"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("dave should not exist: %v", err)
+	}
+}
+
 func TestAdminSetPassword(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
@@ -798,6 +818,144 @@ func TestAdminGroupMembersLastAdminGuard(t *testing.T) {
 	}
 	if members, _ := f.store.ListUsersInGroup(ctx, ids["zzadmin"]); len(members) != 1 {
 		t.Errorf("ZZADMIN members = %+v, want just root", members)
+	}
+}
+
+// TestAdminSelfRemoveAdminGroupBlockedUserGroups: self-removal from ZZADMIN is
+// blocked via the user-groups screen even when ≥2 admins exist (the case
+// guardLastAdmin would otherwise pass).
+func TestAdminSelfRemoveAdminGroupBlockedUserGroups(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'G', Row: 1}, // users list: G on root (row 1, alice is row 0)
+			{Cmd: 'R', Row: 1}, // groups: remove ZZADMIN (row 1, ops is row 0) — blocked
+			{PF: 3}, {PF: 3},
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	f.store.AddUserToGroup(ctx, ids["alice"], ids["zzadmin"]) // 2 admins now
+	f.Run(ctx, nil)
+	if msg := p.gotLists[2].ErrMsg; msg != "CANNOT REMOVE YOUR OWN ADMIN MEMBERSHIP" {
+		t.Errorf("errMsg = %q", msg)
+	}
+	got, _ := f.store.GetUserGroups(ctx, ids["root"])
+	if len(got) == 0 || got[0] != store.AdminGroup {
+		t.Errorf("root should remain in ZZADMIN: %v", got)
+	}
+}
+
+// TestAdminRemoveOtherAdminAllowedUserGroups: removing a *different* admin from
+// ZZADMIN is still allowed when ≥2 admins exist.
+func TestAdminRemoveOtherAdminAllowedUserGroups(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'G', Row: 0}, // users list: G on alice (row 0)
+			{Cmd: 'R', Row: 1}, // groups: remove ZZADMIN (row 1, ops is row 0) from alice — allowed
+			{PF: 3}, {PF: 3},
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	f.store.AddUserToGroup(ctx, ids["alice"], ids["zzadmin"]) // 2 admins now
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if msg := p.gotLists[2].ErrMsg; msg != "" {
+		t.Errorf("unexpected errMsg = %q", msg)
+	}
+	got, _ := f.store.GetUserGroups(ctx, ids["alice"])
+	for _, g := range got {
+		if g == store.AdminGroup {
+			t.Errorf("alice should no longer be in ZZADMIN: %v", got)
+		}
+	}
+}
+
+// TestAdminSelfRemoveNonAdminGroupAllowed: self-removal from a non-ZZADMIN
+// group is unaffected by the guardrail.
+func TestAdminSelfRemoveNonAdminGroupAllowed(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'G', Row: 1}, // users list: G on root (row 1)
+			{Cmd: 'R', Row: 0}, // groups: remove OPS (row 0, zzadmin is row 1) from root — allowed
+			{PF: 3}, {PF: 3},
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	f.store.AddUserToGroup(ctx, ids["root"], ids["ops"]) // root also in ops
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if msg := p.gotLists[2].ErrMsg; msg != "" {
+		t.Errorf("unexpected errMsg = %q", msg)
+	}
+	got, _ := f.store.GetUserGroups(ctx, ids["root"])
+	for _, g := range got {
+		if g == "OPS" {
+			t.Errorf("root should no longer be in OPS: %v", got)
+		}
+	}
+}
+
+// TestAdminSelfRemoveAdminGroupBlockedGroupMembers: self-removal from ZZADMIN
+// is blocked via the group-members screen even when ≥2 admins exist.
+func TestAdminSelfRemoveAdminGroupBlockedGroupMembers(t *testing.T) {
+	// user rows ALICE(0), ROOT(1); group rows OPS(0), ZZADMIN(1).
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'M', Row: 1}, // groups list: M on ZZADMIN (row 1, ops is row 0)
+			{Cmd: 'R', Row: 1}, // members: remove ROOT (row 1) — blocked
+			{PF: 3}, {PF: 3},
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	f.store.AddUserToGroup(ctx, ids["alice"], ids["zzadmin"]) // 2 admins now
+	f.Run(ctx, nil)
+	if msg := p.gotLists[2].ErrMsg; msg != "CANNOT REMOVE YOUR OWN ADMIN MEMBERSHIP" {
+		t.Errorf("errMsg = %q", msg)
+	}
+	members, _ := f.store.ListUsersInGroup(ctx, ids["zzadmin"])
+	for _, m := range members {
+		if m.Username == "ROOT" {
+			return // root is still there — good
+		}
+	}
+	t.Error("root should remain in ZZADMIN")
+}
+
+// TestAdminRemoveOtherAdminAllowedGroupMembers: removing a *different* admin
+// from ZZADMIN via the group-members screen is still allowed when ≥2 admins.
+func TestAdminRemoveOtherAdminAllowedGroupMembers(t *testing.T) {
+	// user rows ALICE(0), ROOT(1); group rows OPS(0), ZZADMIN(1).
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 2}, {back: true}},
+		lists: []AdminListAction{
+			{Cmd: 'M', Row: 1}, // groups list: M on ZZADMIN (row 1, ops is row 0)
+			{Cmd: 'R', Row: 0}, // members: remove ALICE (row 0) — allowed
+			{PF: 3}, {PF: 3},
+		},
+	}
+	f, ids := newAdminFixture(t, p)
+	ctx := context.Background()
+	f.store.AddUserToGroup(ctx, ids["alice"], ids["zzadmin"]) // 2 admins now
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if msg := p.gotLists[2].ErrMsg; msg != "" {
+		t.Errorf("unexpected errMsg = %q", msg)
+	}
+	members, _ := f.store.ListUsersInGroup(ctx, ids["zzadmin"])
+	for _, m := range members {
+		if m.Username == "ALICE" {
+			t.Errorf("ALICE should no longer be in ZZADMIN: %+v", members)
+		}
 	}
 }
 

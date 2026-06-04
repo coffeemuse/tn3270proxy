@@ -13,6 +13,26 @@ import (
 // cannot distinguish the two (no username-enumeration leak).
 var ErrInvalidCredentials = errors.New("auth: invalid credentials")
 
+// MaxPasswordLen is the maximum password length, in bytes, that bcrypt accepts.
+// Anything longer makes bcrypt.GenerateFromPassword return ErrPasswordTooLong,
+// so callers should reject it up front with a clear message.
+const MaxPasswordLen = 72
+
+// ErrPasswordTooLong is returned by ValidatePassword when a password exceeds
+// MaxPasswordLen bytes. It is a stable sentinel so callers (admin UI, seed) can
+// distinguish "too long" from a generic store/hash failure and report it.
+var ErrPasswordTooLong = errors.New("auth: password too long")
+
+// ValidatePassword reports whether a password is acceptable for hashing. It
+// checks the bcrypt byte-length limit (counting bytes, not runes, since that
+// is what bcrypt enforces).
+func ValidatePassword(password string) error {
+	if len(password) > MaxPasswordLen {
+		return ErrPasswordTooLong
+	}
+	return nil
+}
+
 // Identity is the result of a successful authentication.
 type Identity struct {
 	UserID   int64

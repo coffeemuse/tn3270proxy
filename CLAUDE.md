@@ -30,7 +30,8 @@ go test ./...                  # all tests
 go test ./... -race            # tests with race detector (bridge is concurrent — use this)
 go build -o bin/tn3270proxy ./cmd/tn3270proxy
 
-./bin/tn3270proxy seed -db proxy.db -file seed.example.json   # load users/groups/services
+./bin/tn3270proxy bootstrap -db proxy.db                      # create first admin (fresh system)
+./bin/tn3270proxy seed -db proxy.db -file seed.example.json   # optional: bulk-load users/groups/services
 ./bin/tn3270proxy serve -db proxy.db -listen :2323            # run the proxy
 ./bin/tn3270proxy audit list -db proxy.db                      # query the audit trail
 ./bin/tn3270proxy audit prune -db proxy.db -older-than 90d     # retention cleanup
@@ -43,7 +44,7 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 ## Architecture (package map)
 
 ```
-cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, and `audit list|prune`; wires everything
+cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, and `audit list|prune`; wires everything
 internal/config   Config{DBPath, Plain, TLS, Limits}; Load(args) merges defaults<file<flags.
                   Optional JSON file (tn3270proxy.json) defines plain+tls listeners and a
                   `limits` section (pre_auth_idle/idle as Go duration strings, max_conns,
@@ -111,7 +112,7 @@ so the session is unit-tested with fakes (no live 3270 client needed).
 - **Reserved groups:** `ZZ*` (case-insensitive, `store.ReservedGroupPrefix`) group names are
   app-dictated; `store.AdminGroup` (`ZZADMIN`) is auto-created by `migrate()`. The admin UI
   can't create/delete `ZZ*` groups, only manage membership. Guardrails: no self-delete, never
-  empty ZZADMIN. Admin changes apply at the next menu render/login — live sessions are not
+  empty ZZADMIN, no self-demotion from ZZADMIN. Admin changes apply at the next menu render/login — live sessions are not
   re-evaluated.
 - **Canonical uppercase names.** Usernames, group names, and service NAMEs are folded to
   uppercase in the store layer (the single choke point) so case-insensitive compares done
@@ -153,8 +154,10 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   auto-downloads. No cgo.
 - **`tn3270proxy.json` in the repo root is auto-loaded by `serve`** and enables a TLS
   listener on :2324 — a second instance collides with a running one. `-listen` overrides
-  only the plain addr; pass `-config` with `"tls":{"enabled":false}` for throwaway
-  instances (smoke.sh does this).
+  only the plain addr (when the plain listener is enabled); if a config file sets
+  `listeners.plain.enabled=false`, passing `-listen` is a fatal conflict error — it never
+  silently enables plaintext on a gateway that deliberately disabled it. Pass `-config`
+  with `"tls":{"enabled":false}` for throwaway instances (smoke.sh does this).
 - Runtime `*.db` files and `/bin/` are gitignored — don't commit them.
 
 ## Verifying a change actually works
