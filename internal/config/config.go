@@ -121,6 +121,9 @@ func Load(args []string) (Config, error) {
 		cfg.DBPath = *dbPath
 	}
 	if set["listen"] {
+		if !cfg.Plain.Enabled {
+			return Config{}, errors.New("config: -listen given but the plain listener is disabled by the config file; set listeners.plain.enabled=true or drop -listen")
+		}
 		cfg.Plain.Addr = *listenAddr
 	}
 	if set["pre-auth-idle"] {

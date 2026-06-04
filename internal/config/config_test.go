@@ -124,6 +124,67 @@ func TestUnknownConfigKeyIsError(t *testing.T) {
 	}
 }
 
+func TestListenFlag(t *testing.T) {
+	cases := []struct {
+		name    string
+		cfgJSON string // empty = no config file
+		args    []string
+		wantErr bool
+		wantAddr string
+	}{
+		{
+			name: "tls-only file plus -listen returns error",
+			cfgJSON: `{ "listeners": {
+				"plain": { "enabled": false },
+				"tls": { "enabled": true, "addr": ":3270", "cert": "c.pem", "key": "k.pem" }
+			} }`,
+			args:    []string{"-listen", ":2323"},
+			wantErr: true,
+		},
+		{
+			name:     "plain-enabled file plus -listen overrides addr",
+			cfgJSON:  `{ "listeners": { "plain": { "enabled": true, "addr": ":111" } } }`,
+			args:     []string{"-listen", ":222"},
+			wantErr:  false,
+			wantAddr: ":222",
+		},
+		{
+			name:     "no config file plus -listen uses the given addr",
+			cfgJSON:  "",
+			args:     []string{"-listen", ":9000"},
+			wantErr:  false,
+			wantAddr: ":9000",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := tc.args
+			if tc.cfgJSON != "" {
+				p := writeConfig(t, tc.cfgJSON)
+				args = append([]string{"-config", p}, args...)
+			} else {
+				t.Chdir(t.TempDir()) // empty dir — no default config file
+			}
+			c, err := Load(args)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("want error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load error: %v", err)
+			}
+			if c.Plain.Addr != tc.wantAddr {
+				t.Errorf("Plain.Addr = %q, want %q", c.Plain.Addr, tc.wantAddr)
+			}
+			if !c.Plain.Enabled {
+				t.Errorf("Plain.Enabled = false, want true")
+			}
+		})
+	}
+}
+
 func TestValidateNoListenerEnabled(t *testing.T) {
 	p := writeConfig(t, `{ "listeners": { "plain": { "enabled": false } } }`)
 	_, err := Load([]string{"-config", p})
