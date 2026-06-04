@@ -22,10 +22,10 @@ type SeedService struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Host        string   `json:"host"`
-	Port   int      `json:"port"`
-	TLS    bool     `json:"tls"`
-	Verify *bool    `json:"verify"` // omitted → verify ON (secure default)
-	Groups []string `json:"groups"`
+	Port        int      `json:"port"`
+	TLS         bool     `json:"tls"`
+	Verify      *bool    `json:"verify"` // omitted → verify ON (secure default)
+	Groups      []string `json:"groups"`
 }
 
 // SeedData is the full set of records to apply.

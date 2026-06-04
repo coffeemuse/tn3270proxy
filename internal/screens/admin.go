@@ -8,15 +8,15 @@ import (
 
 // Field-name constants for the admin screens.
 const (
-	FieldOption    = "option" // admin menu option input
-	FieldCmdPrefix = "cmd"    // per-row line-command inputs: cmd0, cmd1, ...
-	FieldRetype    = "retype" // password confirmation input
+	FieldOption      = "option"      // admin menu option input
+	FieldCmdPrefix   = "cmd"         // per-row line-command inputs: cmd0, cmd1, ...
+	FieldRetype      = "retype"      // password confirmation input
 	FieldName        = "name"        // entity name input (group/service forms)
 	FieldDescription = "description" // service form: human label
 	FieldHost        = "host"        // service form inputs
-	FieldPort      = "port"   // service form inputs
-	FieldTLS       = "tls"    // service form inputs
-	FieldVerify    = "verify" // service form inputs
+	FieldPort        = "port"        // service form inputs
+	FieldTLS         = "tls"         // service form inputs
+	FieldVerify      = "verify"      // service form inputs
 )
 
 // AdminListView is the view model for an ISPF-style admin list screen: one

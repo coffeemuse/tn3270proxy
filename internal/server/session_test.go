@@ -236,8 +236,8 @@ func TestSessionPassesTLSIntentToBridger(t *testing.T) {
 
 func TestSessionClientClosedEndsSession(t *testing.T) {
 	p := &fakePresenter{
-		termType:  "IBM-3278-2-E",
-		logins:    []loginResult{{user: "alice", pass: "good"}},
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{user: "alice", pass: "good"}},
 		menuPicks: []menuResult{
 			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
 		},
