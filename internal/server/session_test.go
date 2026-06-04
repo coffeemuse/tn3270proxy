@@ -658,10 +658,19 @@ func TestSessionAuthInfraErrorRepresentsLoginScreen(t *testing.T) {
 		t.Errorf("auth_error detail = %q, want error text included", authErrEv.Detail)
 	}
 
-	// Session must not end as a quit-at-login disconnect.
-	disc := rec.events[len(rec.events)-1]
-	if disc.Detail == "quit at login" {
-		t.Errorf("disconnect detail = %q; session should have ended normally, not as quit-at-login", disc.Detail)
+	// The infra error must not have aborted the session: the retry login
+	// succeeds, so an auth_ok event must follow the auth_error (rather than the
+	// session disconnecting at the first error, as it did before the fix).
+	errIdx := slices.IndexFunc(rec.events, func(e store.AuditEvent) bool {
+		return e.Kind == store.AuditAuthError
+	})
+	okIdx := slices.IndexFunc(rec.events, func(e store.AuditEvent) bool {
+		return e.Kind == store.AuditAuthOK
+	})
+	if okIdx < 0 {
+		t.Errorf("kinds = %v, want an %s event after the infra error", kinds, store.AuditAuthOK)
+	} else if okIdx < errIdx {
+		t.Errorf("auth_ok (idx %d) should follow auth_error (idx %d)", okIdx, errIdx)
 	}
 }
 
