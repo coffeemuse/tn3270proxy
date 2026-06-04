@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -111,8 +112,9 @@ func (f *adminFlow) groupIDByName(ctx context.Context, name string) (int64, bool
 	if err != nil {
 		return 0, false, err
 	}
+	nameUpper := strings.ToUpper(name)
 	for _, g := range groups {
-		if g.Name == name {
+		if g.Name == nameUpper {
 			return g.ID, true, nil
 		}
 	}

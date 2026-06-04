@@ -42,12 +42,12 @@ func (s *Store) Close() error { return s.db.Close() }
 const schema = `
 CREATE TABLE IF NOT EXISTS users (
 	id            INTEGER PRIMARY KEY,
-	username      TEXT UNIQUE NOT NULL,
+	username      TEXT UNIQUE COLLATE NOCASE NOT NULL,
 	password_hash TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS groups (
 	id   INTEGER PRIMARY KEY,
-	name TEXT UNIQUE NOT NULL
+	name TEXT UNIQUE COLLATE NOCASE NOT NULL
 );
 CREATE TABLE IF NOT EXISTS user_groups (
 	user_id  INTEGER NOT NULL REFERENCES users(id),
@@ -142,6 +142,7 @@ type User struct {
 // CreateUser inserts a user, or returns the existing user's id if the
 // username already exists (idempotent for seeding).
 func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (int64, error) {
+	username = strings.ToUpper(username)
 	return s.insertOrGet(ctx,
 		"INSERT OR IGNORE INTO users (username, password_hash) VALUES (?, ?)",
 		[]any{username, passwordHash},
@@ -151,6 +152,7 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (
 
 // CreateGroup inserts a group, or returns the existing group's id.
 func (s *Store) CreateGroup(ctx context.Context, name string) (int64, error) {
+	name = strings.ToUpper(name)
 	return s.insertOrGet(ctx,
 		"INSERT OR IGNORE INTO groups (name) VALUES (?)",
 		[]any{name},
@@ -168,6 +170,7 @@ func (s *Store) AddUserToGroup(ctx context.Context, userID, groupID int64) error
 
 // GetUserByUsername returns the user, or ErrNotFound.
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (User, error) {
+	username = strings.ToUpper(username)
 	var u User
 	err := s.db.QueryRowContext(ctx,
 		"SELECT id, username, password_hash FROM users WHERE username = ?", username).

@@ -113,6 +113,37 @@ func TestOpenPragmas(t *testing.T) {
 	}
 }
 
+func TestUsernameFoldsToUppercase(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	if _, err := st.CreateUser(ctx, "alice", "hash"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	u, err := st.GetUserByUsername(ctx, "ALICE")
+	if err != nil {
+		t.Fatalf("lookup ALICE: %v", err)
+	}
+	if u.Username != "ALICE" {
+		t.Errorf("stored username = %q, want ALICE", u.Username)
+	}
+	if u2, err := st.GetUserByUsername(ctx, "aLiCe"); err != nil || u2.ID != u.ID {
+		t.Errorf("aLiCe lookup = (%+v, %v), want same id %d", u2, err, u.ID)
+	}
+}
+
+func TestGroupNameFoldsToUppercase(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	id, err := st.CreateGroup(ctx, "zzadmin")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id2, err := st.CreateGroup(ctx, "ZZADMIN")
+	if err != nil || id2 != id {
+		t.Fatalf("re-create ZZADMIN = (%d, %v), want same id %d", id2, err, id)
+	}
+}
+
 // TestConcurrentAuditInserts fails with "database is locked" before the fix (busy_timeout=0, delete mode).
 func TestConcurrentAuditInserts(t *testing.T) {
 	st := newTestStore(t)

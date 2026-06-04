@@ -35,7 +35,7 @@ func TestApplySeedsUsersGroupsServices(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authenticate seeded user: %v", err)
 	}
-	if len(id.Groups) != 1 || id.Groups[0] != "ops" {
+	if len(id.Groups) != 1 || id.Groups[0] != "OPS" {
 		t.Errorf("groups = %v", id.Groups)
 	}
 
