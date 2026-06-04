@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -128,6 +129,91 @@ func TestValidateNoListenerEnabled(t *testing.T) {
 	_, err := Load([]string{"-config", p})
 	if err == nil {
 		t.Fatal("want error when no listener is enabled, got nil")
+	}
+}
+
+func TestLimitsDefaults(t *testing.T) {
+	t.Chdir(t.TempDir()) // no config file
+	c, err := Load(nil)
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	want := Limits{
+		PreAuthIdle: 2 * time.Minute,
+		Idle:        30 * time.Minute,
+		MaxConns:    512,
+		MaxPerIP:    16,
+	}
+	if c.Limits != want {
+		t.Errorf("Limits = %+v, want %+v", c.Limits, want)
+	}
+}
+
+func TestLimitsFromFile(t *testing.T) {
+	p := writeConfig(t, `{ "limits": {
+		"pre_auth_idle": "30s",
+		"idle": "1h",
+		"max_conns": 100,
+		"max_per_ip": 0
+	} }`)
+	c, err := Load([]string{"-config", p})
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	want := Limits{PreAuthIdle: 30 * time.Second, Idle: time.Hour, MaxConns: 100, MaxPerIP: 0}
+	if c.Limits != want {
+		t.Errorf("Limits = %+v, want %+v", c.Limits, want)
+	}
+}
+
+func TestLimitsPartialFileKeepsDefaults(t *testing.T) {
+	p := writeConfig(t, `{ "limits": { "max_conns": 64 } }`)
+	c, err := Load([]string{"-config", p})
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if c.Limits.MaxConns != 64 {
+		t.Errorf("MaxConns = %d, want 64", c.Limits.MaxConns)
+	}
+	if c.Limits.PreAuthIdle != 2*time.Minute || c.Limits.Idle != 30*time.Minute || c.Limits.MaxPerIP != 16 {
+		t.Errorf("unset limits changed: %+v", c.Limits)
+	}
+}
+
+func TestLimitsFlagsOverrideFile(t *testing.T) {
+	p := writeConfig(t, `{ "limits": { "idle": "1h", "max_conns": 100 } }`)
+	c, err := Load([]string{"-config", p,
+		"-idle", "45m", "-pre-auth-idle", "90s", "-max-conns", "200", "-max-per-ip", "4"})
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	want := Limits{PreAuthIdle: 90 * time.Second, Idle: 45 * time.Minute, MaxConns: 200, MaxPerIP: 4}
+	if c.Limits != want {
+		t.Errorf("Limits = %+v, want %+v", c.Limits, want)
+	}
+}
+
+func TestLimitsBadDurationIsError(t *testing.T) {
+	p := writeConfig(t, `{ "limits": { "idle": "soon" } }`)
+	if _, err := Load([]string{"-config", p}); err == nil {
+		t.Fatal("want error for unparseable idle duration, got nil")
+	}
+}
+
+func TestLimitsValidation(t *testing.T) {
+	cases := []struct{ name, body string }{
+		{"zero idle", `{ "limits": { "idle": "0s" } }`},
+		{"negative pre_auth_idle", `{ "limits": { "pre_auth_idle": "-1m" } }`},
+		{"zero max_conns", `{ "limits": { "max_conns": 0 } }`},
+		{"negative max_per_ip", `{ "limits": { "max_per_ip": -1 } }`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := writeConfig(t, tc.body)
+			if _, err := Load([]string{"-config", p}); err == nil {
+				t.Fatalf("want error for %s, got nil", tc.name)
+			}
+		})
 	}
 }
 
