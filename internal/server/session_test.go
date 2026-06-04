@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
@@ -468,5 +470,41 @@ func TestSessionAuditsDisconnectAfterClientClosed(t *testing.T) {
 	}
 	if disc.Username != "alice" {
 		t.Errorf("disconnect username = %q, want %q", disc.Username, "alice")
+	}
+}
+
+func TestSessionAuditsAuthEvents(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "sw0rdf1sh-wrong"},
+			{user: "alice", pass: "good"},
+			{quit: true}, // second login render after menu logoff
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	want := []string{store.AuditConnect, store.AuditAuthFail, store.AuditAuthOK, store.AuditDisconnect}
+	if !slices.Equal(rec.kinds(), want) {
+		t.Fatalf("kinds = %v, want %v", rec.kinds(), want)
+	}
+	fail := rec.events[1]
+	if fail.Username != "alice" {
+		t.Errorf("auth_fail username = %q, want the attempted username", fail.Username)
+	}
+	// The password must not appear in ANY field of ANY event.
+	for _, ev := range rec.events {
+		for _, field := range []string{ev.SessionID, ev.Kind, ev.Username, ev.RemoteAddr, ev.Service, ev.Detail} {
+			if strings.Contains(field, "sw0rdf1sh-wrong") || strings.Contains(field, "good") {
+				t.Errorf("credential leaked into audit event %+v", ev)
+			}
+		}
 	}
 }

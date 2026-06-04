@@ -82,7 +82,7 @@ func (s *Session) Run(conn net.Conn) {
 	// Re-login re-evaluates groups, so a demoted admin loses the A entry at
 	// logoff.
 	for {
-		identity, ok := s.doLogin(ctx, conn, term)
+		identity, ok := s.doLogin(ctx, conn, term, aud)
 		if !ok {
 			endDetail = "quit at login"
 			return
@@ -144,7 +144,7 @@ func (s *Session) Run(conn net.Conn) {
 
 // doLogin loops the login screen until success, or returns ok=false if the
 // user quits.
-func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term) (auth.Identity, bool) {
+func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *auditTrail) (auth.Identity, bool) {
 	errMsg := ""
 	for {
 		user, pass, quit, err := s.Presenter.Login(conn, term, errMsg)
@@ -153,11 +153,14 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term) (auth.I
 		}
 		identity, err := s.Authenticate(ctx, s.Store, user, pass)
 		if err == nil {
+			aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthOK, Username: identity.Username})
 			return identity, true
 		}
 		if !errors.Is(err, auth.ErrInvalidCredentials) {
 			return auth.Identity{}, false
 		}
+		// Attempted username only — never the password (CLAUDE.md hard rule).
+		aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthFail, Username: user})
 		// Generic message — never reveals whether the username exists (spec §7).
 		errMsg = "Invalid userid or password"
 	}
