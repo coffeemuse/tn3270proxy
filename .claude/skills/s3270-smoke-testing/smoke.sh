@@ -42,10 +42,13 @@ cat > "$WORK/back-cfg.json" <<EOF
 EOF
 
 # Front seed: alice(ops) sees BACKEND (the second proxy) + DEADHOST (port 1,
-# nothing listens). DEVONLY(dev) must NOT appear on her menu.
+# nothing listens). DEVONLY(dev) must NOT appear on her menu. charlie(empty) is
+# in a group with no services — a legitimately empty menu, used by scenario 8.
 cat > "$WORK/front-seed.json" <<EOF
-{"groups":["ops","dev"],
- "users":[{"username":"alice","password":"changeme","groups":["ops"]}],
+{"groups":["ops","dev","empty"],
+ "users":[
+  {"username":"alice","password":"changeme","groups":["ops"]},
+  {"username":"charlie","password":"changeme","groups":["empty"]}],
  "services":[
   {"name":"BACKEND","host":"127.0.0.1","port":$BACK_PORT,"groups":["ops"]},
   {"name":"DEADHOST","host":"127.0.0.1","port":1,"groups":["ops"]},
@@ -199,6 +202,33 @@ EOF
 check "7a PF3 at menu logs off to login screen" "TN3270 GATEWAY LOGIN" "$WORK/t7.out"
 # Wait(Disconnect) emits "error" on timeout if the host never closed.
 ncheck "7b second PF3 disconnects cleanly" "^error" "$WORK/t7.out"
+
+# --- 8. empty menu (issue #4): Enter on an empty menu returns control to the
+# session, which re-queries and re-renders — the session stays alive instead of
+# being trapped. charlie's group has no services, so the menu mapping is empty:
+# the SAME branch the store-error path takes (services=nil). This exercises the
+# fixed `menuRequery` return through the real go3270 stream — it does NOT
+# reproduce the transient store-error itself (inducing that black-box is out of
+# scope; the unit tests cover the classification decision). ---
+s3 t8 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(charlie)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+Ascii()
+Enter()
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "8a empty menu shows no-services message" "no services available" "$WORK/t8.out"
+# Wait(5,InputField) after the second Enter emits an "error" line on timeout if
+# the session were trapped/desynced; its absence proves the menu re-rendered.
+ncheck "8b Enter on empty menu does not hang (session not trapped)" "^error" "$WORK/t8.out"
+check "8c menu re-renders after Enter (session alive)" "TN3270 GATEWAY MENU" "$WORK/t8.out"
 
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
