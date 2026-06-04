@@ -112,7 +112,8 @@ so the session is unit-tested with fakes (no live 3270 client needed).
 - **go3270 cursor:** `HandleScreen`'s initial cursor `(crow, ccol)` must be
   `(field.Row, field.Col + 1)` — a field's `Col` is the **attribute byte**, so input starts
   one column right. `(0,0)` or the field's own `Col` leaves the cursor in the wrong place.
-  Unit tests do NOT catch this; only a real emulator does.
+  Unit tests do NOT catch this; only a real emulator does (s3270's status line reports
+  cursor row/col — the smoke script asserts it; see the s3270-smoke-testing skill).
 - **Screen layout convention** (all screens are 0-based, 24 rows = 0..23): title on **row 0**,
   the **error line just above** the action/help line, and the **PF-key help on the last row
   (`geom.HelpRow()`; 23 on a MOD 2)**. Cursor lands on the primary input field per the rule
@@ -131,5 +132,8 @@ so the session is unit-tested with fakes (no live 3270 client needed).
 ## Verifying a change actually works
 
 Unit tests cover the packages, but the 3270 *protocol surface* (screens, cursor, negotiation,
-PA3, bridging) is only truly verified against a live emulator + backend. See the manual
-smoke-test checklist in the MVP plan (Task 15) before declaring protocol-facing work done.
+PA3, bridging) is only truly verified against a real emulator + backend. The
+**s3270-smoke-testing skill** (`.claude/skills/s3270-smoke-testing/`) automates the Task 15
+checklist with s3270 (screen content, cursor position, non-display attributes, PA3/PF3,
+bridging) — run it before declaring protocol-facing work done. A human pass in a live
+emulator (c3270) remains the final word on visual polish.
