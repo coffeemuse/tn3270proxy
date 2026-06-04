@@ -16,6 +16,10 @@ func parseDuration(s string) (time.Duration, error) {
 		if err != nil || n < 0 {
 			return 0, fmt.Errorf("invalid duration %q (want e.g. 90d or 24h)", s)
 		}
+		const maxDays = 36500 // ~100 years; far beyond any sane retention window
+		if n > maxDays {
+			return 0, fmt.Errorf("invalid duration %q (max %dd)", s, maxDays)
+		}
 		return time.Duration(n) * 24 * time.Hour, nil
 	}
 	d, err := time.ParseDuration(s)
