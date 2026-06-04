@@ -9,6 +9,7 @@ import (
 	"net"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
@@ -53,6 +54,34 @@ type Session struct {
 	AdminPresenter AdminPresenter
 	// Auditor records the session's audit trail; nil disables auditing.
 	Auditor Auditor
+	// PreAuthIdle/Idle are the idle windows applied to conns that implement
+	// idleSetter (the idleConn wrapper installed by the accept path): Idle
+	// after a successful login, PreAuthIdle again at logoff. Zero values
+	// leave the connection untouched.
+	PreAuthIdle time.Duration
+	Idle        time.Duration
+}
+
+// idleSetter is implemented by idleConn; the session uses it to widen the
+// idle window once a user has authenticated (and narrow it again at logoff).
+type idleSetter interface {
+	SetIdle(d time.Duration)
+}
+
+// setIdle applies d to conn when both d and the conn's wrapper support it.
+func setIdle(conn net.Conn, d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	if ic, ok := conn.(idleSetter); ok {
+		ic.SetIdle(d)
+	}
+}
+
+// isTimeoutErr reports whether err is a net timeout (an idle deadline firing).
+func isTimeoutErr(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
 }
 
 // Run executes the session state machine for one connection. It returns when
@@ -74,6 +103,9 @@ func (s *Session) Run(conn net.Conn) {
 	if err != nil {
 		log.Printf("telnet negotiation failed: %v", err)
 		endDetail = "negotiation failed"
+		if isTimeoutErr(err) {
+			endDetail = "idle timeout"
+		}
 		return
 	}
 
@@ -82,12 +114,16 @@ func (s *Session) Run(conn net.Conn) {
 	// Re-login re-evaluates groups, so a demoted admin loses the A entry at
 	// logoff.
 	for {
-		identity, ok := s.doLogin(ctx, conn, term, aud)
+		identity, ok, lerr := s.doLogin(ctx, conn, term, aud)
 		if !ok {
 			endDetail = "quit at login"
+			if isTimeoutErr(lerr) {
+				endDetail = "idle timeout"
+			}
 			return
 		}
 		currentUser = identity.Username
+		setIdle(conn, s.Idle) // authenticated: widen the idle window
 
 		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
 		errMsg := ""
@@ -102,11 +138,15 @@ func (s *Session) Run(conn net.Conn) {
 			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, errMsg)
 			if err != nil {
 				endDetail = "menu render error"
+				if isTimeoutErr(err) {
+					endDetail = "idle timeout"
+				}
 				return
 			}
 			if quit {
 				currentUser = ""
-				break menu // logoff: back to the login screen
+				setIdle(conn, s.PreAuthIdle) // logoff: back to the pre-auth window
+				break menu                   // logoff: back to the login screen
 			}
 			errMsg = ""
 			if adminSel && isAdmin {
@@ -115,6 +155,9 @@ func (s *Session) Run(conn net.Conn) {
 				if aerr := flow.Run(ctx, conn); aerr != nil {
 					log.Printf("admin flow for %s ended: %v", identity.Username, aerr)
 					endDetail = "admin flow error"
+					if isTimeoutErr(aerr) {
+						endDetail = "idle timeout"
+					}
 					return
 				}
 				continue // re-render the menu: fresh service list shows admin edits
@@ -149,21 +192,22 @@ func (s *Session) Run(conn net.Conn) {
 }
 
 // doLogin loops the login screen until success, or returns ok=false if the
-// user quits.
-func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *auditTrail) (auth.Identity, bool) {
+// user quits or a render/auth error ends the session (the error, if any, is
+// returned so the caller can audit timeouts distinctly).
+func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *auditTrail) (auth.Identity, bool, error) {
 	errMsg := ""
 	for {
 		user, pass, quit, err := s.Presenter.Login(conn, term, errMsg)
 		if err != nil || quit {
-			return auth.Identity{}, false
+			return auth.Identity{}, false, err
 		}
 		identity, err := s.Authenticate(ctx, s.Store, user, pass)
 		if err == nil {
 			aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthOK, Username: identity.Username})
-			return identity, true
+			return identity, true, nil
 		}
 		if !errors.Is(err, auth.ErrInvalidCredentials) {
-			return auth.Identity{}, false
+			return auth.Identity{}, false, err
 		}
 		// Attempted username only — never the password (CLAUDE.md hard rule).
 		aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthFail, Username: user})
