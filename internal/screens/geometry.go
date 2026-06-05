@@ -72,3 +72,9 @@ func (g Geometry) MenuCapacity(admin bool) int {
 	}
 	return n
 }
+
+// NewsLinesPerPage is how many MOTD/NEWS text lines fit on one page: every row
+// except the bottom row reserved for the "***" page gate and the blank row
+// above it (22 on MOD 2). The "***" sits on row NewsLinesPerPage()+1 (the last
+// row); see NewsScreen.
+func (g Geometry) NewsLinesPerPage() int { return g.norm().Rows - 2 }

@@ -123,6 +123,31 @@ func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admi
 	}
 }
 
+func (go3270Presenter) News(conn net.Conn, term Term, pages [][]string) error {
+	geom := term.Geometry()
+	for i := 0; i < len(pages); {
+		screen, rules, cur := screens.NewsScreen(geom, pages[i])
+		resp, err := handleScreen(func() (go3270.Response, error) {
+			return go3270.HandleScreenAlt(
+				screen, rules, map[string]string{},
+				[]go3270.AID{go3270.AIDEnter},
+				withSilentExits([]go3270.AID{go3270.AIDPF3}),
+				"", cur.Row, cur.Col, conn, term.dev, term.codepage(),
+			)
+		})
+		if err != nil {
+			return err
+		}
+		// ENTER advances (the last page's ENTER ends the loop → nil). PF3
+		// returns here but is a deliberate no-op: re-present the same page.
+		// PA1/PA2/PA3/Clear never reach here (handleScreen swallows them).
+		if resp.AID == go3270.AIDEnter {
+			i++
+		}
+	}
+	return nil
+}
+
 // realBridger adapts bridge.Bridge to the Bridger interface.
 type realBridger struct{}
 

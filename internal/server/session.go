@@ -24,15 +24,21 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
+	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
 	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
@@ -44,6 +50,11 @@ type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
 	Login(conn net.Conn, term Term, errMsg string) (username, password string, quit bool, err error)
 	Menu(conn net.Conn, term Term, services []store.Service, admin bool, errMsg string) (selected *store.Service, adminSel bool, quit bool, err error)
+	// News shows the MOTD pages (already paginated) one at a time: ENTER
+	// advances, the last ENTER returns nil. PA3/PF3 are silent no-ops. A
+	// non-nil error is a disconnect or an idle timeout (classified by the
+	// caller). News is only called with at least one page.
+	News(conn net.Conn, term Term, pages [][]string) error
 }
 
 // BackendTLS expresses a service's backend-TLS intent. The server layer keeps
@@ -90,6 +101,25 @@ type Session struct {
 	PreAuthMax       time.Duration
 	Trusted          bool
 	BridgeIdleExempt bool
+	// MOTDRead reads the MOTD file for maybeShowNews; nil selects the capped
+	// os.ReadFile default (readMOTDCapped). Tests inject a fake.
+	MOTDRead func(path string) ([]byte, error)
+}
+
+// motdReadCap bounds how much of the MOTD file is read. A legitimate notice is
+// a few screens of text; the cap is a defensive ceiling against a misconfigured
+// path (a device/FIFO or a huge file). An over-cap file is truncated, not
+// rejected — the banner is simply clipped.
+const motdReadCap = 8 << 10 // 8 KiB
+
+// readMOTDCapped is the default MOTDRead: it reads at most motdReadCap bytes.
+func readMOTDCapped(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(io.LimitReader(f, motdReadCap))
 }
 
 // idleRegime is implemented by *idleConn (and test fakes); the session switches
@@ -194,6 +224,17 @@ func (s *Session) Run(conn net.Conn) {
 		currentUser = identity.Username
 		s.armPostAuth(conn) // authenticated: post-auth idle window
 
+		// MOTD/NEWS gate: shown once per login, before the menu.
+		enterMenu, nerr := s.maybeShowNews(ctx, conn, term, identity, aud)
+		if nerr != nil {
+			endDetail = "news render error"
+			return
+		}
+		if !enterMenu { // idled out during the gate: back to the login screen
+			currentUser = ""
+			continue
+		}
+
 		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
 		errMsg := ""
 	menu:
@@ -277,6 +318,52 @@ func (s *Session) Run(conn net.Conn) {
 			s.armPostAuth(conn) // back to the menu: restore the post-auth window
 		}
 	}
+}
+
+// maybeShowNews renders the MOTD/NEWS gate once after login, before the menu.
+// It returns (true, nil) to proceed into the menu — including every skip case
+// (MOTD disabled, unreadable, relative path, or empty). It returns (false, nil)
+// when the user idled out during the gate (audited + pre-auth re-armed here; the
+// caller returns to the login screen). A non-nil error is a fatal render error
+// (the caller disconnects).
+func (s *Session) maybeShowNews(ctx context.Context, conn net.Conn, term Term, identity auth.Identity, aud *auditTrail) (bool, error) {
+	path, err := s.Store.GetConfig(ctx, sysconfig.KeyMOTDFile)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			log.Printf("MOTD: reading config key failed; skipping: %v", err)
+		}
+		return true, nil
+	}
+	if strings.TrimSpace(path) == "" {
+		return true, nil // disabled → straight to the menu
+	}
+	if !filepath.IsAbs(path) {
+		log.Printf("MOTD file %q is not absolute; skipping", path)
+		return true, nil
+	}
+	read := s.MOTDRead
+	if read == nil {
+		read = readMOTDCapped
+	}
+	data, err := read(path)
+	if err != nil {
+		log.Printf("MOTD file %q unreadable; skipping: %v", path, err)
+		return true, nil
+	}
+	pages := screens.PaginateNews(term.Geometry(), string(data))
+	if len(pages) == 0 {
+		return true, nil // empty/whitespace-only → straight to the menu
+	}
+	if err := s.Presenter.News(conn, term, pages); err != nil {
+		if isTimeoutErr(err) {
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditLogout, Username: identity.Username, Detail: "idle logout"})
+			s.armPreAuth(conn)
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // doLogin loops the login screen until success, or returns ok=false when the

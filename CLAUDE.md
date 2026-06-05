@@ -175,6 +175,11 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   silently enables plaintext on a gateway that deliberately disabled it. Pass `-config`
   with `"tls":{"enabled":false}` for throwaway instances (smoke.sh does this).
 - Runtime `*.db` files and `/bin/` are gitignored — don't commit them.
+- **MOTD/NEWS screen is deliberately chrome-less** (`internal/screens/news.go`):
+  no title row, no PF-key help row — just red protected text and a `***` page
+  gate on the last row, matching classic TSO/READY logon messages. This is an
+  intentional exception to the "title on row 0, PF help on the last row" rule.
+  Lines truncate at column 79; the gate sits on `NewsLinesPerPage()+1`.
 
 ## Verifying a change actually works
 

@@ -39,8 +39,8 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) error {
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.User]{
 		Title:  "TN3270 GATEWAY ADMIN: USERS",
 		Header: "CMD  USERNAME         GROUPS",
-		Legend: "S = edit user   G = groups   D = delete   PF4 = add user",
-		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = admin menu",
+		Legend: "S = edit user   G = groups   D = delete",
+		PFHelp: "PF3=Admin Menu    PF4=Add User    PF7=PgUp    PF8=PgDn",
 		Rows:   f.term.Rows,
 		Fetch:  f.fetchUsers,
 		Add:    func(ctx context.Context, r ui3270.Renderer) (string, error) { return "", f.userEdit(ctx, r, nil) },

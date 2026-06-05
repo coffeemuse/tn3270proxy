@@ -95,7 +95,7 @@ func (f *adminFlow) groupMembers(ctx context.Context, r ui3270.Renderer, g store
 		Title:  "TN3270 GATEWAY ADMIN: MEMBERS OF " + g.Name,
 		Header: "CMD  USERNAME         MEMBER",
 		Legend: "A = add to group   R = remove from group",
-		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = back",
+		PFHelp: "PF3=Back    PF7=PgUp    PF8=PgDn",
 		Rows:   f.term.Rows,
 		Fetch: func(ctx context.Context) ([]ui3270.Row[store.User], string) {
 			users, err := f.store.ListUsers(ctx)
