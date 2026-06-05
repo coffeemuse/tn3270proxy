@@ -131,18 +131,39 @@ func TestConnLimiterPerIPCounting(t *testing.T) {
 	b := &net.TCPAddr{IP: net.IPv4(10, 0, 0, 2), Port: 1}
 
 	for i := range 2 {
-		if !l.admitIP(a) {
+		if !l.admitIP(a, false) {
 			t.Fatalf("conn %d from A should be admitted", i+1)
 		}
 	}
-	if l.admitIP(a) {
+	if l.admitIP(a, false) {
 		t.Fatal("third conn from A should be rejected at max_per_ip=2")
 	}
-	if !l.admitIP(b) {
+	if !l.admitIP(b, false) {
 		t.Fatal("conn from B should be admitted (independent count)")
 	}
-	l.releaseIP(a)
-	if !l.admitIP(a) {
+	l.releaseIP(a, false)
+	if !l.admitIP(a, false) {
 		t.Fatal("conn from A should be admitted again after a release")
+	}
+}
+
+func TestAdmitIPTrustedBypassesCap(t *testing.T) {
+	l := newConnLimiter(10, 1) // per-IP cap of 1
+	addr := &net.TCPAddr{IP: net.ParseIP("10.0.0.5"), Port: 5000}
+
+	if !l.admitIP(addr, false) {
+		t.Fatal("first untrusted admit should succeed")
+	}
+	if l.admitIP(addr, false) {
+		t.Fatal("second untrusted admit should hit the per-IP cap")
+	}
+	// Trusted bypasses the cap and does not consume a per-IP slot.
+	if !l.admitIP(addr, true) {
+		t.Fatal("trusted admit should bypass the per-IP cap")
+	}
+	l.releaseIP(addr, true) // must be a no-op (never admitted a slot)
+	// The original untrusted slot is still held → still at cap.
+	if l.admitIP(addr, false) {
+		t.Fatal("untrusted slot should still be held after trusted release")
 	}
 }

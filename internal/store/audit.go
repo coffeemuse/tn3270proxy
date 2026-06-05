@@ -34,6 +34,7 @@ const (
 	AuditBridgeStart = "bridge_start" // service selected, backend dial begins
 	AuditBridgeEnd   = "bridge_end"   // bridge returned (detail = cause)
 	AuditAdmin       = "admin"        // admin CRUD mutation (detail = change description)
+	AuditLogout      = "logout"       // session ended login (detail: "user logoff" | "idle logout")
 	AuditDisconnect  = "disconnect"   // connection ended (detail = how)
 )
 

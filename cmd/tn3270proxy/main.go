@@ -83,10 +83,13 @@ func runServe(args []string) error {
 	}
 
 	limits := server.Limits{
-		PreAuthIdle: cfg.Limits.PreAuthIdle,
-		Idle:        cfg.Limits.Idle,
-		MaxConns:    cfg.Limits.MaxConns,
-		MaxPerIP:    cfg.Limits.MaxPerIP,
+		PreAuthIdle:      cfg.Limits.PreAuthIdle,
+		Idle:             cfg.Limits.Idle,
+		MaxConns:         cfg.Limits.MaxConns,
+		MaxPerIP:         cfg.Limits.MaxPerIP,
+		PreAuthMax:       cfg.Limits.PreAuthMax,
+		TrustedCIDRs:     cfg.Limits.TrustedCIDRs,
+		BridgeIdleExempt: cfg.Limits.BridgeIdleExempt,
 	}
 	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits)
 	return server.ServeAll(listeners, handler, limits)

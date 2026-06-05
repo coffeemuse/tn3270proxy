@@ -20,6 +20,7 @@
 package config
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -145,10 +146,10 @@ func TestUnknownConfigKeyIsError(t *testing.T) {
 
 func TestListenFlag(t *testing.T) {
 	cases := []struct {
-		name    string
-		cfgJSON string // empty = no config file
-		args    []string
-		wantErr bool
+		name     string
+		cfgJSON  string // empty = no config file
+		args     []string
+		wantErr  bool
 		wantAddr string
 	}{
 		{
@@ -218,14 +219,26 @@ func TestLimitsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}
-	want := Limits{
-		PreAuthIdle: 2 * time.Minute,
-		Idle:        30 * time.Minute,
-		MaxConns:    512,
-		MaxPerIP:    16,
+	if c.Limits.PreAuthIdle != 2*time.Minute {
+		t.Errorf("PreAuthIdle = %v, want 2m", c.Limits.PreAuthIdle)
 	}
-	if c.Limits != want {
-		t.Errorf("Limits = %+v, want %+v", c.Limits, want)
+	if c.Limits.Idle != 30*time.Minute {
+		t.Errorf("Idle = %v, want 30m", c.Limits.Idle)
+	}
+	if c.Limits.MaxConns != 512 {
+		t.Errorf("MaxConns = %d, want 512", c.Limits.MaxConns)
+	}
+	if c.Limits.MaxPerIP != 16 {
+		t.Errorf("MaxPerIP = %d, want 16", c.Limits.MaxPerIP)
+	}
+	if c.Limits.PreAuthMax != 5*time.Minute {
+		t.Errorf("PreAuthMax = %v, want 5m", c.Limits.PreAuthMax)
+	}
+	if len(c.Limits.TrustedCIDRs) != 0 {
+		t.Errorf("TrustedCIDRs = %v, want empty", c.Limits.TrustedCIDRs)
+	}
+	if c.Limits.BridgeIdleExempt {
+		t.Errorf("BridgeIdleExempt = true, want false")
 	}
 }
 
@@ -240,9 +253,17 @@ func TestLimitsFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}
-	want := Limits{PreAuthIdle: 30 * time.Second, Idle: time.Hour, MaxConns: 100, MaxPerIP: 0}
-	if c.Limits != want {
-		t.Errorf("Limits = %+v, want %+v", c.Limits, want)
+	if c.Limits.PreAuthIdle != 30*time.Second {
+		t.Errorf("PreAuthIdle = %v, want 30s", c.Limits.PreAuthIdle)
+	}
+	if c.Limits.Idle != time.Hour {
+		t.Errorf("Idle = %v, want 1h", c.Limits.Idle)
+	}
+	if c.Limits.MaxConns != 100 {
+		t.Errorf("MaxConns = %d, want 100", c.Limits.MaxConns)
+	}
+	if c.Limits.MaxPerIP != 0 {
+		t.Errorf("MaxPerIP = %d, want 0", c.Limits.MaxPerIP)
 	}
 }
 
@@ -267,9 +288,17 @@ func TestLimitsFlagsOverrideFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load error: %v", err)
 	}
-	want := Limits{PreAuthIdle: 90 * time.Second, Idle: 45 * time.Minute, MaxConns: 200, MaxPerIP: 4}
-	if c.Limits != want {
-		t.Errorf("Limits = %+v, want %+v", c.Limits, want)
+	if c.Limits.PreAuthIdle != 90*time.Second {
+		t.Errorf("PreAuthIdle = %v, want 90s", c.Limits.PreAuthIdle)
+	}
+	if c.Limits.Idle != 45*time.Minute {
+		t.Errorf("Idle = %v, want 45m", c.Limits.Idle)
+	}
+	if c.Limits.MaxConns != 200 {
+		t.Errorf("MaxConns = %d, want 200", c.Limits.MaxConns)
+	}
+	if c.Limits.MaxPerIP != 4 {
+		t.Errorf("MaxPerIP = %d, want 4", c.Limits.MaxPerIP)
 	}
 }
 
@@ -305,5 +334,82 @@ func TestValidateTLSWithoutCert(t *testing.T) {
 	_, err := Load([]string{"-config", p})
 	if err == nil {
 		t.Fatal("want error when tls enabled without cert/key, got nil")
+	}
+}
+
+func TestLoadDefaultsNewLimits(t *testing.T) {
+	cfg, err := Load([]string{"-config", writeConfig(t, `{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Limits.PreAuthMax != 5*time.Minute {
+		t.Errorf("PreAuthMax default = %v, want 5m", cfg.Limits.PreAuthMax)
+	}
+	if len(cfg.Limits.TrustedCIDRs) != 0 {
+		t.Errorf("TrustedCIDRs default = %v, want empty", cfg.Limits.TrustedCIDRs)
+	}
+	if cfg.Limits.BridgeIdleExempt {
+		t.Error("BridgeIdleExempt default = true, want false")
+	}
+}
+
+func TestLoadTrustedCIDRsParsesIPAndCIDR(t *testing.T) {
+	path := writeConfig(t, `{"limits":{"trusted_cidrs":["10.0.0.0/24","192.168.1.5"]}}`)
+	cfg, err := Load([]string{"-config", path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []netip.Prefix{
+		netip.MustParsePrefix("10.0.0.0/24"),
+		netip.MustParsePrefix("192.168.1.5/32"),
+	}
+	if len(cfg.Limits.TrustedCIDRs) != 2 ||
+		cfg.Limits.TrustedCIDRs[0] != want[0] || cfg.Limits.TrustedCIDRs[1] != want[1] {
+		t.Errorf("TrustedCIDRs = %v, want %v", cfg.Limits.TrustedCIDRs, want)
+	}
+}
+
+func TestLoadTrustedCIDRsRejectsGarbage(t *testing.T) {
+	path := writeConfig(t, `{"limits":{"trusted_cidrs":["not-an-ip"]}}`)
+	if _, err := Load([]string{"-config", path}); err == nil {
+		t.Fatal("expected error for malformed trusted_cidrs")
+	}
+}
+
+func TestLoadBridgeIdle(t *testing.T) {
+	for _, c := range []struct {
+		val        string
+		wantExempt bool
+		wantErr    bool
+	}{
+		{`"disconnect"`, false, false},
+		{`"exempt"`, true, false},
+		{`"bogus"`, false, true},
+	} {
+		path := writeConfig(t, `{"limits":{"bridge_idle":`+c.val+`}}`)
+		cfg, err := Load([]string{"-config", path})
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("bridge_idle=%s: expected error", c.val)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("bridge_idle=%s: %v", c.val, err)
+		}
+		if cfg.Limits.BridgeIdleExempt != c.wantExempt {
+			t.Errorf("bridge_idle=%s: exempt=%v, want %v", c.val, cfg.Limits.BridgeIdleExempt, c.wantExempt)
+		}
+	}
+}
+
+func TestLoadPreAuthMaxFlagOverrides(t *testing.T) {
+	path := writeConfig(t, `{"limits":{"pre_auth_max":"5m"}}`)
+	cfg, err := Load([]string{"-config", path, "-pre-auth-max", "90s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Limits.PreAuthMax != 90*time.Second {
+		t.Errorf("PreAuthMax = %v, want 90s (flag overrides file)", cfg.Limits.PreAuthMax)
 	}
 }

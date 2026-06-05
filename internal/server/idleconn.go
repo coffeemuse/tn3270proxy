@@ -25,42 +25,65 @@ import (
 	"time"
 )
 
-// idleConn wraps a net.Conn and arms an idle deadline (SetDeadline(now+idle))
-// before every Read and Write, so a stalled client cannot pin the connection
-// forever (slowloris hardening, GH issue #1).
+// idleConn wraps a net.Conn and arms a deadline before every Read and Write so
+// a stalled peer cannot pin the connection (slowloris hardening, GH #1/#18).
 //
-// An explicit non-zero deadline set *through* the wrapper suspends auto-arming
-// until a zero deadline clears it again. The bridge relies on this: it
-// interrupts a blocked relay by setting a past deadline (bridge.go), and a
-// blind re-arm from the other relay goroutine would overwrite that interrupt
-// and stall teardown. mu serializes deadline decisions so the
-// suspend-vs-re-arm interleaving cannot race.
+// Two bounds compose: a sliding idle window (idle) re-armed on every byte, and
+// an optional absolute ceiling (hard) that does NOT slide — used pre-auth so a
+// trickle cannot hold a slot forever. The earlier of the two fires. idle<=0
+// with no ceiling disables the deadline (trusted/exempt regimes).
+//
+// An explicit non-zero deadline set through the wrapper suspends auto-arming
+// until a zero deadline clears it (the bridge teardown interrupt relies on
+// this). mu serializes deadline decisions.
 type idleConn struct {
 	net.Conn
 
 	mu     sync.Mutex
 	idle   time.Duration
-	manual bool // explicit deadline in force; auto-arm suspended
+	hard   time.Time // absolute ceiling; zero = none
+	manual bool      // explicit deadline in force; auto-arm suspended
 }
 
 func newIdleConn(c net.Conn, idle time.Duration) *idleConn {
 	return &idleConn{Conn: c, idle: idle}
 }
 
-// SetIdle changes the idle window for subsequent reads/writes (e.g. the
-// pre-auth → post-auth switch).
-func (c *idleConn) SetIdle(d time.Duration) {
+// arm sets the deadline to the earlier of (now+idle) and the absolute ceiling,
+// unless an explicit deadline is in force. A zero result clears the deadline.
+func (c *idleConn) arm() {
 	c.mu.Lock()
-	c.idle = d
+	defer c.mu.Unlock()
+	if c.manual {
+		return
+	}
+	var d time.Time
+	if c.idle > 0 {
+		d = time.Now().Add(c.idle)
+	}
+	if !c.hard.IsZero() && (d.IsZero() || c.hard.Before(d)) {
+		d = c.hard
+	}
+	c.Conn.SetDeadline(d)
+}
+
+// setPreAuth installs the pre-auth regime: a sliding idle window plus an
+// absolute ceiling now+max by which authentication must complete. The ceiling
+// does not slide with activity; re-call to re-arm it (e.g. at logoff).
+func (c *idleConn) setPreAuth(idle, max time.Duration) {
+	c.mu.Lock()
+	c.idle = idle
+	c.hard = time.Now().Add(max)
 	c.mu.Unlock()
 }
 
-// arm sets the idle deadline unless an explicit deadline is in force.
-func (c *idleConn) arm() {
+// setWindow installs a plain sliding idle window with no ceiling (post-auth and
+// bridge regimes). idle<=0 disables the deadline entirely (trusted pre-auth
+// exemption, or bridge_idle=exempt).
+func (c *idleConn) setWindow(idle time.Duration) {
 	c.mu.Lock()
-	if !c.manual {
-		c.Conn.SetDeadline(time.Now().Add(c.idle))
-	}
+	c.idle = idle
+	c.hard = time.Time{}
 	c.mu.Unlock()
 }
 

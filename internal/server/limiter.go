@@ -84,9 +84,10 @@ func ipKey(addr net.Addr) string {
 
 // admitIP records one connection against addr's IP, reporting false when the
 // per-IP cap is already reached (the caller must then close the conn and must
-// NOT call releaseIP for it).
-func (l *connLimiter) admitIP(addr net.Addr) bool {
-	if l == nil || l.maxPerIP <= 0 {
+// NOT call releaseIP for it). Trusted connections bypass the per-IP cap and do
+// not consume a per-IP slot (GH #18); they still count toward the global cap.
+func (l *connLimiter) admitIP(addr net.Addr, trusted bool) bool {
+	if l == nil || l.maxPerIP <= 0 || trusted {
 		return true
 	}
 	key := ipKey(addr)
@@ -102,9 +103,10 @@ func (l *connLimiter) admitIP(addr net.Addr) bool {
 	return true
 }
 
-// releaseIP undoes admitIP for addr's IP.
-func (l *connLimiter) releaseIP(addr net.Addr) {
-	if l == nil || l.maxPerIP <= 0 {
+// releaseIP undoes admitIP for addr's IP. It is a no-op for trusted
+// connections because admitIP never allocated a slot for them (GH #18).
+func (l *connLimiter) releaseIP(addr net.Addr, trusted bool) {
+	if l == nil || l.maxPerIP <= 0 || trusted {
 		return
 	}
 	key := ipKey(addr)

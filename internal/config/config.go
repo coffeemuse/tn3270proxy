@@ -25,6 +25,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 	"time"
 )
@@ -46,10 +47,13 @@ type TLSListener struct {
 // Limits bounds per-connection lifetime and concurrency on the public
 // listeners (slowloris/DoS hardening, GH issue #1).
 type Limits struct {
-	PreAuthIdle time.Duration // idle deadline before authentication
-	Idle        time.Duration // idle deadline after authentication (incl. bridged sessions)
-	MaxConns    int           // global concurrent-connection cap
-	MaxPerIP    int           // per-client-IP cap; 0 disables
+	PreAuthIdle      time.Duration  // idle deadline before authentication
+	Idle             time.Duration  // idle deadline after authentication (incl. bridges unless BridgeIdleExempt)
+	MaxConns         int            // global concurrent-connection cap
+	MaxPerIP         int            // per-client-IP cap; 0 disables
+	PreAuthMax       time.Duration  // absolute deadline to authenticate (GH #18)
+	TrustedCIDRs     []netip.Prefix // clients exempt from pre-auth timers + per-IP cap
+	BridgeIdleExempt bool           // true → no idle timeout during an active bridge
 }
 
 // Config holds runtime configuration for the proxy.
@@ -77,10 +81,13 @@ type fileConfig struct {
 		} `json:"tls"`
 	} `json:"listeners"`
 	Limits *struct {
-		PreAuthIdle *string `json:"pre_auth_idle"` // Go duration string, e.g. "2m"
-		Idle        *string `json:"idle"`
-		MaxConns    *int    `json:"max_conns"`
-		MaxPerIP    *int    `json:"max_per_ip"`
+		PreAuthIdle  *string  `json:"pre_auth_idle"` // Go duration string, e.g. "2m"
+		Idle         *string  `json:"idle"`
+		MaxConns     *int     `json:"max_conns"`
+		MaxPerIP     *int     `json:"max_per_ip"`
+		PreAuthMax   *string  `json:"pre_auth_max"`  // Go duration string, e.g. "5m"
+		TrustedCIDRs []string `json:"trusted_cidrs"` // IPs or CIDRs
+		BridgeIdle   *string  `json:"bridge_idle"`   // "disconnect" (default) | "exempt"
 	} `json:"limits"`
 }
 
@@ -92,6 +99,7 @@ const (
 	defaultIdle        = 30 * time.Minute
 	defaultMaxConns    = 512
 	defaultMaxPerIP    = 16
+	defaultPreAuthMax  = 5 * time.Minute
 )
 
 func defaults() Config {
@@ -104,6 +112,7 @@ func defaults() Config {
 			Idle:        defaultIdle,
 			MaxConns:    defaultMaxConns,
 			MaxPerIP:    defaultMaxPerIP,
+			PreAuthMax:  defaultPreAuthMax,
 		},
 	}
 }
@@ -119,6 +128,7 @@ func Load(args []string) (Config, error) {
 	idle := fs.Duration("idle", 0, "idle timeout after login, incl. bridged sessions (overrides config)")
 	maxConns := fs.Int("max-conns", 0, "max concurrent connections (overrides config)")
 	maxPerIP := fs.Int("max-per-ip", -1, "max concurrent connections per client IP, 0 disables (overrides config)")
+	preAuthMax := fs.Duration("pre-auth-max", 0, "absolute deadline to authenticate (overrides config)")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
 	}
@@ -147,6 +157,9 @@ func Load(args []string) (Config, error) {
 	}
 	if set["pre-auth-idle"] {
 		cfg.Limits.PreAuthIdle = *preAuthIdle
+	}
+	if set["pre-auth-max"] {
+		cfg.Limits.PreAuthMax = *preAuthMax
 	}
 	if set["idle"] {
 		cfg.Limits.Idle = *idle
@@ -224,8 +237,50 @@ func mergeFile(cfg *Config, path string, explicit bool) error {
 		if l.MaxPerIP != nil {
 			cfg.Limits.MaxPerIP = *l.MaxPerIP
 		}
+		if l.PreAuthMax != nil {
+			d, err := time.ParseDuration(*l.PreAuthMax)
+			if err != nil {
+				return fmt.Errorf("config: limits.pre_auth_max: %w", err)
+			}
+			cfg.Limits.PreAuthMax = d
+		}
+		if l.TrustedCIDRs != nil {
+			prefixes, err := parseTrusted(l.TrustedCIDRs)
+			if err != nil {
+				return err
+			}
+			cfg.Limits.TrustedCIDRs = prefixes
+		}
+		if l.BridgeIdle != nil {
+			switch *l.BridgeIdle {
+			case "disconnect":
+				cfg.Limits.BridgeIdleExempt = false
+			case "exempt":
+				cfg.Limits.BridgeIdleExempt = true
+			default:
+				return fmt.Errorf("config: limits.bridge_idle: %q (want \"disconnect\" or \"exempt\")", *l.BridgeIdle)
+			}
+		}
 	}
 	return nil
+}
+
+// parseTrusted converts trusted_cidrs entries (IP or CIDR) to prefixes; a bare
+// IP becomes a host route (/32 or /128).
+func parseTrusted(entries []string) ([]netip.Prefix, error) {
+	out := make([]netip.Prefix, 0, len(entries))
+	for _, s := range entries {
+		if p, err := netip.ParsePrefix(s); err == nil {
+			out = append(out, p)
+			continue
+		}
+		addr, err := netip.ParseAddr(s)
+		if err != nil {
+			return nil, fmt.Errorf("config: limits.trusted_cidrs: %q is not an IP or CIDR", s)
+		}
+		out = append(out, netip.PrefixFrom(addr, addr.BitLen()))
+	}
+	return out, nil
 }
 
 func validate(cfg Config) error {
@@ -245,6 +300,9 @@ func validate(cfg Config) error {
 	}
 	if cfg.Limits.PreAuthIdle <= 0 {
 		return errors.New("config: limits.pre_auth_idle must be positive")
+	}
+	if cfg.Limits.PreAuthMax <= 0 {
+		return errors.New("config: limits.pre_auth_max must be positive")
 	}
 	if cfg.Limits.Idle <= 0 {
 		return errors.New("config: limits.idle must be positive")

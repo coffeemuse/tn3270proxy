@@ -78,27 +78,75 @@ type Session struct {
 	// Auditor records the session's audit trail; nil disables auditing.
 	Auditor Auditor
 	// PreAuthIdle/Idle are the idle windows applied to conns that implement
-	// idleSetter (the idleConn wrapper installed by the accept path): Idle
+	// idleRegime (the idleConn wrapper installed by the accept path): Idle
 	// after a successful login, PreAuthIdle again at logoff. Zero values
 	// leave the connection untouched.
 	PreAuthIdle time.Duration
 	Idle        time.Duration
+	// PreAuthMax bounds total time to authenticate (absolute, re-armed at every
+	// return to the login screen). Trusted skips all pre-auth timers; the
+	// per-connection trust decision is made by the handler. BridgeIdleExempt
+	// disables the idle deadline during an active bridge. (GH #18)
+	PreAuthMax       time.Duration
+	Trusted          bool
+	BridgeIdleExempt bool
 }
 
-// idleSetter is implemented by idleConn; the session uses it to widen the
-// idle window once a user has authenticated (and narrow it again at logoff).
-type idleSetter interface {
-	SetIdle(d time.Duration)
+// idleRegime is implemented by *idleConn (and test fakes); the session switches
+// the connection's idle regime at each lifecycle transition. A connection that
+// doesn't implement it (idle hardening disabled) is left untouched.
+type idleRegime interface {
+	setPreAuth(idle, max time.Duration)
+	setWindow(idle time.Duration)
 }
 
-// setIdle applies d to conn when both d and the conn's wrapper support it.
-func setIdle(conn net.Conn, d time.Duration) {
-	if d <= 0 {
+// armPreAuth enters the pre-auth regime: trusted connections are exempt; others
+// get the idle window plus a fresh absolute ceiling. No-op when idle hardening
+// is off (PreAuthIdle<=0) and the client isn't trusted.
+func (s *Session) armPreAuth(conn net.Conn) {
+	r, ok := conn.(idleRegime)
+	if !ok {
 		return
 	}
-	if ic, ok := conn.(idleSetter); ok {
-		ic.SetIdle(d)
+	if s.Trusted {
+		r.setWindow(0) // exempt: park at login indefinitely
+		return
 	}
+	if s.PreAuthIdle <= 0 {
+		return
+	}
+	if s.PreAuthMax > 0 {
+		r.setPreAuth(s.PreAuthIdle, s.PreAuthMax)
+	} else {
+		r.setWindow(s.PreAuthIdle) // no absolute ceiling configured: idle window only
+	}
+}
+
+// armPostAuth enters the post-auth regime (menu/admin): a plain idle window.
+func (s *Session) armPostAuth(conn net.Conn) {
+	if s.Idle <= 0 {
+		return
+	}
+	if r, ok := conn.(idleRegime); ok {
+		r.setWindow(s.Idle)
+	}
+}
+
+// armBridge enters the bridge regime: the post-auth idle window, or no deadline
+// when bridge idle is exempt.
+func (s *Session) armBridge(conn net.Conn) {
+	r, ok := conn.(idleRegime)
+	if !ok {
+		return
+	}
+	if s.BridgeIdleExempt {
+		r.setWindow(0)
+		return
+	}
+	if s.Idle <= 0 {
+		return
+	}
+	r.setWindow(s.Idle)
 }
 
 // isTimeoutErr reports whether err is a net timeout (an idle deadline firing).
@@ -113,6 +161,7 @@ func isTimeoutErr(err error) bool {
 func (s *Session) Run(conn net.Conn) {
 	ctx := context.Background()
 	aud := s.newAuditTrail(conn)
+	s.armPreAuth(conn)
 
 	aud.record(ctx, store.AuditEvent{Kind: store.AuditConnect})
 	endDetail := "client disconnected"
@@ -143,7 +192,7 @@ func (s *Session) Run(conn net.Conn) {
 			return
 		}
 		currentUser = identity.Username
-		setIdle(conn, s.Idle) // authenticated: widen the idle window
+		s.armPostAuth(conn) // authenticated: post-auth idle window
 
 		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
 		errMsg := ""
@@ -157,16 +206,22 @@ func (s *Session) Run(conn net.Conn) {
 			}
 			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, errMsg)
 			if err != nil {
-				endDetail = "menu render error"
 				if isTimeoutErr(err) {
-					endDetail = "idle timeout"
+					aud.record(ctx, store.AuditEvent{
+						Kind: store.AuditLogout, Username: identity.Username, Detail: "idle logout"})
+					currentUser = ""
+					s.armPreAuth(conn)
+					break menu
 				}
+				endDetail = "menu render error"
 				return
 			}
 			if quit {
+				aud.record(ctx, store.AuditEvent{
+					Kind: store.AuditLogout, Username: identity.Username, Detail: "user logoff"})
 				currentUser = ""
-				setIdle(conn, s.PreAuthIdle) // logoff: back to the pre-auth window
-				break menu                   // logoff: back to the login screen
+				s.armPreAuth(conn) // logoff: back to the pre-auth regime
+				break menu         // logoff: back to the login screen
 			}
 			errMsg = ""
 			if adminSel && isAdmin {
@@ -180,11 +235,15 @@ func (s *Session) Run(conn net.Conn) {
 					renderer: renderer,
 					identity: identity, term: term, audit: aud.record}
 				if aerr := flow.Run(ctx, conn); aerr != nil {
+					if isTimeoutErr(aerr) {
+						aud.record(ctx, store.AuditEvent{
+							Kind: store.AuditLogout, Username: identity.Username, Detail: "idle logout"})
+						currentUser = ""
+						s.armPreAuth(conn)
+						break menu
+					}
 					log.Printf("admin flow for %s ended: %v", identity.Username, aerr)
 					endDetail = "admin flow error"
-					if isTimeoutErr(aerr) {
-						endDetail = "idle timeout"
-					}
 					return
 				}
 				continue // re-render the menu: fresh service list shows admin edits
@@ -197,6 +256,7 @@ func (s *Session) Run(conn net.Conn) {
 			btls := BackendTLS{Enabled: selected.TLS, Verify: selected.TLSVerify}
 			aud.record(ctx, store.AuditEvent{
 				Kind: store.AuditBridgeStart, Username: identity.Username, Service: selected.Name})
+			s.armBridge(conn)
 			cause, berr := s.Bridger.Bridge(conn, addr, term.Type, s.EscapeAID, btls)
 			aud.record(ctx, store.AuditEvent{
 				Kind: store.AuditBridgeEnd, Username: identity.Username,
@@ -214,6 +274,7 @@ func (s *Session) Run(conn net.Conn) {
 			default:
 				// CauseBackendClosed or CauseUserEscaped → back to the menu.
 			}
+			s.armPostAuth(conn) // back to the menu: restore the post-auth window
 		}
 	}
 }

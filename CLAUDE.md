@@ -47,8 +47,11 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, and `audit list|prune`; wires everything
 internal/config   Config{DBPath, Plain, TLS, Limits}; Load(args) merges defaults<file<flags.
                   Optional JSON file (tn3270proxy.json) defines plain+tls listeners and a
-                  `limits` section (pre_auth_idle/idle as Go duration strings, max_conns,
-                  max_per_ip; defaults 2m/30m/512/16, max_per_ip 0 disables).
+                  `limits` section (pre_auth_idle/idle/pre_auth_max as Go duration
+                  strings, trusted_cidrs []IP-or-CIDR, bridge_idle "disconnect"|"exempt",
+                  max_conns, max_per_ip; defaults 2m/30m/5m, [], disconnect, 512, 16,
+                  max_per_ip 0 disables). trusted_cidrs is config-file-only by design
+                  (it bypasses DoS controls — deployment surface, not the admin UI).
 internal/listen   Build(cfg) → []net.Listener (plaintext + tls.NewListener, immediate TLS).
 internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + group-gated
                   ListServicesForGroups. All Create* are idempotent (INSERT OR IGNORE).
@@ -89,12 +92,20 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
                   Auditor seam (best-effort store-backed auditing; nil disables) +
                   storeAuditor + per-connection auditTrail record session lifecycle events.
-                  Hardening (GH issue #1): idleConn wraps every conn and arms an idle
-                  deadline around each Read/Write (pre-auth window → wider post-auth via
-                  the idleSetter seam; deadline-fired disconnects audit as "idle timeout");
-                  connLimiter (shared across listeners by ServeAll(…, Limits)) claims a
-                  global slot BEFORE Accept (over-cap conns wait in the kernel backlog)
-                  and enforces the per-IP cap after Accept by closing.
+                  Hardening (GH #1, #18): idleConn enforces an idle *regime* the session
+                  switches at each transition (idleRegime seam: armPreAuth/armPostAuth/
+                  armBridge) — pre-auth (idle window + an absolute now+pre_auth_max ceiling
+                  that does NOT slide, so a 1-byte/2min trickle can't hold a slot),
+                  post-auth (plain idle window), bridge (idle window, or none when
+                  bridge_idle=exempt). Post-auth idle at the menu/admin LOGS OUT to the
+                  login screen (re-arming pre-auth) rather than disconnecting — audited as
+                  logout{idle logout}; PF3-logoff audits as logout{user logoff}. Trusted
+                  clients (limits.trusted_cidrs) skip the pre-auth timers and the per-IP cap
+                  but still count toward the global cap. connLimiter (shared across listeners
+                  by ServeAll(…, Limits)) claims a global slot BEFORE Accept (over-cap conns
+                  wait in the kernel backlog) and enforces the per-IP cap after Accept by
+                  closing. (Residual: accept-loop rework + user-idle-during-bridge are
+                  deferred follow-ups; see #18/#19.)
 ```
 
 Data flow: `main → Server.Serve` (accept) → `Session.Run` → `Presenter` (go3270 screens) /

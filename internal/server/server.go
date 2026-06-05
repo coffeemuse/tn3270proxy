@@ -23,6 +23,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -34,10 +35,13 @@ import (
 // layer; it mirrors config.Limits without importing the config package. Zero
 // values disable the corresponding control.
 type Limits struct {
-	PreAuthIdle time.Duration // idle deadline before login
-	Idle        time.Duration // idle deadline after login (incl. bridged sessions)
-	MaxConns    int           // global concurrent-connection cap
-	MaxPerIP    int           // per-client-IP cap
+	PreAuthIdle      time.Duration  // idle deadline before login
+	Idle             time.Duration  // idle deadline after login (incl. bridges unless BridgeIdleExempt)
+	MaxConns         int            // global concurrent-connection cap
+	MaxPerIP         int            // per-client-IP cap
+	PreAuthMax       time.Duration  // absolute deadline to authenticate (GH #18)
+	TrustedCIDRs     []netip.Prefix // trusted client networks
+	BridgeIdleExempt bool           // no idle timeout during an active bridge
 }
 
 // connHandler handles a single accepted connection.
@@ -52,6 +56,8 @@ type Server struct {
 	Handler  connHandler
 	// Limiter bounds concurrent connections; nil means unlimited.
 	Limiter *connLimiter
+	// Trust exempts matching client IPs from the per-IP cap (GH #18).
+	Trust trustList
 }
 
 // Serve runs the accept loop until the listener is closed. The global
@@ -66,24 +72,25 @@ func (s *Server) Serve() error {
 			s.Limiter.releaseGlobal()
 			return err
 		}
-		if !s.Limiter.admitIP(conn.RemoteAddr()) {
+		trusted := s.Trust.Contains(conn.RemoteAddr())
+		if !s.Limiter.admitIP(conn.RemoteAddr(), trusted) {
 			log.Printf("per-ip connection cap reached; rejecting %s", conn.RemoteAddr())
 			conn.Close()
 			s.Limiter.releaseGlobal()
 			continue
 		}
 		log.Printf("accepted connection from %s", conn.RemoteAddr())
-		go s.handle(conn)
+		go s.handle(conn, trusted)
 	}
 }
 
-func (s *Server) handle(conn net.Conn) {
+func (s *Server) handle(conn net.Conn, trusted bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("session panic from %s: %v", conn.RemoteAddr(), r)
 		}
 		conn.Close()
-		s.Limiter.releaseIP(conn.RemoteAddr())
+		s.Limiter.releaseIP(conn.RemoteAddr(), trusted)
 		s.Limiter.releaseGlobal()
 	}()
 	s.Handler.Handle(conn)
@@ -104,18 +111,27 @@ func wrapIdle(conn net.Conn, preAuthIdle time.Duration) net.Conn {
 	return newIdleConn(conn, preAuthIdle)
 }
 
-func (h sessionHandler) Handle(conn net.Conn) {
-	s := &Session{
-		Store:          h.store,
-		Authenticate:   auth.Authenticate,
-		Presenter:      go3270Presenter{},
-		Bridger:        realBridger{},
-		EscapeAID:      h.escapeAID,
-		AdminPresenter: go3270Presenter{},
-		Auditor:        storeAuditor{store: h.store},
-		PreAuthIdle:    h.limits.PreAuthIdle,
-		Idle:           h.limits.Idle,
+// sessionFor builds the Session for a connection from addr, deciding trust and
+// carrying the regime knobs from limits.
+func (h sessionHandler) sessionFor(addr net.Addr) *Session {
+	return &Session{
+		Store:            h.store,
+		Authenticate:     auth.Authenticate,
+		Presenter:        go3270Presenter{},
+		Bridger:          realBridger{},
+		EscapeAID:        h.escapeAID,
+		AdminPresenter:   go3270Presenter{},
+		Auditor:          storeAuditor{store: h.store},
+		PreAuthIdle:      h.limits.PreAuthIdle,
+		Idle:             h.limits.Idle,
+		PreAuthMax:       h.limits.PreAuthMax,
+		Trusted:          trustList(h.limits.TrustedCIDRs).Contains(addr),
+		BridgeIdleExempt: h.limits.BridgeIdleExempt,
 	}
+}
+
+func (h sessionHandler) Handle(conn net.Conn) {
+	s := h.sessionFor(conn.RemoteAddr())
 	s.Run(wrapIdle(conn, h.limits.PreAuthIdle))
 }
 
@@ -133,9 +149,10 @@ func newServers(listeners []net.Listener, handler connHandler, limits Limits) []
 	if limits.MaxConns > 0 {
 		limiter = newConnLimiter(limits.MaxConns, limits.MaxPerIP)
 	}
+	trust := trustList(limits.TrustedCIDRs)
 	servers := make([]*Server, len(listeners))
 	for i, ln := range listeners {
-		servers[i] = &Server{Listener: ln, Handler: handler, Limiter: limiter}
+		servers[i] = &Server{Listener: ln, Handler: handler, Limiter: limiter, Trust: trust}
 	}
 	return servers
 }

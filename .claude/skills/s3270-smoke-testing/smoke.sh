@@ -8,12 +8,14 @@ set -u
 
 FRONT_PORT="${FRONT_PORT:-3411}"
 BACK_PORT="${BACK_PORT:-3412}"
+IDLE_PORT="${IDLE_PORT:-3413}"
 WORK="$(mktemp -d /tmp/s3270smoke.XXXXXX)"
 PASS=0 FAIL=0
 
 cleanup() {
   [ -n "${FRONT_PID:-}" ] && kill "$FRONT_PID" 2>/dev/null
   [ -n "${BACK_PID:-}" ] && kill "$BACK_PID" 2>/dev/null
+  [ -n "${IDLE_PID:-}" ] && kill "$IDLE_PID" 2>/dev/null
 }
 trap cleanup EXIT
 
@@ -71,6 +73,19 @@ BACK_PID=$!
 sleep 1
 grep -q listening "$WORK/front.log" || { echo "FAIL: front proxy did not start"; cat "$WORK/front.log"; exit 1; }
 grep -q listening "$WORK/back.log"  || { echo "FAIL: back proxy did not start";  cat "$WORK/back.log";  exit 1; }
+
+# A THIRD proxy with a deliberately short post-auth idle (2s) for the idle-logout
+# scenario (GH #18). It is isolated so the tiny idle window can't disconnect the
+# bridge/PA3 scenarios on the front proxy. Reuses the front seed (alice/ops).
+cat > "$WORK/idle-cfg.json" <<EOF
+{"listeners":{"plain":{"enabled":true,"addr":"127.0.0.1:$IDLE_PORT"},"tls":{"enabled":false}},
+ "limits":{"idle":"2s","pre_auth_idle":"30s","pre_auth_max":"120s"}}
+EOF
+"$WORK/tn3270proxy" seed -db "$WORK/idle.db" -file "$WORK/front-seed.json" >/dev/null || exit 1
+"$WORK/tn3270proxy" serve -db "$WORK/idle.db" -config "$WORK/idle-cfg.json" >"$WORK/idle.log" 2>&1 &
+IDLE_PID=$!
+sleep 1
+grep -q listening "$WORK/idle.log" || { echo "FAIL: idle proxy did not start"; cat "$WORK/idle.log"; exit 1; }
 
 # --- 1. login screen renders; password non-display; cursor on userid field ---
 s3 t1 <<EOF
@@ -275,6 +290,41 @@ if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' 
   PASS=$((PASS+1)); echo "PASS: 9d add-user form cursor (3,17) after users list"
 else
   FAIL=$((FAIL+1)); echo "FAIL: 9d add-user form cursor not at (3,17) after users list"
+fi
+
+# --- 10. post-auth idle LOGS OUT to the login screen (GH #18), not disconnect.
+# Against the short-idle proxy: log in, reach the menu, then sit idle past the
+# 2s post-auth window. The proxy must re-render the LOGIN screen (deauth) with
+# the cursor homed to the userid field — the protocol-risk path (a deadline
+# firing mid-HandleScreen, then re-driving the login screen). Two Ascii captures
+# to one file; awk asserts the menu→login ORDER so the initial login screen
+# can't satisfy the check vacuously. ---
+s3 t10 <<EOF
+Connect(127.0.0.1:$IDLE_PORT)
+Wait(5,InputField)
+String(alice)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+Ascii()
+Wait(4,Output)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "10a reached menu before idle" "TN3270 GATEWAY MENU" "$WORK/t10.out"
+# Order proves the transition: MENU captured first, then LOGIN after the idle.
+if awk '/TN3270 GATEWAY MENU/{seen=1} seen && /TN3270 GATEWAY LOGIN/{ok=1} END{exit !ok}' "$WORK/t10.out"; then
+  PASS=$((PASS+1)); echo "PASS: 10b post-auth idle logs out to login screen"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 10b post-auth idle did not return to login screen"
+fi
+# Cursor homed: menu cursor (19 8) then the re-rendered login cursor (3 17) after.
+if awk '/I 2 24 80 19 8 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' "$WORK/t10.out"; then
+  PASS=$((PASS+1)); echo "PASS: 10c login cursor homes to userid after idle-logout"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 10c cursor not homed to (3,17) after idle-logout"
 fi
 
 echo
