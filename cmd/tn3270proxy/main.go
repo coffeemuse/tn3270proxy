@@ -52,6 +52,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "bootstrap" {
 		return runBootstrap(args[1:], os.Stdout)
 	}
+	if len(args) > 0 && args[0] == "mfa" {
+		return runMFA(args[1:], os.Stdout)
+	}
 	if len(args) > 0 && args[0] == "serve" {
 		args = args[1:]
 	}

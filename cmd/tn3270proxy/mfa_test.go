@@ -22,6 +22,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"testing"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/mfa"
@@ -86,4 +87,43 @@ func TestMFAStartupNoKeyNoEnrolledIsFine(t *testing.T) {
 	if cipher != nil {
 		t.Fatal("no key → nil cipher (MFA disabled)")
 	}
+}
+
+func TestRunMFAResetAll(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := dir + "/s.db"
+	st, _ := store.Open(dbPath)
+	ctx := context.Background()
+	uid, _ := st.CreateUser(ctx, "alice", "h")
+	c, _ := mfa.NewCipher(key32())
+	sealed, _ := c.Seal([]byte("JBSWY3DPEHPK3PXP"))
+	st.StoreMFAEnrollment(ctx, uid, sealed, "t", 5)
+	// First run also needs a sentinel so reset-all's startup check passes.
+	st.SetMFASentinel(ctx, mustSeal(t, c))
+	st.Close()
+
+	t.Setenv("TN3270PROXY_MFA_KEY", b64Key(key32()))
+	var out bytes.Buffer
+	if err := runMFA([]string{"reset-all", "-db", dbPath}, &out); err != nil {
+		t.Fatalf("reset-all: %v", err)
+	}
+
+	st2, _ := store.Open(dbPath)
+	defer st2.Close()
+	if n, _ := st2.CountEnrolledUsers(ctx); n != 0 {
+		t.Fatalf("want 0 enrolled after reset, got %d", n)
+	}
+}
+
+func mustSeal(t *testing.T, c *mfa.Cipher) string {
+	t.Helper()
+	s, err := c.Seal([]byte(mfaSentinelPlaintext))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func b64Key(k []byte) string {
+	return base64.StdEncoding.EncodeToString(k)
 }

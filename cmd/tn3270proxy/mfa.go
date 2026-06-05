@@ -22,8 +22,11 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 
+	"github.com/CoffeeMuse/tn3270proxy/internal/config"
 	"github.com/CoffeeMuse/tn3270proxy/internal/mfa"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
@@ -74,4 +77,66 @@ func mfaStartup(ctx context.Context, st *store.Store, key []byte) (*mfa.Cipher, 
 		return nil, fmt.Errorf("mfa: verify sentinel: %w", err)
 	}
 	return c, nil
+}
+
+// runMFA dispatches the `mfa` subcommand group. out receives human-readable
+// status (os.Stdout in production, a buffer in tests).
+func runMFA(args []string, out io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("mfa: expected a subcommand (reset-all)")
+	}
+	switch args[0] {
+	case "reset-all":
+		return runMFAResetAll(args[1:], out)
+	default:
+		return fmt.Errorf("mfa: unknown subcommand %q", args[0])
+	}
+}
+
+func runMFAResetAll(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("mfa reset-all", flag.ContinueOnError)
+	dbPath := fs.String("db", "tn3270proxy.db", "path to SQLite database file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	key, err := resolveMFAKeyForCLI()
+	if err != nil {
+		return err
+	}
+	if len(key) == 0 {
+		return fmt.Errorf("mfa reset-all: no master key configured (set TN3270PROXY_MFA_KEY); a key is required to rewrite the sentinel")
+	}
+	c, err := mfa.NewCipher(key)
+	if err != nil {
+		return fmt.Errorf("mfa reset-all: %w", err)
+	}
+	st, err := store.Open(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	ctx := context.Background()
+	n, err := st.ResetAllMFA(ctx)
+	if err != nil {
+		return fmt.Errorf("mfa reset-all: %w", err)
+	}
+	sealed, err := c.Seal([]byte(mfaSentinelPlaintext))
+	if err != nil {
+		return fmt.Errorf("mfa reset-all: %w", err)
+	}
+	if err := st.SetMFASentinel(ctx, sealed); err != nil {
+		return fmt.Errorf("mfa reset-all: rewrite sentinel: %w", err)
+	}
+	fmt.Fprintf(out, "reset MFA for %d user(s); sentinel rewritten for the current key\n", n)
+	return nil
+}
+
+// resolveMFAKeyForCLI reads the master key from the same sources as serve
+// (env wins over config file).
+func resolveMFAKeyForCLI() ([]byte, error) {
+	cfg, err := config.Load([]string{})
+	if err != nil {
+		return nil, err
+	}
+	return cfg.MFA.Key, nil
 }
