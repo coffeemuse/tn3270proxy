@@ -70,8 +70,11 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
 internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,Username,Groups}.
                   bcrypt; uniform ErrInvalidCredentials (no username-enumeration leak).
 internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, svcs,
-                  admin, errMsg). The user menu renders ISPF-style `NN NAME Description`
-                  rows and deliberately hides backend host/port (admin-only).
+                  admin, status, errMsg). The user menu renders an ISPF-style fixed grid
+                  (number col 0 / name col 4 / description col 13, hard-cut 40) plus a
+                  right-hand status block (MenuStatus: User ID / Date / Time / Terminal /
+                  System ID / Release; paint-time clock passed in, not read) at
+                  Geometry.StatusBlockCol(). Backend host/port stay hidden (admin-only).
                   All builders take a Geometry (first param; self-normalizing to 24×80)
                   with formula methods for the bottom-anchored rows (HelpRow, ErrorRow,
                   etc.), list page size, form capacity, and menu capacity.
