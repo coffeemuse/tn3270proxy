@@ -604,10 +604,9 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		// the audit detail records the applied delay; never log the password.
 		delay, count := s.failDelay(ctx, user)
 		s.log().Warn("auth failed", "user", user)
-		// Attempted username only — never the password (CLAUDE.md hard rule).
 		aud.record(ctx, store.AuditEvent{
 			Kind: store.AuditAuthFail, Username: user, Detail: throttleDetail("", delay, count)})
-		s.sleepFor(delay)
+		s.sleepFor(delay) // bounded well under pre_auth_idle by default; a tight pre-auth window could turn a large delay into a timeout
 		// Generic message — never reveals whether the username exists (spec §7).
 		errMsg = "Invalid userid or password"
 	}
