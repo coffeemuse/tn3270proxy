@@ -117,3 +117,63 @@ func TestMFAIssuerValidation(t *testing.T) {
 		t.Fatal("over-length issuer should be rejected")
 	}
 }
+
+func TestCatalogThrottleParams(t *testing.T) {
+	want := map[string]string{
+		KeyAuthDelayBaseSecs:  "2",
+		KeyAuthMaxTries:       "5",
+		KeyAuthFailWindowMins: "15",
+	}
+	for key, def := range want {
+		var found *Entry
+		for i := range Catalog {
+			if Catalog[i].Key == key {
+				found = &Catalog[i]
+				break
+			}
+		}
+		if found == nil {
+			t.Fatalf("%s not in catalog", key)
+		}
+		if found.Label == "" {
+			t.Errorf("%s label is empty", key)
+		}
+		if found.Default != def {
+			t.Errorf("%s default = %q, want %q", key, found.Default, def)
+		}
+		if found.Validate == nil {
+			t.Fatalf("%s Validate is nil", key)
+		}
+	}
+}
+
+func TestThrottleValidators(t *testing.T) {
+	base := entryByKey(t, KeyAuthDelayBaseSecs)
+	if msg := base.Validate("0"); msg != "" { // 0 is the off-switch, must be valid
+		t.Errorf("base 0: got %q, want valid", msg)
+	}
+	if msg := base.Validate("-1"); msg == "" {
+		t.Error("base -1: want error")
+	}
+	if msg := base.Validate("x"); msg == "" {
+		t.Error("base x: want error")
+	}
+	win := entryByKey(t, KeyAuthFailWindowMins)
+	if msg := win.Validate("0"); msg == "" { // window must be >= 1
+		t.Error("window 0: want error")
+	}
+	if msg := win.Validate("1"); msg != "" {
+		t.Errorf("window 1: got %q, want valid", msg)
+	}
+}
+
+func entryByKey(t *testing.T, key string) *Entry {
+	t.Helper()
+	for i := range Catalog {
+		if Catalog[i].Key == key {
+			return &Catalog[i]
+		}
+	}
+	t.Fatalf("%s not in catalog", key)
+	return nil
+}
