@@ -23,6 +23,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -34,10 +35,13 @@ import (
 // layer; it mirrors config.Limits without importing the config package. Zero
 // values disable the corresponding control.
 type Limits struct {
-	PreAuthIdle time.Duration // idle deadline before login
-	Idle        time.Duration // idle deadline after login (incl. bridged sessions)
-	MaxConns    int           // global concurrent-connection cap
-	MaxPerIP    int           // per-client-IP cap
+	PreAuthIdle      time.Duration  // idle deadline before login
+	Idle             time.Duration  // idle deadline after login (incl. bridged sessions)
+	MaxConns         int            // global concurrent-connection cap
+	MaxPerIP         int            // per-client-IP cap
+	PreAuthMax       time.Duration  // absolute deadline to authenticate (GH #18)
+	TrustedCIDRs     []netip.Prefix // trusted client networks
+	BridgeIdleExempt bool           // no idle timeout during an active bridge
 }
 
 // connHandler handles a single accepted connection.
