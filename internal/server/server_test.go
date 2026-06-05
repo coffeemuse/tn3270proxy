@@ -84,7 +84,7 @@ func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
 		BridgeIdleExempt: true,
 		Trust:            StaticTrustChecker(netip.MustParsePrefix("10.0.0.0/24")),
 	}
-	h := NewSessionHandler(st, 0x6B, limits, slog.Default(), nil).(sessionHandler)
+	h := NewSessionHandler(st, 0x6B, limits, slog.Default(), "v9.9.9", nil).(sessionHandler)
 	connLog := slog.Default()
 
 	got := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.0.0.9"), Port: 1}, connLog)
@@ -93,6 +93,9 @@ func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
 	}
 	if got.PreAuthMax != 5*time.Minute || !got.BridgeIdleExempt {
 		t.Errorf("regime fields not propagated: %+v", got)
+	}
+	if got.Release != "v9.9.9" {
+		t.Errorf("Session.Release = %q, want v9.9.9", got.Release)
 	}
 	untrusted := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.9.9.9"), Port: 1}, connLog)
 	if untrusted.Trusted {

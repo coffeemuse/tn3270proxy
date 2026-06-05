@@ -23,6 +23,7 @@ import (
 	"crypto/tls"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
 	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
@@ -91,10 +92,12 @@ func (go3270Presenter) Login(conn net.Conn, term Term, errMsg string) (string, s
 		resp.Values[screens.FieldPassword], false, nil
 }
 
-func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
+func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, status screens.MenuStatus, errMsg string) (*store.Service, bool, bool, error) {
 	geom := term.Geometry()
+	status.TermType = term.Type // presenter owns the terminal-derived field
 	for {
-		screen, mapping, cur := screens.MenuScreen(geom, svcs, admin, errMsg)
+		status.Now = time.Now() // paint-time clock, refreshed every render
+		screen, mapping, cur := screens.MenuScreen(geom, svcs, admin, status, errMsg)
 		resp, err := handleScreen(func() (go3270.Response, error) {
 			return go3270.HandleScreenAlt(
 				screen, nil, map[string]string{},

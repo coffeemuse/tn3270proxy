@@ -90,3 +90,14 @@ func TestNewsLinesPerPage(t *testing.T) {
 		})
 	}
 }
+
+func TestStatusBlockCol(t *testing.T) {
+	// Fixed at 57 on the 80-col layout: the service grid (desc col 13, cut 40)
+	// ends near col 53, leaving a gutter before the block. The value is the
+	// same on taller models because content is always within cols 0-79.
+	for _, g := range []Geometry{DefaultGeometry, {Rows: 43, Cols: 80}, {}} {
+		if got := g.StatusBlockCol(); got != 57 {
+			t.Errorf("StatusBlockCol(%+v) = %d, want 57", g, got)
+		}
+	}
+}

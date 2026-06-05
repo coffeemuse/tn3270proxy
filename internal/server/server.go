@@ -114,6 +114,7 @@ type sessionHandler struct {
 	escapeAID byte
 	limits    Limits
 	logger    *slog.Logger
+	release   string
 	mfaCipher *mfa.Cipher
 }
 
@@ -139,6 +140,7 @@ func (h sessionHandler) sessionFor(addr net.Addr, connLog *slog.Logger) *Session
 		AdminPresenter:   go3270Presenter{},
 		Auditor:          storeAuditor{store: h.store, logger: connLog},
 		Logger:           connLog,
+		Release:          h.release,
 		PreAuthIdle:      h.limits.PreAuthIdle,
 		Idle:             h.limits.Idle,
 		PreAuthMax:       h.limits.PreAuthMax,
@@ -158,11 +160,14 @@ func (h sessionHandler) Handle(conn net.Conn) {
 // Connections are wrapped with the idle-deadline enforcer per limits.
 // logger is the base logger; each accepted connection receives a child logger
 // tagged with "remote" (and later "user" after authentication).
-func NewSessionHandler(st *store.Store, escapeAID byte, limits Limits, logger *slog.Logger, mfaCipher *mfa.Cipher) connHandler {
+// release is the resolved build version (e.g. "v1.2.3" or a VCS hash) shown in
+// the menu status block (GH #53). mfaCipher encrypts/decrypts TOTP secrets;
+// nil disables MFA (GH #47).
+func NewSessionHandler(st *store.Store, escapeAID byte, limits Limits, logger *slog.Logger, release string, mfaCipher *mfa.Cipher) connHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits, logger: logger, mfaCipher: mfaCipher}
+	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits, logger: logger, release: release, mfaCipher: mfaCipher}
 }
 
 // newServers builds one Server per listener, all sharing handler and one

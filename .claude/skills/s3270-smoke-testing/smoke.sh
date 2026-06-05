@@ -55,6 +55,7 @@ cat > "$WORK/front-seed.json" <<EOF
  "services":[
   {"name":"BACKEND","description":"Backend Host","host":"127.0.0.1","port":$BACK_PORT,"groups":["ops"]},
   {"name":"DEADHOST","description":"Dead Host","host":"127.0.0.1","port":1,"groups":["ops"]},
+  {"name":"WIDEDESC","description":"1234567890123456789012345678901234567890","host":"127.0.0.1","port":1,"groups":["ops"]},
   {"name":"DEVONLY","description":"Dev Only","host":"127.0.0.1","port":9999,"groups":["dev"]}]}
 EOF
 # Back seed: the backend is a second tn3270proxy instance — a real TN3270
@@ -133,9 +134,14 @@ check "3a menu shown after login" "TN3270 GATEWAY MENU" "$WORK/t3.out"
 check "3b ops service BACKEND listed" "BACKEND" "$WORK/t3.out"
 check "3c ops service DEADHOST listed" "DEADHOST" "$WORK/t3.out"
 ncheck "3d dev-only service hidden from alice" "DEVONLY" "$WORK/t3.out"
+check "3e status block User ID row" "User ID. :" "$WORK/t3.out"
+check "3f status block Release row"  "Release. :" "$WORK/t3.out"
+check "3g status block Terminal row" "Terminal :" "$WORK/t3.out"
+check "3h wide description renders"        "1234567890123456789012345678901234567890" "$WORK/t3.out"
+check "3i status block coexists with wide desc" "User ID. :" "$WORK/t3.out"
 # Cursor on the selection input (===> field at row 19 col 8 on a MOD 2);
 # login is the only other screen and it reports 3 17, so 19 8 is the menu.
-check "3e menu cursor on selection input" "I 2 24 80 19 8 " "$WORK/t3.out"
+check "3j menu cursor on selection input" "I 2 24 80 19 8 " "$WORK/t3.out"
 
 # --- 4. select 1 + ENTER bridges to the backend proxy ---
 BACK_CONNS_BEFORE=$(grep -c "accepted connection" "$WORK/back.log")

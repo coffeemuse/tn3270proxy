@@ -78,7 +78,8 @@ func runServe(args []string) error {
 	}
 	defer closer.Close()
 
-	logger.Info("starting", "version", resolvedVersion())
+	rv := resolvedVersion()
+	logger.Info("starting", "version", rv)
 
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
@@ -114,7 +115,7 @@ func runServe(args []string) error {
 		BridgeIdleExempt: cfg.Limits.BridgeIdleExempt,
 		Trust:            server.NewStoreTrustChecker(st),
 	}
-	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits, logger, mfaCipher)
+	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits, logger, rv, mfaCipher)
 	return server.ServeAll(listeners, handler, limits)
 }
 
