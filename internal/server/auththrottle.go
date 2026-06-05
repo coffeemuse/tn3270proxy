@@ -65,7 +65,7 @@ func (t *authThrottle) Fail(username string, now time.Time, window time.Duration
 	key := throttleKey(username)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.sweepLocked(now, window)
+	t.sweepLocked(now, window) // may delete key itself if stale; zero-value below handles that
 	e := t.entries[key]
 	if e.count > 0 && now.Sub(e.last) > window {
 		e.count = 0 // decayed: start over
