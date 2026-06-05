@@ -24,7 +24,9 @@ import (
 	"errors"
 	"net"
 	"os"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
@@ -186,6 +188,35 @@ func TestMOTDIdleTimeoutLogsOut(t *testing.T) {
 	}
 	if logout == nil || logout.Detail != "idle logout" || logout.Username != "alice" {
 		t.Errorf("want AuditLogout{idle logout, alice}, got %+v", logout)
+	}
+}
+
+func TestMOTDIdleTimeoutRearmsPreAuth(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true}, // re-presented login after the idle-logout
+		},
+	}
+	s := motdSession(t, p, "/etc/motd.txt", []byte("news"), nil, nil)
+	s.PreAuthIdle = 2 * time.Minute
+	s.Idle = 30 * time.Minute
+	s.PreAuthMax = 5 * time.Minute
+	p.newsResults = []error{os.ErrDeadlineExceeded}
+
+	pipe, _ := net.Pipe()
+	defer pipe.Close()
+	client := &idleRecordingConn{Conn: pipe}
+	s.Run(client)
+
+	want := []string{
+		"preauth:2m0s/5m0s", // connect → pre-auth
+		"window:30m0s",      // auth ok → post-auth
+		"preauth:2m0s/5m0s", // MOTD idle-logout → back to pre-auth
+	}
+	if !slices.Equal(client.calls, want) {
+		t.Errorf("regime calls = %v, want %v", client.calls, want)
 	}
 }
 

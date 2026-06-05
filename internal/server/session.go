@@ -328,8 +328,14 @@ func (s *Session) Run(conn net.Conn) {
 // (the caller disconnects).
 func (s *Session) maybeShowNews(ctx context.Context, conn net.Conn, term Term, identity auth.Identity, aud *auditTrail) (bool, error) {
 	path, err := s.Store.GetConfig(ctx, sysconfig.KeyMOTDFile)
-	if err != nil || strings.TrimSpace(path) == "" {
-		return true, nil // unset/empty (or store hiccup) → straight to the menu
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			log.Printf("MOTD: reading config key failed; skipping: %v", err)
+		}
+		return true, nil
+	}
+	if strings.TrimSpace(path) == "" {
+		return true, nil // disabled → straight to the menu
 	}
 	if !filepath.IsAbs(path) {
 		log.Printf("MOTD file %q is not absolute; skipping", path)
