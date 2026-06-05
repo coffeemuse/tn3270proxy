@@ -109,16 +109,20 @@ func wrapIdle(conn net.Conn, preAuthIdle time.Duration) net.Conn {
 }
 
 func (h sessionHandler) Handle(conn net.Conn) {
+	trusted := trustList(h.limits.TrustedCIDRs).Contains(conn.RemoteAddr())
 	s := &Session{
-		Store:          h.store,
-		Authenticate:   auth.Authenticate,
-		Presenter:      go3270Presenter{},
-		Bridger:        realBridger{},
-		EscapeAID:      h.escapeAID,
-		AdminPresenter: go3270Presenter{},
-		Auditor:        storeAuditor{store: h.store},
-		PreAuthIdle:    h.limits.PreAuthIdle,
-		Idle:           h.limits.Idle,
+		Store:            h.store,
+		Authenticate:     auth.Authenticate,
+		Presenter:        go3270Presenter{},
+		Bridger:          realBridger{},
+		EscapeAID:        h.escapeAID,
+		AdminPresenter:   go3270Presenter{},
+		Auditor:          storeAuditor{store: h.store},
+		PreAuthIdle:      h.limits.PreAuthIdle,
+		Idle:             h.limits.Idle,
+		PreAuthMax:       h.limits.PreAuthMax,
+		Trusted:          trusted,
+		BridgeIdleExempt: h.limits.BridgeIdleExempt,
 	}
 	s.Run(wrapIdle(conn, h.limits.PreAuthIdle))
 }

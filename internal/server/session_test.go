@@ -516,7 +516,7 @@ func TestSessionAuditsAuthEvents(t *testing.T) {
 	defer client.Close()
 	s.Run(client)
 
-	want := []string{store.AuditConnect, store.AuditAuthFail, store.AuditAuthOK, store.AuditDisconnect}
+	want := []string{store.AuditConnect, store.AuditAuthFail, store.AuditAuthOK, store.AuditLogout, store.AuditDisconnect}
 	if !slices.Equal(rec.kinds(), want) {
 		t.Fatalf("kinds = %v, want %v", rec.kinds(), want)
 	}
@@ -553,7 +553,7 @@ func TestSessionAuditsBridgeLifecycle(t *testing.T) {
 	s.Run(client)
 
 	want := []string{store.AuditConnect, store.AuditAuthOK,
-		store.AuditBridgeStart, store.AuditBridgeEnd, store.AuditDisconnect}
+		store.AuditBridgeStart, store.AuditBridgeEnd, store.AuditLogout, store.AuditDisconnect}
 	if !slices.Equal(rec.kinds(), want) {
 		t.Fatalf("kinds = %v, want %v", rec.kinds(), want)
 	}

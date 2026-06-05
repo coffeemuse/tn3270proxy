@@ -29,39 +29,46 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
-// idleRecordingConn wraps a net.Conn and records SetIdle calls, standing in
-// for the idleConn wrapper installed by the accept path.
+// idleRecordingConn stands in for the idleConn wrapper, recording the regime
+// transitions the session drives.
 type idleRecordingConn struct {
 	net.Conn
-	setIdleCalls []time.Duration
+	calls []string
 }
 
-func (c *idleRecordingConn) SetIdle(d time.Duration) {
-	c.setIdleCalls = append(c.setIdleCalls, d)
+func (c *idleRecordingConn) setPreAuth(idle, max time.Duration) {
+	c.calls = append(c.calls, "preauth:"+idle.String()+"/"+max.String())
+}
+func (c *idleRecordingConn) setWindow(idle time.Duration) {
+	c.calls = append(c.calls, "window:"+idle.String())
 }
 
-func TestSessionSwitchesIdleAfterAuthAndBackOnLogoff(t *testing.T) {
+func TestSessionRegimeTransitions(t *testing.T) {
 	p := &fakePresenter{
 		termType: "IBM-3278-2-E",
 		logins: []loginResult{
 			{user: "alice", pass: "good"},
-			{quit: true}, // second login render after menu logoff
+			{quit: true},
 		},
 		menuPicks: []menuResult{{quit: true}},
 	}
 	s := newTestSession(t, p, &fakeBridger{})
 	s.PreAuthIdle = 2 * time.Minute
 	s.Idle = 30 * time.Minute
+	s.PreAuthMax = 5 * time.Minute
 
 	pipe, _ := net.Pipe()
 	defer pipe.Close()
 	client := &idleRecordingConn{Conn: pipe}
 	s.Run(client)
 
-	want := []time.Duration{30 * time.Minute, 2 * time.Minute} // post-auth, then logoff
-	if len(client.setIdleCalls) != 2 ||
-		client.setIdleCalls[0] != want[0] || client.setIdleCalls[1] != want[1] {
-		t.Errorf("SetIdle calls = %v, want %v", client.setIdleCalls, want)
+	want := []string{
+		"preauth:2m0s/5m0s", // connect
+		"window:30m0s",      // auth ok → post-auth
+		"preauth:2m0s/5m0s", // PF3 logoff → back to pre-auth
+	}
+	if !equalStrings(client.calls, want) {
+		t.Errorf("regime calls = %v, want %v", client.calls, want)
 	}
 }
 
@@ -71,16 +78,28 @@ func TestSessionZeroIdleConfigLeavesConnAlone(t *testing.T) {
 		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
 		menuPicks: []menuResult{{quit: true}},
 	}
-	s := newTestSession(t, p, &fakeBridger{}) // PreAuthIdle/Idle left zero
+	s := newTestSession(t, p, &fakeBridger{}) // PreAuthIdle/Idle/PreAuthMax left zero
 
 	pipe, _ := net.Pipe()
 	defer pipe.Close()
 	client := &idleRecordingConn{Conn: pipe}
 	s.Run(client)
 
-	if len(client.setIdleCalls) != 0 {
-		t.Errorf("SetIdle calls = %v, want none when idle config is zero", client.setIdleCalls)
+	if len(client.calls) != 0 {
+		t.Errorf("regime calls = %v, want none when idle config is zero", client.calls)
 	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestSessionAuditsIdleTimeoutAtLogin(t *testing.T) {
@@ -102,10 +121,13 @@ func TestSessionAuditsIdleTimeoutAtLogin(t *testing.T) {
 	}
 }
 
-func TestSessionAuditsIdleTimeoutAtMenu(t *testing.T) {
+func TestSessionIdleAtMenuLogsOutToLogin(t *testing.T) {
 	p := &fakePresenter{
-		termType:  "IBM-3278-2-E",
-		logins:    []loginResult{{user: "alice", pass: "good"}},
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true}, // re-presented login after idle-logout
+		},
 		menuPicks: []menuResult{{err: os.ErrDeadlineExceeded}},
 	}
 	s := newTestSession(t, p, &fakeBridger{})
@@ -116,13 +138,100 @@ func TestSessionAuditsIdleTimeoutAtMenu(t *testing.T) {
 	defer client.Close()
 	s.Run(client)
 
-	disc := rec.events[len(rec.events)-1]
-	if disc.Kind != store.AuditDisconnect || disc.Detail != "idle timeout" {
-		t.Errorf("disconnect = %+v, want Detail %q", disc, "idle timeout")
+	if len(p.logins) != 0 {
+		t.Fatalf("expected both login renders consumed, %d left (login not re-presented)", len(p.logins))
 	}
-	if disc.Username != "alice" {
-		t.Errorf("disconnect username = %q, want alice (timed out post-auth)", disc.Username)
+	var logout *store.AuditEvent
+	for i := range rec.events {
+		if rec.events[i].Kind == store.AuditLogout {
+			logout = &rec.events[i]
+		}
 	}
+	if logout == nil || logout.Detail != "idle logout" || logout.Username != "alice" {
+		t.Errorf("want AuditLogout{idle logout, alice}, got %+v", logout)
+	}
+}
+
+func TestSessionPF3LogoffAuditsLogout(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	found := false
+	for _, e := range rec.events {
+		if e.Kind == store.AuditLogout && e.Detail == "user logoff" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("PF3 logoff did not emit AuditLogout{user logoff}; events=%v", rec.kinds())
+	}
+}
+
+func TestSessionTrustedIsExemptPreAuth(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.PreAuthIdle = 2 * time.Minute
+	s.Idle = 30 * time.Minute
+	s.PreAuthMax = 5 * time.Minute
+	s.Trusted = true
+
+	pipe, _ := net.Pipe()
+	defer pipe.Close()
+	client := &idleRecordingConn{Conn: pipe}
+	s.Run(client)
+
+	want := []string{"window:0s", "window:30m0s", "window:0s"}
+	if !equalStrings(client.calls, want) {
+		t.Errorf("trusted regime calls = %v, want %v", client.calls, want)
+	}
+}
+
+func TestSessionBridgeIdleExemptDisablesTimeout(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{quit: true},
+		},
+	}
+	b := &fakeBridger{causes: []bridge.Cause{bridge.CauseUserEscaped}}
+	s := newTestSession(t, p, b)
+	s.PreAuthIdle = 2 * time.Minute
+	s.Idle = 30 * time.Minute
+	s.PreAuthMax = 5 * time.Minute
+	s.BridgeIdleExempt = true
+
+	pipe, _ := net.Pipe()
+	defer pipe.Close()
+	client := &idleRecordingConn{Conn: pipe}
+	s.Run(client)
+
+	if !containsStr(client.calls, "window:0s") {
+		t.Errorf("bridge-exempt did not disable idle; calls=%v", client.calls)
+	}
+}
+
+func containsStr(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSessionAuditsIdleTimeoutAtNegotiate(t *testing.T) {
