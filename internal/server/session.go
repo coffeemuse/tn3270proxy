@@ -509,7 +509,10 @@ func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u sto
 			continue
 		}
 		if !ok {
-			aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAFailed, Username: u.Username, Detail: "enroll"})
+			delay, count := s.failDelay(ctx, u.Username)
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditMFAFailed, Username: u.Username, Detail: throttleDetail("enroll", delay, count)})
+			s.sleepFor(delay)
 			errMsg = "Code incorrect - check the key and try again"
 			continue
 		}
@@ -521,6 +524,7 @@ func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u sto
 		if err := s.Store.StoreMFAEnrollment(ctx, u.ID, enc, enrolledAt, int64(step)); err != nil {
 			return false, "mfa store error", err
 		}
+		s.Throttle.Reset(u.Username)
 		aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAEnrolled, Username: u.Username})
 		return true, "", nil
 	}
@@ -555,13 +559,17 @@ func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u sto
 			continue
 		}
 		if !ok {
-			aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAFailed, Username: u.Username, Detail: "login"})
+			delay, count := s.failDelay(ctx, u.Username)
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditMFAFailed, Username: u.Username, Detail: throttleDetail("login", delay, count)})
+			s.sleepFor(delay)
 			errMsg = "Code incorrect - try again"
 			continue
 		}
 		if err := s.Store.UpdateMFAStep(ctx, u.ID, int64(step)); err != nil {
 			return false, "mfa store error", err
 		}
+		s.Throttle.Reset(u.Username)
 		aud.record(ctx, store.AuditEvent{Kind: store.AuditMFASuccess, Username: u.Username})
 		return true, "", nil
 	}
