@@ -88,8 +88,8 @@ func runServe(args []string) error {
 		MaxConns:         cfg.Limits.MaxConns,
 		MaxPerIP:         cfg.Limits.MaxPerIP,
 		PreAuthMax:       cfg.Limits.PreAuthMax,
-		TrustedCIDRs:     cfg.Limits.TrustedCIDRs,
 		BridgeIdleExempt: cfg.Limits.BridgeIdleExempt,
+		Trust:            server.NewStoreTrustChecker(st),
 	}
 	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits)
 	return server.ServeAll(listeners, handler, limits)

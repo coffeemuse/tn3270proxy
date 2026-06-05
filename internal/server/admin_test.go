@@ -1051,3 +1051,196 @@ func TestServiceFormPersistsDescription(t *testing.T) {
 		t.Errorf("Description = %q, want %q", found.Description, "Production CICS")
 	}
 }
+
+// --- Trusted Networks admin flow tests ---
+
+func TestAdminNetworkAddHappyPath(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 5}, {back: true}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{{Values: map[string]string{
+			screens.FieldCIDR:    "10.0.0.0/24",
+			screens.FieldComment: "internal OEC",
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	nets, err := f.store.ListTrustedNetworks(ctx)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(nets) != 1 || nets[0].CIDR != "10.0.0.0/24" || nets[0].Comment != "internal OEC" {
+		t.Errorf("networks = %+v", nets)
+	}
+}
+
+func TestAdminNetworkAddBareIP(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 5}, {back: true}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{{Values: map[string]string{
+			screens.FieldCIDR:    "192.168.1.5",
+			screens.FieldComment: "dev workstation",
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	nets, _ := f.store.ListTrustedNetworks(ctx)
+	if len(nets) != 1 || nets[0].CIDR != "192.168.1.5/32" {
+		t.Errorf("stored CIDR = %q, want 192.168.1.5/32", nets[0].CIDR)
+	}
+}
+
+func TestAdminNetworkAddBadCIDRShowsError(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 5}, {back: true}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
+			{Values: map[string]string{screens.FieldCIDR: "not-an-ip", screens.FieldComment: "ok"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	f.Run(ctx, nil)
+	if msg := p.gotForms[1].ErrMsg; msg == "" {
+		t.Error("expected error for bad CIDR, got empty")
+	}
+	nets, _ := f.store.ListTrustedNetworks(ctx)
+	if len(nets) != 0 {
+		t.Errorf("no network should be stored: %+v", nets)
+	}
+}
+
+func TestAdminNetworkAddEmptyCommentShowsError(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 5}, {back: true}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
+			{Values: map[string]string{screens.FieldCIDR: "10.0.0.0/24", screens.FieldComment: ""}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	f.Run(ctx, nil)
+	if msg := p.gotForms[1].ErrMsg; msg == "" {
+		t.Error("expected error for empty comment, got empty")
+	}
+}
+
+func TestAdminNetworkFormPreservesInputOnError(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 5}, {back: true}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}},
+		forms: []ui3270.FormAction{
+			{Values: map[string]string{screens.FieldCIDR: "bad", screens.FieldComment: "my net"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+	last := p.gotForms[len(p.gotForms)-1]
+	if last.Fields[0].Value != "bad" {
+		t.Errorf("CIDR not re-seeded: %q", last.Fields[0].Value)
+	}
+	if last.Fields[1].Value != "my net" {
+		t.Errorf("comment not re-seeded: %q", last.Fields[1].Value)
+	}
+}
+
+func TestAdminNetworkEdit(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 5}, {back: true}},
+		lists: []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}},
+		forms: []ui3270.FormAction{{Values: map[string]string{
+			screens.FieldCIDR: "10.0.1.0/24", screens.FieldComment: "updated",
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	// Pre-seed a network so the list has row 0 to edit.
+	if _, err := f.store.CreateTrustedNetwork(ctx, "10.0.0.0/24", "original"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	nets, _ := f.store.ListTrustedNetworks(ctx)
+	if len(nets) != 1 || nets[0].CIDR != "10.0.1.0/24" || nets[0].Comment != "updated" {
+		t.Errorf("after edit: %+v", nets)
+	}
+	// The edit form must be pre-filled with the existing CIDR.
+	if got := p.gotForms[0].Fields[0].Value; got != "10.0.0.0/24" {
+		t.Errorf("edit pre-fill CIDR = %q, want 10.0.0.0/24", got)
+	}
+}
+
+func TestAdminNetworkDeleteConfirm(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 5}, {back: true}},
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {}, {PF: 3}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	// Pre-seed a network to delete.
+	if _, err := f.store.CreateTrustedNetwork(ctx, "10.0.0.0/24", "to delete"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	// gotLists[1] is the re-render after D: it carries the confirm prompt.
+	if msg := p.gotLists[1].ErrMsg; !strings.Contains(msg, "CONFIRM DELETE OF '10.0.0.0/24'") {
+		t.Errorf("confirm prompt = %q", msg)
+	}
+	nets, _ := f.store.ListTrustedNetworks(ctx)
+	if len(nets) != 0 {
+		t.Errorf("network should be deleted: %+v", nets)
+	}
+}
+
+func TestAdminNetworkDeleteCancel(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 5}, {back: true}},
+		lists: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {PF: 3}, {PF: 3}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	// Pre-seed a network; delete should be cancelled.
+	if _, err := f.store.CreateTrustedNetwork(ctx, "10.0.0.0/24", "keep me"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	nets, _ := f.store.ListTrustedNetworks(ctx)
+	if len(nets) != 1 {
+		t.Errorf("network should survive cancel: %+v", nets)
+	}
+}
+
+func TestAdminNetworkAudit(t *testing.T) {
+	p := &fakeAdminPresenter{
+		forms: []ui3270.FormAction{{Values: map[string]string{
+			screens.FieldCIDR:    "10.0.0.0/24",
+			screens.FieldComment: "internal OEC",
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	var got []store.AuditEvent
+	f.audit = func(_ context.Context, ev store.AuditEvent) { got = append(got, ev) }
+	if err := f.networkForm(context.Background(), p, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Kind != store.AuditAdmin ||
+		!strings.Contains(got[0].Detail, "trust create") {
+		t.Errorf("audit = %+v", got)
+	}
+}

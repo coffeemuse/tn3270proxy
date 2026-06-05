@@ -104,6 +104,11 @@ CREATE TABLE IF NOT EXISTS system_config (
 	key   TEXT PRIMARY KEY COLLATE NOCASE NOT NULL,
 	value TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS trusted_networks (
+	id      INTEGER PRIMARY KEY AUTOINCREMENT,
+	cidr    TEXT UNIQUE NOT NULL,
+	comment TEXT NOT NULL
+);
 `
 
 func (s *Store) migrate() error {

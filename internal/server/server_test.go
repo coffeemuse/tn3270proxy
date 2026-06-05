@@ -81,7 +81,7 @@ func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
 		Idle:             30 * time.Minute,
 		PreAuthMax:       5 * time.Minute,
 		BridgeIdleExempt: true,
-		TrustedCIDRs:     []netip.Prefix{netip.MustParsePrefix("10.0.0.0/24")},
+		Trust:            StaticTrustChecker(netip.MustParsePrefix("10.0.0.0/24")),
 	}
 	h := NewSessionHandler(st, 0x6B, limits).(sessionHandler)
 
