@@ -44,6 +44,11 @@ type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
 	Login(conn net.Conn, term Term, errMsg string) (username, password string, quit bool, err error)
 	Menu(conn net.Conn, term Term, services []store.Service, admin bool, errMsg string) (selected *store.Service, adminSel bool, quit bool, err error)
+	// News shows the MOTD pages (already paginated) one at a time: ENTER
+	// advances, the last ENTER returns nil. PA3/PF3 are silent no-ops. A
+	// non-nil error is a disconnect or an idle timeout (classified by the
+	// caller). News is only called with at least one page.
+	News(conn net.Conn, term Term, pages [][]string) error
 }
 
 // BackendTLS expresses a service's backend-TLS intent. The server layer keeps

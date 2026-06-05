@@ -45,7 +45,9 @@ type fakePresenter struct {
 	menuErrors   []string
 	loginErrors  []string
 	gotAdminFlag []bool
-	gotTerms     []Term // every term passed to Login/Menu, in call order
+	gotTerms     []Term       // every term passed to Login/Menu, in call order
+	newsCalls    [][][]string // pages passed to each News call, in order
+	newsResults  []error      // queued News return values; default nil
 }
 
 type loginResult struct {
@@ -86,6 +88,17 @@ func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, adm
 	r := f.menuPicks[0]
 	f.menuPicks = f.menuPicks[1:]
 	return r.sel, r.admin, r.quit, r.err
+}
+
+func (f *fakePresenter) News(conn net.Conn, term Term, pages [][]string) error {
+	f.gotTerms = append(f.gotTerms, term)
+	f.newsCalls = append(f.newsCalls, pages)
+	if len(f.newsResults) > 0 {
+		r := f.newsResults[0]
+		f.newsResults = f.newsResults[1:]
+		return r
+	}
+	return nil
 }
 
 type fakeBridger struct {
