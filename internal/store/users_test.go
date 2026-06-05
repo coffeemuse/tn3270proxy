@@ -22,8 +22,46 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
+
+func TestValidateFullName(t *testing.T) {
+	if err := ValidateFullName(""); err != nil {
+		t.Errorf("empty full name should be allowed: %v", err)
+	}
+	if err := ValidateFullName("Robert Lawrence"); err != nil {
+		t.Errorf("normal full name rejected: %v", err)
+	}
+	long := strings.Repeat("a", MaxDescriptionLen+1)
+	if err := ValidateFullName(long); err == nil {
+		t.Errorf("over-length full name should be rejected")
+	}
+}
+
+func TestNormalizeEmail(t *testing.T) {
+	if got := NormalizeEmail("  Bob@Example.COM "); got != "bob@example.com" {
+		t.Errorf("NormalizeEmail = %q, want bob@example.com", got)
+	}
+	if got := NormalizeEmail(""); got != "" {
+		t.Errorf("NormalizeEmail(empty) = %q, want empty", got)
+	}
+}
+
+func TestValidateEmail(t *testing.T) {
+	ok := []string{"", "a@b.co", "robert@example.com"}
+	for _, e := range ok {
+		if err := ValidateEmail(e); err != nil {
+			t.Errorf("ValidateEmail(%q) rejected: %v", e, err)
+		}
+	}
+	bad := []string{"no-at", "a@b", "a b@c.com", "@b.com", "a@", "a@@b.com"}
+	for _, e := range bad {
+		if err := ValidateEmail(e); err == nil {
+			t.Errorf("ValidateEmail(%q) should be rejected", e)
+		}
+	}
+}
 
 func TestUserAndGroupRoundTrip(t *testing.T) {
 	ctx := context.Background()
@@ -55,6 +93,21 @@ func TestUserAndGroupRoundTrip(t *testing.T) {
 	}
 	if len(groups) != 1 || groups[0] != "OPS" {
 		t.Errorf("groups = %v, want [OPS]", groups)
+	}
+}
+
+func TestUserDetailsDefaultEmpty(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	if _, err := st.CreateUser(ctx, "alice", "hash-a"); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	u, err := st.GetUserByUsername(ctx, "alice")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+	if u.FullName != "" || u.Email != "" {
+		t.Errorf("new user details = %q/%q, want empty/empty", u.FullName, u.Email)
 	}
 }
 

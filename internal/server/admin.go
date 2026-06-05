@@ -37,6 +37,7 @@ type AdminStore interface {
 	GetUserGroups(ctx context.Context, userID int64) ([]string, error)
 	CreateUser(ctx context.Context, username, passwordHash string) (int64, error)
 	SetPassword(ctx context.Context, userID int64, passwordHash string) error
+	UpdateUserDetails(ctx context.Context, userID int64, fullName, email string) error
 	DeleteUser(ctx context.Context, userID int64) error
 	AddUserToGroup(ctx context.Context, userID, groupID int64) error
 	RemoveUserFromGroup(ctx context.Context, userID, groupID int64) error

@@ -40,13 +40,13 @@ type Group struct {
 // ListUsers returns all users ordered by username.
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	return s.queryUsers(ctx,
-		"SELECT id, username, password_hash FROM users ORDER BY username")
+		"SELECT id, username, password_hash, full_name, email FROM users ORDER BY username")
 }
 
 // ListUsersInGroup returns the group's members ordered by username.
 func (s *Store) ListUsersInGroup(ctx context.Context, groupID int64) ([]User, error) {
 	return s.queryUsers(ctx,
-		`SELECT u.id, u.username, u.password_hash FROM users u
+		`SELECT u.id, u.username, u.password_hash, u.full_name, u.email FROM users u
 		 JOIN user_groups ug ON ug.user_id = u.id
 		 WHERE ug.group_id = ? ORDER BY u.username`, groupID)
 }
@@ -60,7 +60,7 @@ func (s *Store) queryUsers(ctx context.Context, query string, args ...any) ([]Us
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Email); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -160,6 +160,22 @@ func (s *Store) queryServices(ctx context.Context, query string, args ...any) ([
 func (s *Store) SetPassword(ctx context.Context, userID int64, passwordHash string) error {
 	return s.execExpectingRow(ctx,
 		"UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, userID)
+}
+
+// UpdateUserDetails replaces the user's optional display name and email.
+// Email is normalized (trim + lower-case). Returns ErrNotFound for an unknown
+// user id. The password is updated separately via SetPassword.
+func (s *Store) UpdateUserDetails(ctx context.Context, userID int64, fullName, email string) error {
+	if err := ValidateFullName(fullName); err != nil {
+		return err
+	}
+	email = NormalizeEmail(email)
+	if err := ValidateEmail(email); err != nil {
+		return err
+	}
+	return s.execExpectingRow(ctx,
+		"UPDATE users SET full_name = ?, email = ? WHERE id = ?",
+		fullName, email, userID)
 }
 
 // UpdateService replaces every editable field of the service. Returns

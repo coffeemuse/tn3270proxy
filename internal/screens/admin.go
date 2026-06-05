@@ -35,6 +35,8 @@ const (
 	FieldVerify      = "verify"      // service form inputs
 	FieldCIDR        = "cidr"        // trusted networks form: network CIDR or bare IP
 	FieldComment     = "comment"     // trusted networks form: operator annotation
+	FieldFullName    = "fullname"    // edit-user form: display name
+	FieldEmail       = "email"       // edit-user form: email address
 )
 
 // AdminMenuScreen renders the top-level admin menu sized for geom. The caller

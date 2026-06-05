@@ -63,7 +63,9 @@ const schema = `
 CREATE TABLE IF NOT EXISTS users (
 	id            INTEGER PRIMARY KEY,
 	username      TEXT UNIQUE COLLATE NOCASE NOT NULL,
-	password_hash TEXT NOT NULL
+	password_hash TEXT NOT NULL,
+	full_name     TEXT NOT NULL DEFAULT '',
+	email         TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS groups (
 	id   INTEGER PRIMARY KEY,
@@ -128,6 +130,14 @@ func (s *Store) migrate() error {
 		"ALTER TABLE services ADD COLUMN description TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn("users", "full_name",
+		"ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("users", "email",
+		"ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	// The reserved admin group always exists; seeding only assigns members.
 	if _, err := s.db.Exec("INSERT OR IGNORE INTO groups (name) VALUES (?)", AdminGroup); err != nil {
 		return fmt.Errorf("ensure %s group: %w", AdminGroup, err)
@@ -183,6 +193,8 @@ type User struct {
 	ID           int64
 	Username     string
 	PasswordHash string
+	FullName     string
+	Email        string
 }
 
 // CreateUser inserts a user, or returns the existing user's id if the
@@ -219,8 +231,8 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (User, e
 	username = strings.ToUpper(username)
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		"SELECT id, username, password_hash FROM users WHERE username = ?", username).
-		Scan(&u.ID, &u.Username, &u.PasswordHash)
+		"SELECT id, username, password_hash, full_name, email FROM users WHERE username = ?", username).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Email)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
@@ -311,6 +323,46 @@ func ValidateDescription(desc string) error {
 	// len counts bytes; descriptions are expected to be ASCII (EBCDIC display context).
 	if len(desc) > MaxDescriptionLen {
 		return errors.New("description must be 40 characters or fewer")
+	}
+	return nil
+}
+
+// ValidateFullName checks the optional display name: empty is allowed; a
+// non-empty value reuses the description length cap (MaxDescriptionLen bytes).
+func ValidateFullName(name string) error {
+	if len(name) > MaxDescriptionLen {
+		return errors.New("full name must be 40 characters or fewer")
+	}
+	return nil
+}
+
+// NormalizeEmail trims surrounding space and lower-cases the address, so the
+// column is a clean key for future email lookups. Empty in, empty out.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// ValidateEmail does a deliberately permissive "looks like an address" check:
+// empty is allowed (the field is optional); otherwise exactly one "@", a
+// non-empty local part, a domain that is non-empty and contains a ".", and no
+// spaces. This is intentionally loose and is expected to loosen further later
+// for legacy / pre-SMTP address forms — keep the rule in this one function.
+func ValidateEmail(email string) error {
+	if email == "" {
+		return nil
+	}
+	if strings.ContainsAny(email, " \t") {
+		return errors.New("email must not contain spaces")
+	}
+	local, domain, found := strings.Cut(email, "@")
+	if !found || strings.Contains(domain, "@") {
+		return errors.New("email must contain exactly one @")
+	}
+	if local == "" || domain == "" {
+		return errors.New("email must have text before and after the @")
+	}
+	if !strings.Contains(domain, ".") {
+		return errors.New("email domain must contain a .")
 	}
 	return nil
 }

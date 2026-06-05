@@ -347,3 +347,28 @@ func TestListUsersInGroup(t *testing.T) {
 		t.Errorf("missing group = %+v, %v; want empty, nil", empty, err)
 	}
 }
+
+func TestUpdateUserDetails(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	uid, err := st.CreateUser(ctx, "alice", "h")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := st.UpdateUserDetails(ctx, uid, "Alice Doe", "  Alice@Example.COM "); err != nil {
+		t.Fatalf("UpdateUserDetails: %v", err)
+	}
+	u, err := st.GetUserByUsername(ctx, "alice")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+	if u.FullName != "Alice Doe" || u.Email != "alice@example.com" {
+		t.Errorf("details = %q/%q, want 'Alice Doe'/'alice@example.com'", u.FullName, u.Email)
+	}
+	if err := st.UpdateUserDetails(ctx, 99999, "X", ""); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing id: err = %v, want ErrNotFound", err)
+	}
+	if err := st.UpdateUserDetails(ctx, uid, "X", "bogus"); err == nil {
+		t.Errorf("invalid email should be rejected")
+	}
+}

@@ -43,3 +43,31 @@ func TestBuildFormScreenCursor(t *testing.T) {
 		t.Errorf("cursor = %+v, want {3,17}", cur)
 	}
 }
+
+func TestBuildFormScreenReadOnlyField(t *testing.T) {
+	screen, cur := buildFormScreen(24, FormView{Fields: []FormField{
+		{Name: "username", Label: "User", Value: "RJLAWREN", ReadOnly: true},
+		{Name: "fullname", Label: "Name", Length: 40},
+	}})
+	// Cursor skips the read-only field and homes to the first editable input.
+	// Editable field is the 2nd row: attribute byte at (5,16), input one col right.
+	if cur != (Cursor{Row: 5, Col: 17}) {
+		t.Errorf("cursor = %+v, want {5,17}", cur)
+	}
+	// The read-only value renders as static content with no writable input field.
+	var sawStatic, sawWritableUsername bool
+	for _, f := range screen {
+		if f.Content == "RJLAWREN" && !f.Write {
+			sawStatic = true
+		}
+		if f.Name == "username" && f.Write {
+			sawWritableUsername = true
+		}
+	}
+	if !sawStatic {
+		t.Errorf("read-only value not rendered as static content")
+	}
+	if sawWritableUsername {
+		t.Errorf("read-only field must not be a writable input")
+	}
+}
