@@ -102,3 +102,58 @@ func TestAuthThrottleConcurrent(t *testing.T) {
 		t.Errorf("concurrent count = %d, want 50", n)
 	}
 }
+
+func TestThrottleDelayFormula(t *testing.T) {
+	s := &Session{}
+	cfg := throttleConfig{baseSecs: 2, maxTries: 5, window: testWindow}
+	cases := []struct {
+		count int
+		want  time.Duration
+	}{
+		{0, 0},
+		{1, 2 * time.Second},
+		{3, 6 * time.Second},
+		{5, 10 * time.Second},
+		{9, 10 * time.Second}, // capped at maxTries
+	}
+	for _, c := range cases {
+		if got := s.throttleDelay(c.count, cfg); got != c.want {
+			t.Errorf("count %d: delay = %s, want %s", c.count, got, c.want)
+		}
+	}
+}
+
+func TestThrottleDelayDisabled(t *testing.T) {
+	s := &Session{}
+	if got := s.throttleDelay(3, throttleConfig{baseSecs: 0, maxTries: 5}); got != 0 {
+		t.Errorf("base 0: delay = %s, want 0 (disabled)", got)
+	}
+	if got := s.throttleDelay(3, throttleConfig{baseSecs: 2, maxTries: 0}); got != 0 {
+		t.Errorf("maxTries 0: delay = %s, want 0 (disabled)", got)
+	}
+}
+
+func TestSleepForUsesSeam(t *testing.T) {
+	var slept []time.Duration
+	s := &Session{Sleep: func(d time.Duration) { slept = append(slept, d) }}
+	s.sleepFor(6 * time.Second)
+	s.sleepFor(0) // zero must be a no-op
+	if len(slept) != 1 || slept[0] != 6*time.Second {
+		t.Errorf("slept = %v, want [6s]", slept)
+	}
+}
+
+func TestThrottleDetail(t *testing.T) {
+	if d := throttleDetail("", 0, 0); d != "" {
+		t.Errorf("disabled detail = %q, want empty", d)
+	}
+	if d := throttleDetail("", 6*time.Second, 3); d != "delay=6s count=3" {
+		t.Errorf("detail = %q", d)
+	}
+	if d := throttleDetail("login", 6*time.Second, 3); d != "login delay=6s count=3" {
+		t.Errorf("detail = %q", d)
+	}
+	if d := throttleDetail("login", 0, 0); d != "login" {
+		t.Errorf("base-only detail = %q, want \"login\"", d)
+	}
+}

@@ -20,9 +20,14 @@
 package server
 
 import (
+	"context"
+	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
 )
 
 // authThrottle applies per-username linear backoff to failed authentication
@@ -111,4 +116,88 @@ func (t *authThrottle) sweepLocked(now time.Time, window time.Duration) {
 			delete(t.entries, k)
 		}
 	}
+}
+
+// throttleConfig is a snapshot of the three throttle params, read live per
+// failure so admin edits take effect without a restart.
+type throttleConfig struct {
+	baseSecs int
+	maxTries int
+	window   time.Duration
+}
+
+// loadThrottle reads the throttle params from system_config, falling back to the
+// catalog defaults on a missing key or parse error (mirrors mfaIssuer).
+func (s *Session) loadThrottle(ctx context.Context) throttleConfig {
+	return throttleConfig{
+		baseSecs: s.throttleInt(ctx, sysconfig.KeyAuthDelayBaseSecs, sysconfig.DefaultAuthDelayBaseSecs),
+		maxTries: s.throttleInt(ctx, sysconfig.KeyAuthMaxTries, sysconfig.DefaultAuthMaxTries),
+		window:   time.Duration(s.throttleInt(ctx, sysconfig.KeyAuthFailWindowMins, sysconfig.DefaultAuthFailWindowMins)) * time.Minute,
+	}
+}
+
+func (s *Session) throttleInt(ctx context.Context, key string, def int) int {
+	v, err := s.Store.GetConfig(ctx, key)
+	if err != nil {
+		return def
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n < 0 {
+		return def
+	}
+	return n
+}
+
+// throttleDelay implements delay = baseSecs * min(count, maxTries) seconds. A
+// base or max-tries of 0 yields 0 (throttling disabled).
+func (s *Session) throttleDelay(count int, cfg throttleConfig) time.Duration {
+	if cfg.baseSecs <= 0 {
+		return 0
+	}
+	mult := count
+	if mult > cfg.maxTries {
+		mult = cfg.maxTries
+	}
+	if mult <= 0 {
+		return 0
+	}
+	return time.Duration(cfg.baseSecs*mult) * time.Second
+}
+
+// failDelay records a failed attempt for username and returns how long to delay
+// before re-prompting, plus the running count for the audit detail. Returns
+// (0, 0) when throttling is off (nil throttle or base/max-tries 0).
+func (s *Session) failDelay(ctx context.Context, username string) (time.Duration, int) {
+	if s.Throttle == nil {
+		return 0, 0
+	}
+	cfg := s.loadThrottle(ctx)
+	count := s.Throttle.Fail(username, s.now(), cfg.window)
+	return s.throttleDelay(count, cfg), count
+}
+
+// sleepFor delays by d using the Sleep seam (nil → time.Sleep). A non-positive
+// d is a no-op.
+func (s *Session) sleepFor(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	if s.Sleep != nil {
+		s.Sleep(d)
+		return
+	}
+	time.Sleep(d)
+}
+
+// throttleDetail formats the audit Detail for a failed attempt, appending the
+// applied backoff when throttling fired. base is the existing context label
+// ("" for password, "login"/"enroll" for MFA).
+func throttleDetail(base string, delay time.Duration, count int) string {
+	if delay <= 0 {
+		return base
+	}
+	if base == "" {
+		return fmt.Sprintf("delay=%s count=%d", delay, count)
+	}
+	return fmt.Sprintf("%s delay=%s count=%d", base, delay, count)
 }

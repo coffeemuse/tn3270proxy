@@ -130,6 +130,12 @@ type Session struct {
 	// MFAGenerate creates a new TOTP secret; nil → mfa.GenerateSecret. Injected
 	// in tests so enrollment is deterministic.
 	MFAGenerate func(issuer, account string) (string, error)
+	// Throttle applies per-username backoff to failed auth attempts (GH #48);
+	// nil disables throttling (no delay). Shared across sessions by the handler.
+	Throttle *authThrottle
+	// Sleep delays the next prompt after a failed attempt; nil → time.Sleep.
+	// Tests inject a recorder to assert the computed delay without waiting.
+	Sleep func(time.Duration)
 }
 
 func (s *Session) now() time.Time {
