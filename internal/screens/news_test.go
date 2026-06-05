@@ -22,6 +22,8 @@ package screens
 import (
 	"strings"
 	"testing"
+
+	"github.com/racingmars/go3270"
 )
 
 func TestPaginateNewsEmptyAndWhitespace(t *testing.T) {
@@ -107,5 +109,56 @@ func TestPaginateNewsExactFitOnePage(t *testing.T) {
 	if len(pages) != 1 || len(pages[0]) != 22 {
 		t.Errorf("got %d pages (first %d lines), want 1 page of 22",
 			len(pages), len(pages[0]))
+	}
+}
+
+func TestNewsScreenFieldsRedProtectedWithGate(t *testing.T) {
+	mod2 := Geometry{Rows: 24, Cols: 80}
+	page := []string{"NEWS LINE A", "NEWS LINE B"}
+	screen, rules, cur := NewsScreen(mod2, page)
+
+	if rules != nil {
+		t.Errorf("rules = %v, want nil (no input fields)", rules)
+	}
+	if cur != (Cursor{Row: 0, Col: 0}) {
+		t.Errorf("cursor = %+v, want home {0,0}", cur)
+	}
+	// One field per line + one "***" gate field.
+	if len(screen) != len(page)+1 {
+		t.Fatalf("screen has %d fields, want %d", len(screen), len(page)+1)
+	}
+	for i := 0; i < len(page); i++ {
+		f := screen[i]
+		if f.Row != i || f.Col != 0 {
+			t.Errorf("line %d at (%d,%d), want (%d,0)", i, f.Row, f.Col, i)
+		}
+		if f.Content != page[i] {
+			t.Errorf("line %d content = %q, want %q", i, f.Content, page[i])
+		}
+		if f.Color != go3270.Red {
+			t.Errorf("line %d color = %v, want Red", i, f.Color)
+		}
+		if f.Write {
+			t.Errorf("line %d is writable; MOTD text must be protected", i)
+		}
+	}
+	gate := screen[len(screen)-1]
+	if gate.Content != "***" {
+		t.Errorf("gate content = %q, want ***", gate.Content)
+	}
+	if gate.Row != mod2.NewsLinesPerPage()+1 { // 23 on MOD 2 (last row)
+		t.Errorf("gate row = %d, want %d", gate.Row, mod2.NewsLinesPerPage()+1)
+	}
+	if gate.Color != go3270.Red || gate.Write {
+		t.Errorf("gate field = %+v, want red protected", gate)
+	}
+}
+
+func TestNewsScreenGateRowFixedOnShortPage(t *testing.T) {
+	mod2 := Geometry{Rows: 24, Cols: 80}
+	screen, _, _ := NewsScreen(mod2, []string{"only one line"})
+	gate := screen[len(screen)-1]
+	if gate.Row != 23 {
+		t.Errorf("gate row on short page = %d, want 23 (always last row)", gate.Row)
 	}
 }

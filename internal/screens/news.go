@@ -19,7 +19,11 @@
 
 package screens
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/racingmars/go3270"
+)
 
 // newsMaxCols is the rightmost usable column for MOTD text. The file is a
 // deliberately composed fixed-width banner; the author owns line breaks and
@@ -60,4 +64,23 @@ func PaginateNews(geom Geometry, raw string) [][]string {
 		pages = append(pages, lines[i:end])
 	}
 	return pages
+}
+
+// NewsScreen renders one MOTD/NEWS page: each text line as a red, protected
+// field at column 0, then the "***" page gate on the last row. There is no
+// title row and no PF-key help row — a deliberate departure from the app's
+// usual screen chrome, matching classic TSO/READY logon messages. The cursor
+// homes to {0,0}; there is no input field. The caller (Presenter.News) drives
+// it with go3270.HandleScreenAlt: AIDEnter advances, PA3/PF3 are silent no-ops.
+func NewsScreen(geom Geometry, page []string) (go3270.Screen, go3270.Rules, Cursor) {
+	screen := make(go3270.Screen, 0, len(page)+1)
+	for i, line := range page {
+		screen = append(screen, go3270.Field{
+			Row: i, Col: 0, Color: go3270.Red, Content: line,
+		})
+	}
+	screen = append(screen, go3270.Field{
+		Row: geom.NewsLinesPerPage() + 1, Col: 0, Color: go3270.Red, Content: "***",
+	})
+	return screen, nil, Cursor{Row: 0, Col: 0}
 }
