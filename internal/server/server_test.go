@@ -84,7 +84,7 @@ func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
 		BridgeIdleExempt: true,
 		Trust:            StaticTrustChecker(netip.MustParsePrefix("10.0.0.0/24")),
 	}
-	h := NewSessionHandler(st, 0x6B, limits, slog.Default()).(sessionHandler)
+	h := NewSessionHandler(st, 0x6B, limits, slog.Default(), nil).(sessionHandler)
 	connLog := slog.Default()
 
 	got := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.0.0.9"), Port: 1}, connLog)

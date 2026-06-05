@@ -109,7 +109,9 @@ func TestAdminSystemParamsSaveHappyPath(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
-			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt"}}, // Enter: save, stay
+			// The real form submits every pre-populated field; MFA_ISSUER keeps its
+			// default so only MOTD_FILE changes.
+			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt", "MFA_ISSUER": "TN3270PROXY"}}, // Enter: save, stay
 			{Cancel: true}, // PF3: leave to admin menu
 		},
 	}
@@ -152,8 +154,8 @@ func TestAdminSystemParamsNoAuditWhenUnchanged(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
-			// MOTD_FILE default is "" — submit the same value
-			{Values: map[string]string{"MOTD_FILE": ""}}, // Enter: no change, stay
+			// MOTD_FILE default is "" — submit the same value; MFA_ISSUER keeps its default.
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY"}}, // Enter: no change, stay
 			{Cancel: true}, // PF3: leave
 		},
 	}
@@ -175,7 +177,8 @@ func TestAdminSystemParamsEmptyValueIsValid(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
-			{Values: map[string]string{"MOTD_FILE": ""}}, // Enter: clear (disable), stay
+			// MFA_ISSUER keeps its default so only MOTD_FILE is cleared.
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY"}}, // Enter: clear (disable), stay
 			{Cancel: true}, // PF3: leave
 		},
 	}

@@ -335,3 +335,23 @@ func TestCreateServiceFoldsNameAndRequiresDescription(t *testing.T) {
 		t.Error("invalid name: want error, got nil")
 	}
 }
+
+func TestUserMFAColumnsRoundTrip(t *testing.T) {
+	st, err := Open(t.TempDir() + "/s.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	id, err := st.CreateUser(ctx, "alice", "hash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := st.GetUserByUsername(ctx, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.ID != id || u.MFARequired || u.MFASecret != "" || u.MFAEnrolledAt != "" || u.MFALastStep != 0 {
+		t.Fatalf("fresh user should have zero MFA fields, got %+v", u)
+	}
+}

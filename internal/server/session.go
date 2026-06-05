@@ -36,6 +36,7 @@ import (
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
+	"github.com/CoffeeMuse/tn3270proxy/internal/mfa"
 	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
@@ -55,6 +56,11 @@ type Presenter interface {
 	// non-nil error is a disconnect or an idle timeout (classified by the
 	// caller). News is only called with at least one page.
 	News(conn net.Conn, term Term, pages [][]string) error
+	// EnrollMFA shows the chunked secret and prompts for a confirmation code.
+	// Returns the entered code; quit=true on PF3 (cancel to login).
+	EnrollMFA(conn net.Conn, term Term, issuer, account, chunkedSecret, errMsg string) (code string, quit bool, err error)
+	// VerifyMFA prompts an enrolled user for a code. quit=true on PF3.
+	VerifyMFA(conn net.Conn, term Term, errMsg string) (code string, quit bool, err error)
 }
 
 // BackendTLS expresses a service's backend-TLS intent. The server layer keeps
@@ -107,6 +113,37 @@ type Session struct {
 	// Logger is the per-connection structured logger. nil falls back to
 	// slog.Default(). The session enriches it with "user" after authentication.
 	Logger *slog.Logger
+	// MFA encrypts/decrypts TOTP secrets; nil disables MFA globally (the gate is
+	// skipped). Set from the resolved master key by the handler.
+	MFA *mfa.Cipher
+	// Now returns the current time for TOTP validation; nil → time.Now.
+	Now func() time.Time
+	// MFAGenerate creates a new TOTP secret; nil → mfa.GenerateSecret. Injected
+	// in tests so enrollment is deterministic.
+	MFAGenerate func(issuer, account string) (string, error)
+}
+
+func (s *Session) now() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
+}
+
+func (s *Session) generateSecret(issuer, account string) (string, error) {
+	if s.MFAGenerate != nil {
+		return s.MFAGenerate(issuer, account)
+	}
+	return mfa.GenerateSecret(issuer, account)
+}
+
+// mfaIssuer reads the configured issuer label, falling back to a constant.
+func (s *Session) mfaIssuer(ctx context.Context) string {
+	v, err := s.Store.GetConfig(ctx, sysconfig.KeyMFAIssuer)
+	if err != nil || strings.TrimSpace(v) == "" {
+		return "TN3270PROXY"
+	}
+	return v
 }
 
 // log returns the session's logger (slog.Default() when Logger is nil).
@@ -239,6 +276,18 @@ func (s *Session) Run(conn net.Conn) {
 		currentUser = identity.Username
 		s.Logger = baseLog.With("user", identity.Username) // enrich with user
 		s.armPostAuth(conn)                                // authenticated: post-auth idle window
+
+		// MFA gate: enrollment (pending) or verification (enrolled) before the menu.
+		proceed, mfaDetail, ferr := s.mfaGate(ctx, conn, term, identity, aud)
+		if ferr != nil {
+			endDetail = mfaDetail
+			return
+		}
+		if !proceed { // idled out or cancelled during MFA: back to the login screen
+			currentUser = ""
+			s.Logger = baseLog
+			continue
+		}
 
 		// MOTD/NEWS gate: shown once per login, before the menu.
 		enterMenu, nerr := s.maybeShowNews(ctx, conn, term, identity, aud)
@@ -385,6 +434,117 @@ func (s *Session) maybeShowNews(ctx context.Context, conn net.Conn, term Term, i
 		return false, err
 	}
 	return true, nil
+}
+
+// mfaGate runs the MFA step after a successful login. It returns proceed=true
+// to continue to the MOTD/menu. proceed=false means the user idled out or
+// cancelled (PF3) during MFA — the pre-auth regime is re-armed here and the
+// caller returns to the login screen. A non-nil error is fatal (disconnect),
+// with detail set for the disconnect audit.
+func (s *Session) mfaGate(ctx context.Context, conn net.Conn, term Term, identity auth.Identity, aud *auditTrail) (proceed bool, detail string, err error) {
+	if s.MFA == nil {
+		return true, "", nil // MFA disabled globally
+	}
+	u, gerr := s.Store.GetUserByUsername(ctx, identity.Username)
+	if gerr != nil {
+		s.log().Error("mfa: load user failed", "error", gerr)
+		return false, "mfa user load error", gerr
+	}
+	if !u.MFARequired {
+		return true, "", nil
+	}
+	if u.MFASecret == "" {
+		return s.mfaEnroll(ctx, conn, term, u, aud)
+	}
+	return s.mfaVerify(ctx, conn, term, u, aud)
+}
+
+func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
+	issuer := s.mfaIssuer(ctx)
+	secret, gerr := s.generateSecret(issuer, u.Username)
+	if gerr != nil {
+		s.log().Error("mfa: generate secret failed", "error", gerr)
+		return false, "mfa generate error", gerr
+	}
+	chunked := mfa.Chunk(secret)
+	errMsg := ""
+	for {
+		code, quit, err := s.Presenter.EnrollMFA(conn, term, issuer, u.Username, chunked, errMsg)
+		if err != nil {
+			if isTimeoutErr(err) {
+				aud.record(ctx, store.AuditEvent{Kind: store.AuditLogout, Username: u.Username, Detail: "idle logout"})
+				s.armPreAuth(conn)
+				return false, "", nil
+			}
+			return false, "mfa render error", err
+		}
+		if quit {
+			s.armPreAuth(conn)
+			return false, "", nil
+		}
+		ok, step, verr := mfa.Validate(secret, code, 0, s.now())
+		if verr != nil {
+			s.log().Error("mfa: validate error", "error", verr)
+			errMsg = "Temporary error; try again"
+			continue
+		}
+		if !ok {
+			aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAFailed, Username: u.Username, Detail: "enroll"})
+			errMsg = "Code incorrect - check the key and try again"
+			continue
+		}
+		enc, serr := s.MFA.Seal([]byte(secret))
+		if serr != nil {
+			return false, "mfa seal error", serr
+		}
+		enrolledAt := s.now().UTC().Format(time.RFC3339)
+		if err := s.Store.StoreMFAEnrollment(ctx, u.ID, enc, enrolledAt, int64(step)); err != nil {
+			return false, "mfa store error", err
+		}
+		aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAEnrolled, Username: u.Username})
+		return true, "", nil
+	}
+}
+
+func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
+	pt, oerr := s.MFA.Open(u.MFASecret)
+	if oerr != nil {
+		s.log().Error("mfa: secret decrypt failed", "user", u.Username, "error", oerr)
+		return false, "mfa decrypt error", oerr
+	}
+	secret := string(pt)
+	errMsg := ""
+	for {
+		code, quit, err := s.Presenter.VerifyMFA(conn, term, errMsg)
+		if err != nil {
+			if isTimeoutErr(err) {
+				aud.record(ctx, store.AuditEvent{Kind: store.AuditLogout, Username: u.Username, Detail: "idle logout"})
+				s.armPreAuth(conn)
+				return false, "", nil
+			}
+			return false, "mfa render error", err
+		}
+		if quit {
+			s.armPreAuth(conn)
+			return false, "", nil
+		}
+		ok, step, verr := mfa.Validate(secret, code, uint64(u.MFALastStep), s.now())
+		if verr != nil {
+			s.log().Error("mfa: validate error", "error", verr)
+			errMsg = "Temporary error; try again"
+			continue
+		}
+		if !ok {
+			aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAFailed, Username: u.Username, Detail: "login"})
+			errMsg = "Code incorrect - try again"
+			continue
+		}
+		if err := s.Store.UpdateMFAStep(ctx, u.ID, int64(step)); err != nil {
+			return false, "mfa store error", err
+		}
+		aud.record(ctx, store.AuditEvent{Kind: store.AuditMFASuccess, Username: u.Username})
+		return true, "", nil
+	}
 }
 
 // doLogin loops the login screen until success, or returns ok=false when the

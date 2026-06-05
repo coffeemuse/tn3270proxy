@@ -166,6 +166,26 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 		{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
 		{Name: screens.FieldRetype, Label: "Retype . . .", Hidden: true, Length: 32},
 	}
+	if !create {
+		mfaReq := "N"
+		if u.MFARequired {
+			mfaReq = "Y"
+		}
+		status := "NONE"
+		switch {
+		case !u.MFARequired:
+			status = "NONE"
+		case u.MFASecret == "":
+			status = "PENDING"
+		default:
+			status = "ENROLLED"
+		}
+		fields = append(fields,
+			ui3270.FormField{Name: screens.FieldMFARequired, Label: "MFA req Y/N", Length: 1, Value: mfaReq},
+			ui3270.FormField{Name: screens.FieldMFAStatus, Label: "MFA status .", Length: 10, Value: status, ReadOnly: true},
+			ui3270.FormField{Name: screens.FieldMFAClear, Label: "Clear MFA Y.", Length: 1, Value: ""},
+		)
+	}
 	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
 		Title:  title,
 		Fields: fields,
@@ -241,7 +261,45 @@ func (f *adminFlow) userSaveEdit(ctx context.Context, u store.User, vals map[str
 	if err := f.store.UpdateUserDetails(ctx, u.ID, fullName, email); err != nil {
 		return f.storeErr("set user details", err), nil
 	}
+	if msg, err := f.applyMFAEdit(ctx, u, vals); err != nil {
+		return f.storeErr("apply mfa", err), nil
+	} else if msg != "" {
+		return msg, nil
+	}
 	f.recordAdmin(ctx, "user edit "+u.Username)
+	return "", nil
+}
+
+// applyMFAEdit applies the MFA controls from the edit form: it toggles the
+// enforce flag and, when "Clear MFA" is Y, wipes the secret. It returns an
+// error-line message ("" on success). MFA-specific audit events are recorded
+// directly (recordAdmin is for generic CRUD).
+func (f *adminFlow) applyMFAEdit(ctx context.Context, u store.User, vals map[string]string) (string, error) {
+	var required bool
+	switch strings.ToUpper(strings.TrimSpace(vals[screens.FieldMFARequired])) {
+	case "Y":
+		required = true
+	case "N", "":
+		required = false
+	default:
+		return "MFA REQ MUST BE Y OR N", nil
+	}
+	if required != u.MFARequired {
+		if err := f.store.SetMFARequired(ctx, u.ID, required); err != nil {
+			return f.storeErr("set mfa required", err), nil
+		}
+		if required && f.audit != nil {
+			f.audit(ctx, store.AuditEvent{Kind: store.AuditMFAEnforced, Username: u.Username})
+		}
+	}
+	if strings.ToUpper(strings.TrimSpace(vals[screens.FieldMFAClear])) == "Y" {
+		if err := f.store.ClearMFA(ctx, u.ID); err != nil {
+			return f.storeErr("clear mfa", err), nil
+		}
+		if f.audit != nil {
+			f.audit(ctx, store.AuditEvent{Kind: store.AuditMFACleared, Username: u.Username})
+		}
+	}
 	return "", nil
 }
 

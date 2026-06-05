@@ -84,3 +84,36 @@ func TestKeyMOTDFileConstant(t *testing.T) {
 		t.Errorf("Catalog has no entry keyed by KeyMOTDFile")
 	}
 }
+
+func issuerEntry(t *testing.T) Entry {
+	t.Helper()
+	for _, e := range Catalog {
+		if e.Key == KeyMFAIssuer {
+			return e
+		}
+	}
+	t.Fatal("MFA_ISSUER not in Catalog")
+	return Entry{}
+}
+
+func TestMFAIssuerDefault(t *testing.T) {
+	if issuerEntry(t).Default != "TN3270PROXY" {
+		t.Fatalf("unexpected default: %q", issuerEntry(t).Default)
+	}
+}
+
+func TestMFAIssuerValidation(t *testing.T) {
+	v := issuerEntry(t).Validate
+	if v("TN3270PROXY") != "" {
+		t.Fatal("valid issuer rejected")
+	}
+	if v("") == "" {
+		t.Fatal("empty issuer should be rejected")
+	}
+	if v("has:colon") == "" {
+		t.Fatal("colon should be rejected")
+	}
+	if v("THIS-NAME-IS-WAY-TOO-LONG-TO-FIT-IN-FORTY-CHARS!!") == "" {
+		t.Fatal("over-length issuer should be rejected")
+	}
+}

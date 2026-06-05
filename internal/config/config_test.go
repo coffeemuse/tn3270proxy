@@ -20,6 +20,8 @@
 package config
 
 import (
+	"bytes"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -447,5 +449,42 @@ func TestLogBadLevelFlagIsError(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if _, err := Load([]string{"-log-level", "trace"}); err == nil {
 		t.Fatal("want error for unknown log level via flag, got nil")
+	}
+}
+
+func TestMFAKeyFromEnvWins(t *testing.T) {
+	envKey := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0xAB}, 32))
+	t.Setenv(EnvMFAKey, envKey)
+	cfg, err := Load([]string{"-listen", ":0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.MFA.Key) != 32 || cfg.MFA.Key[0] != 0xAB {
+		t.Fatalf("env key not applied: %v", cfg.MFA.Key)
+	}
+}
+
+func TestMFAKeyAbsentIsNil(t *testing.T) {
+	t.Setenv(EnvMFAKey, "")
+	cfg, err := Load([]string{"-listen", ":0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MFA.Key != nil {
+		t.Fatal("no key configured should leave MFA.Key nil")
+	}
+}
+
+func TestMFAKeyBadBase64IsFatal(t *testing.T) {
+	t.Setenv(EnvMFAKey, "not-base64-!!!")
+	if _, err := Load([]string{"-listen", ":0"}); err == nil {
+		t.Fatal("malformed key must be a fatal config error")
+	}
+}
+
+func TestMFAKeyWrongLenIsFatal(t *testing.T) {
+	t.Setenv(EnvMFAKey, base64.StdEncoding.EncodeToString([]byte("too-short")))
+	if _, err := Load([]string{"-listen", ":0"}); err == nil {
+		t.Fatal("non-32-byte key must be a fatal config error")
 	}
 }
