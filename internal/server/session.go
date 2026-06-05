@@ -42,6 +42,11 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
+// systemIDPlaceholder is shown in the menu status block's "System ID" row.
+// TODO(#53): replace with a DB-backed system-config value entered via the
+// future System Configuration admin screen; hardcoded for now.
+const systemIDPlaceholder = "PROXY"
+
 // Presenter renders the proxy's own 3270 screens to the client. The real
 // implementation wraps go3270; tests use a fake. The Term returned by
 // Negotiate must be passed back into every subsequent call so screens render
@@ -49,7 +54,7 @@ import (
 type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
 	Login(conn net.Conn, term Term, errMsg string) (username, password string, quit bool, err error)
-	Menu(conn net.Conn, term Term, services []store.Service, admin bool, errMsg string) (selected *store.Service, adminSel bool, quit bool, err error)
+	Menu(conn net.Conn, term Term, services []store.Service, admin bool, status screens.MenuStatus, errMsg string) (selected *store.Service, adminSel bool, quit bool, err error)
 	// News shows the MOTD pages (already paginated) one at a time: ENTER
 	// advances, the last ENTER returns nil. PA3/PF3 are silent no-ops. A
 	// non-nil error is a disconnect or an idle timeout (classified by the
@@ -107,6 +112,10 @@ type Session struct {
 	// Logger is the per-connection structured logger. nil falls back to
 	// slog.Default(). The session enriches it with "user" after authentication.
 	Logger *slog.Logger
+	// Release is the resolved build version shown in the menu status block
+	// (version.Resolve, threaded from cmd via NewSessionHandler). Empty renders
+	// a blank Release row.
+	Release string
 }
 
 // log returns the session's logger (slog.Default() when Logger is nil).
@@ -262,7 +271,12 @@ func (s *Session) Run(conn net.Conn) {
 				services = nil
 				errMsg = "Temporary error retrieving services; try again"
 			}
-			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, errMsg)
+			status := screens.MenuStatus{
+				Username: identity.Username,
+				SystemID: systemIDPlaceholder,
+				Release:  s.Release,
+			}
+			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, status, errMsg)
 			if err != nil {
 				if isTimeoutErr(err) {
 					aud.record(ctx, store.AuditEvent{

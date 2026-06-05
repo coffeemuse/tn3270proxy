@@ -81,7 +81,7 @@ func (f *fakePresenter) Login(conn net.Conn, term Term, errMsg string) (string, 
 	return r.user, r.pass, r.quit, r.err
 }
 
-func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, errMsg string) (*store.Service, bool, bool, error) {
+func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, status screens.MenuStatus, errMsg string) (*store.Service, bool, bool, error) {
 	f.gotTerms = append(f.gotTerms, term)
 	f.menuErrors = append(f.menuErrors, errMsg)
 	f.gotAdminFlag = append(f.gotAdminFlag, admin)
