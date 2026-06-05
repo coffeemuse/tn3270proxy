@@ -26,12 +26,16 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
+	"github.com/CoffeeMuse/tn3270proxy/internal/mfa"
 	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
+	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/hotp"
 )
 
 // --- fakes ---
@@ -45,16 +49,26 @@ type fakePresenter struct {
 	menuErrors   []string
 	loginErrors  []string
 	gotAdminFlag []bool
-	gotTerms     []Term              // every term passed to Login/Menu, in call order
+	gotTerms     []Term               // every term passed to Login/Menu, in call order
 	gotStatus    []screens.MenuStatus // every status passed to Menu, in call order
 	newsCalls    [][][]string         // pages passed to each News call, in order
 	newsResults  []error              // queued News return values; default nil
+	enrolls      []mfaResult
+	verifies     []mfaResult
+	enrollErrors []string // errMsg passed to each EnrollMFA call
+	verifyErrors []string // errMsg passed to each VerifyMFA call
+	gotChunked   []string // chunkedSecret passed to each EnrollMFA call
 }
 
 type loginResult struct {
 	user, pass string
 	quit       bool
 	err        error
+}
+type mfaResult struct {
+	code string
+	quit bool
+	err  error
 }
 type menuResult struct {
 	sel   *store.Service
@@ -101,6 +115,21 @@ func (f *fakePresenter) News(conn net.Conn, term Term, pages [][]string) error {
 		return r
 	}
 	return nil
+}
+
+func (f *fakePresenter) EnrollMFA(conn net.Conn, term Term, issuer, account, chunkedSecret, errMsg string) (string, bool, error) {
+	f.enrollErrors = append(f.enrollErrors, errMsg)
+	f.gotChunked = append(f.gotChunked, chunkedSecret)
+	r := f.enrolls[0]
+	f.enrolls = f.enrolls[1:]
+	return r.code, r.quit, r.err
+}
+
+func (f *fakePresenter) VerifyMFA(conn net.Conn, term Term, errMsg string) (string, bool, error) {
+	f.verifyErrors = append(f.verifyErrors, errMsg)
+	r := f.verifies[0]
+	f.verifies = f.verifies[1:]
+	return r.code, r.quit, r.err
 }
 
 type fakeBridger struct {
@@ -824,5 +853,147 @@ func TestSessionPopulatesMenuStatus(t *testing.T) {
 	// the store, so the identity flows through unchanged.
 	if got.Username != "alice" {
 		t.Errorf("status.Username = %q, want alice", got.Username)
+	}
+}
+
+func newMFATestSession(t *testing.T, p *fakePresenter, b *fakeBridger) (*Session, *store.Store) {
+	t.Helper()
+	s := newTestSession(t, p, b)
+	c, err := mfa.NewCipher(make([]byte, mfa.KeyLen))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.MFA = c
+	s.Now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	return s, s.Store
+}
+
+func codeForServer(t *testing.T, secret string, step uint64) string {
+	t.Helper()
+	code, err := hotp.GenerateCodeCustom(secret, step, hotp.ValidateOpts{
+		Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code
+}
+
+func TestMFAEnrollFlow(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP" // fixed 16-char base32
+	now := time.Unix(1_700_000_000, 0)
+	step := uint64(now.Unix() / 30)
+	good := codeForServer(t, secret, step)
+
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		enrolls: []mfaResult{
+			{code: "000000"}, // wrong first
+			{code: good},     // correct
+		},
+		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	b := &fakeBridger{}
+	s, st := newMFATestSession(t, p, b)
+	s.MFAGenerate = func(_, _ string) (string, error) { return secret, nil }
+	ctx := context.Background()
+	uid, _ := st.CreateUser(ctx, "alice", "x")
+	st.SetMFARequired(ctx, uid, true)
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(p.enrolls) != 0 {
+		t.Fatalf("expected both enroll attempts consumed, %d left", len(p.enrolls))
+	}
+	u, _ := st.GetUserByUsername(ctx, "alice")
+	if u.MFASecret == "" || u.MFAEnrolledAt == "" {
+		t.Fatalf("enrollment should have persisted an encrypted secret: %+v", u)
+	}
+	pt, err := s.MFA.Open(u.MFASecret)
+	if err != nil || string(pt) != secret {
+		t.Fatalf("stored secret mismatch: %q err=%v", pt, err)
+	}
+	if u.MFALastStep != int64(step) {
+		t.Fatalf("replay floor not set: %d", u.MFALastStep)
+	}
+}
+
+func TestMFAVerifyFlow(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	now := time.Unix(1_700_000_000, 0)
+	step := uint64(now.Unix() / 30)
+	good := codeForServer(t, secret, step)
+
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		verifies:  []mfaResult{{code: "000000"}, {code: good}}, // wrong then right
+		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	b := &fakeBridger{}
+	s, st := newMFATestSession(t, p, b)
+	ctx := context.Background()
+	uid, _ := st.CreateUser(ctx, "alice", "x")
+	st.SetMFARequired(ctx, uid, true)
+	enc, _ := s.MFA.Seal([]byte(secret))
+	st.StoreMFAEnrollment(ctx, uid, enc, "2026-01-01T00:00:00Z", 0)
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(p.verifies) != 0 {
+		t.Fatalf("expected both verify attempts consumed, %d left", len(p.verifies))
+	}
+	u, _ := st.GetUserByUsername(ctx, "alice")
+	if u.MFALastStep != int64(step) {
+		t.Fatalf("replay floor not advanced: %d", u.MFALastStep)
+	}
+}
+
+func TestMFAVerifyPF3CancelsToLogin(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		verifies: []mfaResult{{quit: true}}, // PF3 at the code prompt
+		logins:   []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+	}
+	b := &fakeBridger{}
+	s, st := newMFATestSession(t, p, b)
+	ctx := context.Background()
+	uid, _ := st.CreateUser(ctx, "alice", "x")
+	st.SetMFARequired(ctx, uid, true)
+	enc, _ := s.MFA.Seal([]byte(secret))
+	st.StoreMFAEnrollment(ctx, uid, enc, "t", 0)
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client) // must not reach the menu; ends at the second login quit
+
+	if len(p.menuErrors) != 0 {
+		t.Fatal("PF3 at MFA must not reach the menu")
+	}
+}
+
+func TestMFADisabledWhenNoCipher(t *testing.T) {
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	b := &fakeBridger{}
+	s := newTestSession(t, p, b) // no cipher
+	ctx := context.Background()
+	uid, _ := s.Store.CreateUser(ctx, "alice", "x")
+	s.Store.SetMFARequired(ctx, uid, true)
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+	if len(p.menuPicks) != 0 {
+		t.Fatal("with MFA cipher nil, user should pass straight to the menu")
 	}
 }

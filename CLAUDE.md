@@ -38,6 +38,8 @@ go build -ldflags "-X main.version=v1.2.3" -o bin/tn3270proxy ./cmd/tn3270proxy
 ./bin/tn3270proxy serve -db proxy.db -listen :2323            # run the proxy
 ./bin/tn3270proxy audit list -db proxy.db                      # query the audit trail
 ./bin/tn3270proxy audit prune -db proxy.db -older-than 90d     # retention cleanup
+TN3270PROXY_MFA_KEY=$(openssl rand -base64 32) ./bin/tn3270proxy serve -db proxy.db   # serve with MFA enabled
+./bin/tn3270proxy mfa reset-all -db proxy.db                   # break-glass: wipe all MFA enrollments (needs the key)
 
 .claude/skills/s3270-smoke-testing/smoke.sh    # automated 3270 protocol smoke test (s3270)
 ```
@@ -47,8 +49,12 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 ## Architecture (package map)
 
 ```
-cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, `version`, and `audit list|prune`; wires everything.
-                  `var version = "dev"` is the ldflags injection point (`-X main.version=vX.Y.Z`); resolved via internal/version.
+cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, `version`,
+                  `audit list|prune`, and `mfa reset-all` (break-glass); wires everything.
+                  `var version = "dev"` is the ldflags injection point (`-X main.version=vX.Y.Z`);
+                  resolved via internal/version. serve runs the fail-closed MFA key check
+                  (mfaStartup: refuse to start if enrolled users exist but no key, or if the key
+                  can't decrypt the MFA_KEY_CHECK sentinel) and injects the *mfa.Cipher.
 internal/config   Config{DBPath, Plain, TLS, Limits}; Load(args) merges defaults<file<flags.
                   Optional JSON file (tn3270proxy.json) defines plain+tls listeners and a
                   `limits` section (pre_auth_idle/idle/pre_auth_max as Go duration
@@ -67,6 +73,10 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
                   hosts and passwords are NOT normalized.
                   Audit trail: `audit` table (UTC RFC3339, session-correlated) +
                   RecordAudit/ListAudit/PruneAudit.
+                  MFA: users carry mfa_required/mfa_secret(encrypted base64, ''=not enrolled)/
+                  mfa_enrolled_at/mfa_last_step(replay floor); Set/Clear/StoreMFAEnrollment/
+                  UpdateMFAStep/CountEnrolledUsers/ResetAllMFA + Get/SetMFASentinel (the
+                  MFA_KEY_CHECK row; not a sysconfig.Catalog entry, hidden from the admin form).
 internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,Username,Groups}.
                   bcrypt; uniform ErrInvalidCredentials (no username-enumeration leak).
 internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, svcs,
@@ -81,6 +91,13 @@ internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, s
                   Field-name constants: FieldUsername/Password/Error/Selection.
                   Admin screen builders: AdminMenuScreen(), and generic AdminListScreen/
                   AdminFormScreen (paging, line commands, delete confirm).
+                  MFA screens: EnrollMFAScreen (issuer/account/chunked key + confirm code; the
+                  otpauth URI is deliberately NOT shown — manual entry is the 3270 path) and
+                  VerifyMFAScreen; FieldMFACode plus admin FieldMFARequired/Status/Clear.
+internal/mfa      Pure TOTP (RFC 6238, pquerna/otp, 80-bit/16-char base32) + AES-256-GCM
+                  secret-at-rest. NewCipher/Seal/Open (ErrDecrypt on wrong key), GenerateSecret,
+                  Chunk (ABCD EFGH…), Validate(secret, code, lastStep, now) → (ok, step) with
+                  ±1-step skew + replay floor. No DB/network. Brute-force throttling is OUT (GH #48).
 internal/bridge   The bespoke core. telnetProcessor parses one Telnet leg (forward 3270
                   data + IAC IAC / IAC EOR framing; answer negotiation locally; detect PA3
                   escape). Bridge(client, addr, termType, escapeAID, *tls.Config) dials
@@ -100,6 +117,12 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   Term (negotiated terminal type + alt dimensions + codepage) is returned by
                   Negotiate and threaded through the Presenter and AdminPresenter seams;
                   rendering uses HandleScreenAlt (nil dev → 24×80 fallback).
+                  MFA gate (session.go: mfaGate/mfaEnroll/mfaVerify behind EnrollMFA/VerifyMFA
+                  Presenter methods) runs AFTER login-success, BEFORE the MOTD/menu — so MFA
+                  status never leaks before a correct password. nil Session.MFA disables it;
+                  the secret is generated in-memory and persisted (encrypted) only on a correct
+                  confirm. PF3/idle returns to login. Session.Now seam makes TOTP deterministic
+                  in tests.
                   adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go)
                   behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
                   Auditor seam (best-effort store-backed auditing; nil disables) +
@@ -145,7 +168,14 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   data migration (closed GH #9).
 - **No credential logging, ever.** Lifecycle logging uses stdlib `log`; usernames are OK to
   log, passwords/Login() contents are not; `auth.HashPassword` is the single bcrypt path
-  (seed + admin UI).
+  (seed + admin UI). Never log the MFA master key, a TOTP secret, or an entered code.
+- **MFA master key is infra-level (GH #47):** sourced from `TN3270PROXY_MFA_KEY` (base64 of
+  32 bytes) or config `mfa.key`/`mfa.key_file` (env wins), NEVER the runtime DB params. `serve`
+  refuses to start if enrolled users exist but no key is set, or if the key can't decrypt the
+  `MFA_KEY_CHECK` sentinel (wrong/rotated key). Recover a lost key with `tn3270proxy mfa
+  reset-all` (wipes all enrollments; everyone re-enrolls). TOTP secrets are stored AES-256-GCM
+  encrypted. Per-attempt throttling is deliberately deferred to GH #48 — ±1-step/replay is NOT
+  a brute-force defense.
 - **Commits:** conventional-ish prefixes (`feat:`/`test:`/`chore:`/`docs:`), small and focused.
 - **Backend TLS:** implemented. A service dials over TLS when `services.tls` is set; the
   per-service `services.tls_verify` column (default on) controls certificate verification

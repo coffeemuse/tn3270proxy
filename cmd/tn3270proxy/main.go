@@ -52,6 +52,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "bootstrap" {
 		return runBootstrap(args[1:], os.Stdout)
 	}
+	if len(args) > 0 && args[0] == "mfa" {
+		return runMFA(args[1:], os.Stdout)
+	}
 	if len(args) > 0 && args[0] == "version" {
 		runVersion()
 		return nil
@@ -84,6 +87,11 @@ func runServe(args []string) error {
 	}
 	defer st.Close()
 
+	mfaCipher, err := mfaStartup(context.Background(), st, cfg.MFA.Key)
+	if err != nil {
+		return err
+	}
+
 	warnIfNoAdmin(context.Background(), st, os.Stderr)
 
 	listeners, err := listen.Build(cfg)
@@ -107,7 +115,7 @@ func runServe(args []string) error {
 		BridgeIdleExempt: cfg.Limits.BridgeIdleExempt,
 		Trust:            server.NewStoreTrustChecker(st),
 	}
-	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits, logger, rv)
+	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits, logger, rv, mfaCipher)
 	return server.ServeAll(listeners, handler, limits)
 }
 

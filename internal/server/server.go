@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
+	"github.com/CoffeeMuse/tn3270proxy/internal/mfa"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
@@ -114,6 +115,7 @@ type sessionHandler struct {
 	limits    Limits
 	logger    *slog.Logger
 	release   string
+	mfaCipher *mfa.Cipher
 }
 
 // wrapIdle installs the idle-deadline wrapper when an idle window is set.
@@ -144,6 +146,7 @@ func (h sessionHandler) sessionFor(addr net.Addr, connLog *slog.Logger) *Session
 		PreAuthMax:       h.limits.PreAuthMax,
 		Trusted:          trusted,
 		BridgeIdleExempt: h.limits.BridgeIdleExempt,
+		MFA:              h.mfaCipher,
 	}
 }
 
@@ -158,12 +161,13 @@ func (h sessionHandler) Handle(conn net.Conn) {
 // logger is the base logger; each accepted connection receives a child logger
 // tagged with "remote" (and later "user" after authentication).
 // release is the resolved build version (e.g. "v1.2.3" or a VCS hash) shown in
-// the menu status block (GH #53).
-func NewSessionHandler(st *store.Store, escapeAID byte, limits Limits, logger *slog.Logger, release string) connHandler {
+// the menu status block (GH #53). mfaCipher encrypts/decrypts TOTP secrets;
+// nil disables MFA (GH #47).
+func NewSessionHandler(st *store.Store, escapeAID byte, limits Limits, logger *slog.Logger, release string, mfaCipher *mfa.Cipher) connHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits, logger: logger, release: release}
+	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits, logger: logger, release: release, mfaCipher: mfaCipher}
 }
 
 // newServers builds one Server per listener, all sharing handler and one
