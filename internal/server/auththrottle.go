@@ -159,6 +159,12 @@ func (s *Session) throttleInt(ctx context.Context, key string, def int) int {
 	return n
 }
 
+// maxThrottleInputSecs is the per-operand ceiling: if base seconds or the
+// effective multiplier alone reaches the 1-hour cap, the delay is already
+// maxed, so we can cap without multiplying — which keeps int64(base)*int64(mult)
+// from overflowing for pathological (unbounded) admin values.
+const maxThrottleInputSecs = int64(maxThrottleDelay / time.Second)
+
 // throttleDelay implements delay = baseSecs * min(count, maxTries) seconds. A
 // base or max-tries of 0 yields 0 (throttling disabled). The result is capped
 // at maxThrottleDelay to prevent int64 overflow for absurd admin values — an
@@ -175,15 +181,16 @@ func (s *Session) throttleDelay(count int, cfg throttleConfig) time.Duration {
 	if mult <= 0 {
 		return 0
 	}
+	// Clamp each operand before the multiply so the int64 product cannot
+	// overflow: if either alone reaches the ceiling, the delay is already maxed.
+	if int64(cfg.baseSecs) >= maxThrottleInputSecs || int64(mult) >= maxThrottleInputSecs {
+		return maxThrottleDelay
+	}
 	secs := int64(cfg.baseSecs) * int64(mult)
-	if secs > int64(maxThrottleDelay/time.Second) {
+	if secs >= maxThrottleInputSecs {
 		return maxThrottleDelay
 	}
-	d := time.Duration(secs) * time.Second
-	if d > maxThrottleDelay {
-		return maxThrottleDelay
-	}
-	return d
+	return time.Duration(secs) * time.Second
 }
 
 // failDelay records a failed attempt for username and returns how long to delay

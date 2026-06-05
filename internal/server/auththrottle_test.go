@@ -163,14 +163,25 @@ func TestThrottleDetail(t *testing.T) {
 
 func TestThrottleDelayCapsAtCeiling(t *testing.T) {
 	s := &Session{}
-	// Absurd values that would overflow time.Duration if multiplied naively.
-	cfg := throttleConfig{baseSecs: 2_000_000_000, maxTries: 2_000_000_000, window: testWindow}
-	got := s.throttleDelay(5, cfg)
-	if got != time.Hour {
-		t.Errorf("absurd config delay = %s, want 1h ceiling (never negative/zero)", got)
+	// Pairs whose int64 product overflows (each >= ~3.04e9). A naive
+	// int64*int64 wraps these to negative/garbage, which sleepFor would skip —
+	// silently disabling throttling. The delay must instead cap at 1h, never <= 0.
+	// count is set to p.max so that mult = min(count, maxTries) = maxTries, and
+	// the full base*maxTries product is computed (not a small count*base).
+	pairs := []struct{ base, max int }{
+		{2_000_000_000, 2_000_000_000}, // 4e18: in-range product, still way over ceiling
+		{3_500_000_000, 3_500_000_000}, // int64 product overflows
+		{4_000_000_000, 3_037_000_500}, // int64 product overflows
 	}
-	if got <= 0 {
-		t.Fatalf("delay must never be <= 0 for a real failure (got %s) — that would silently disable throttling", got)
+	for _, p := range pairs {
+		cfg := throttleConfig{baseSecs: p.base, maxTries: p.max, window: testWindow}
+		got := s.throttleDelay(p.max, cfg) // count == maxTries forces the full multiply
+		if got != time.Hour {
+			t.Errorf("base=%d max=%d: delay = %s, want 1h ceiling", p.base, p.max, got)
+		}
+		if got <= 0 {
+			t.Fatalf("base=%d max=%d: delay = %s; must never be <= 0 (would disable throttling)", p.base, p.max, got)
+		}
 	}
 }
 
