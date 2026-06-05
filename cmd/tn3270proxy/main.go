@@ -100,7 +100,7 @@ func runServe(args []string) error {
 		BridgeIdleExempt: cfg.Limits.BridgeIdleExempt,
 		Trust:            server.NewStoreTrustChecker(st),
 	}
-	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits, logger)
+	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits, logger, nil)
 	return server.ServeAll(listeners, handler, limits)
 }
 
