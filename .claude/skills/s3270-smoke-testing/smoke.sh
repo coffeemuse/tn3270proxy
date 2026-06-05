@@ -327,6 +327,99 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 10c cursor not homed to (3,17) after idle-logout"
 fi
 
+# --- 11. System Parameters admin form (GH #44): render, cursor on the form
+# field, and PF3 back to the admin menu. Walk: login admin -> service menu ->
+# admin menu (A) -> System Parameters (4) -> PF3. The form TITLE is
+# "TN3270 GATEWAY ADMIN: SYSTEM PARAMETERS" (a superstring of the admin-menu
+# title), so the PF3-return check keys off the admin menu's HELP line
+# ("Enter = select") which the form's help ("Enter = save") can't satisfy. ---
+s3 t11 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+String(A)
+Enter()
+Wait(5,InputField)
+Ascii()
+String(4)
+Enter()
+Wait(5,InputField)
+Ascii()
+PF(3)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "11a system parameters form renders" "SYSTEM PARAMETERS" "$WORK/t11.out"
+check "11b MOTD File label present" "MOTD File:" "$WORK/t11.out"
+# Form first input at row 3 col 17 (field.Col+1). Assert a 3 17 cursor AFTER the
+# admin menu's 19 8 line so the earlier login screen (also 3 17) can't satisfy it.
+if awk '/I 2 24 80 19 8 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' "$WORK/t11.out"; then
+  PASS=$((PASS+1)); echo "PASS: 11c form cursor on MOTD field (3,17) after admin menu"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 11c form cursor not at (3,17) after admin menu"
+fi
+# PF3 on the form returns to the admin menu: the form title appears first, then
+# the admin menu's distinctive help line ("Enter = select", not the form's save).
+if awk '/SYSTEM PARAMETERS/{seen=1} seen && /Enter = select/{ok=1} END{exit !ok}' "$WORK/t11.out"; then
+  PASS=$((PASS+1)); echo "PASS: 11d PF3 on form returns to admin menu"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 11d PF3 on form did not return to admin menu"
+fi
+
+# --- 12. System Parameters Enter-save behavior (GH #44): Enter SAVES IN PLACE
+# and stays on the form (it does NOT return to the admin menu); PF3 is the way
+# out. Then re-enter the form to prove the value persisted to the store. Walk:
+# type a path, Enter (stay), capture; PF3 -> admin menu, capture; re-enter (4),
+# capture. The form help line ("Enter = save") vs the admin menu help line
+# ("Enter = select") distinguishes the two screens in the accumulated output. ---
+s3 t12 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+String(A)
+Enter()
+Wait(5,InputField)
+String(4)
+Enter()
+Wait(5,InputField)
+String(/etc/motd.smoke)
+Enter()
+Wait(5,InputField)
+Ascii()
+PF(3)
+Wait(5,InputField)
+Ascii()
+String(4)
+Enter()
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "12a saved MOTD value present" "/etc/motd.smoke" "$WORK/t12.out"
+# Enter stays on the form: the typed value appears BEFORE we ever reach the
+# admin menu ("Enter = select"), i.e. Enter did not pop back to the menu.
+if awk '/Enter = select/{menu=1} /\/etc\/motd\.smoke/ && !menu {ok=1} END{exit !ok}' "$WORK/t12.out"; then
+  PASS=$((PASS+1)); echo "PASS: 12b Enter saves in place (stays on form, not back to menu)"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 12b Enter did not stay on the form after save"
+fi
+# Persisted: after PF3 to the admin menu, re-entering rebuilds the form from the
+# store and the saved value shows AFTER the admin menu line — proves read-back.
+if awk '/Enter = select/{menu=1} menu && /\/etc\/motd\.smoke/{ok=1} END{exit !ok}' "$WORK/t12.out"; then
+  PASS=$((PASS+1)); echo "PASS: 12c saved value persists and pre-populates on re-entry"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 12c saved value did not persist on re-entry"
+fi
+
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
 [ "$FAIL" -eq 0 ]

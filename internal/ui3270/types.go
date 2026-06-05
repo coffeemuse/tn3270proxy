@@ -97,4 +97,8 @@ type FormConfig struct {
 	Title  string
 	Fields []FormField
 	Submit func(ctx context.Context, values map[string]string) (errMsg string, fatal error)
+	// StayOnSave keeps the form on screen after a successful Submit (save in
+	// place) instead of returning to the caller; the user leaves via PF3
+	// (Cancel). Default false: a successful Submit returns, as add/edit forms do.
+	StayOnSave bool
 }
