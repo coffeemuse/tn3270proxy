@@ -27,6 +27,13 @@ import (
 
 func tcp(addr string) net.Addr { return &net.TCPAddr{IP: net.ParseIP(addr), Port: 23} }
 
+// badAddr is a net.Addr whose String() has no parseable host:port, exercising
+// the Contains guard for an unparseable remote address.
+type badAddr struct{}
+
+func (badAddr) Network() string { return "bad" }
+func (badAddr) String() string  { return "garbage-no-port" }
+
 func TestTrustListContains(t *testing.T) {
 	tl := trustList{
 		netip.MustParsePrefix("10.0.0.0/24"),
@@ -44,6 +51,7 @@ func TestTrustListContains(t *testing.T) {
 		{tcp("2001:db8::1"), true},
 		{tcp("2001:dead::1"), false},
 		{nil, false},
+		{badAddr{}, false}, // unparseable remote addr → not trusted
 	}
 	for _, c := range cases {
 		if got := tl.Contains(c.addr); got != c.want {

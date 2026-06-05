@@ -48,7 +48,7 @@ type TLSListener struct {
 // listeners (slowloris/DoS hardening, GH issue #1).
 type Limits struct {
 	PreAuthIdle      time.Duration  // idle deadline before authentication
-	Idle             time.Duration  // idle deadline after authentication (incl. bridged sessions)
+	Idle             time.Duration  // idle deadline after authentication (incl. bridges unless BridgeIdleExempt)
 	MaxConns         int            // global concurrent-connection cap
 	MaxPerIP         int            // per-client-IP cap; 0 disables
 	PreAuthMax       time.Duration  // absolute deadline to authenticate (GH #18)

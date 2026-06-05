@@ -36,7 +36,7 @@ import (
 // values disable the corresponding control.
 type Limits struct {
 	PreAuthIdle      time.Duration  // idle deadline before login
-	Idle             time.Duration  // idle deadline after login (incl. bridged sessions)
+	Idle             time.Duration  // idle deadline after login (incl. bridges unless BridgeIdleExempt)
 	MaxConns         int            // global concurrent-connection cap
 	MaxPerIP         int            // per-client-IP cap
 	PreAuthMax       time.Duration  // absolute deadline to authenticate (GH #18)

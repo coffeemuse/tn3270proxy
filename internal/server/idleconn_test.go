@@ -177,3 +177,26 @@ func TestIdleConnExemptWindowNeverFires(t *testing.T) {
 		t.Errorf("exempt read returned too early (%v)", elapsed)
 	}
 }
+
+// A second setPreAuth must install a FRESH ceiling, not keep the old one — this
+// is what lets every return to the login screen get a full pre_auth_max budget.
+func TestIdleConnSetPreAuthReArmsFreshCeiling(t *testing.T) {
+	c, srv := net.Pipe()
+	defer c.Close()
+	defer srv.Close()
+	ic := newIdleConn(c, 10*time.Second)
+	ic.setPreAuth(10*time.Second, 40*time.Millisecond) // tight ceiling...
+	ic.setPreAuth(10*time.Second, 10*time.Second)      // ...re-armed far out
+
+	go func() {
+		time.Sleep(100 * time.Millisecond) // past the original 40ms ceiling
+		srv.Write([]byte{0x00})
+	}()
+	start := time.Now()
+	if _, err := ic.Read(make([]byte, 1)); err != nil {
+		t.Fatalf("read errored after ceiling re-armed wider: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 80*time.Millisecond {
+		t.Errorf("read returned too early (%v); re-armed ceiling should be far out", elapsed)
+	}
+}
