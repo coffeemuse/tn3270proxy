@@ -420,6 +420,86 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 12c saved value did not persist on re-entry"
 fi
 
+# --- 13. MOTD/NEWS gate (GH #45): the MOTD screen renders after login, pages
+# with ENTER, and ignores PA3/PF3 (both silent no-ops on the gate). The MOTD
+# screen is all protected text with the cursor homed to {0,0} — no input field —
+# so Wait(InputField) may never be satisfied on it; use Wait(Unlock) after AID
+# keys. The MOTD file is 25 lines, which on a MOD 2 (22 text lines/page) spans
+# TWO pages, so two ENTERs are needed to clear the gate and reach the menu.
+#
+# A 25-line MOTD fixture: a "*** SYSTEM NEWS ***" banner plus 24 numbered lines.
+{ echo "*** SYSTEM NEWS ***"; for i in $(seq 1 24); do echo "NEWS LINE $i"; done; } > "$WORK/motd.txt"
+#
+# Scenario 12 left MOTD_FILE set to /etc/motd.smoke in front.db; re-point it at
+# the real fixture via the System Parameters admin form. The MOTD field is the
+# only field on the form (cursor lands on it), so EraseEOF() clears the stale
+# value before we type the real path. The path is interpolated into the macro
+# here because s3() can't expand $WORK itself.
+s3 t13set <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+String(A)
+Enter()
+Wait(5,InputField)
+String(4)
+Enter()
+Wait(5,InputField)
+EraseEOF()
+String($WORK/motd.txt)
+Enter()
+Wait(5,InputField)
+Quit()
+EOF
+
+# 13a/13b: alice logs in, lands on MOTD page 1, presses PA3 then PF3 (both must
+# be inert — must NOT advance to the menu), then Quits WITHOUT pressing Enter.
+s3 t13a <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(alice)
+Tab()
+String(changeme)
+Enter()
+Wait(Unlock)
+Wait(1,seconds)
+Ascii()
+PA(3)
+Wait(1,seconds)
+Ascii()
+PF(3)
+Wait(1,seconds)
+Ascii()
+Quit()
+EOF
+check  "13a MOTD page 1 shown after login"        "SYSTEM NEWS"          "$WORK/t13a.out"
+ncheck "13b menu NOT reached via PA3/PF3 (inert)" "TN3270 GATEWAY MENU"  "$WORK/t13a.out"
+
+# 13c: alice logs in, presses ENTER twice (page1 -> page2 -> menu); the menu
+# (an input-field screen) is reached after the gate clears.
+s3 t13b <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(alice)
+Tab()
+String(changeme)
+Enter()
+Wait(Unlock)
+Wait(1,seconds)
+Enter()
+Wait(Unlock)
+Wait(1,seconds)
+Enter()
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "13c ENTER pages through MOTD to the menu" "TN3270 GATEWAY MENU" "$WORK/t13b.out"
+
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
 [ "$FAIL" -eq 0 ]
