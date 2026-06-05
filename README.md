@@ -8,6 +8,18 @@ to the selected service. See `docs/superpowers/specs/` for the design.
 
     go build -o bin/tn3270proxy ./cmd/tn3270proxy
 
+For a release build with version stamping (replaces the `dev` default):
+
+    go build -ldflags "-X main.version=v1.2.3" -o bin/tn3270proxy ./cmd/tn3270proxy
+
+Print the resolved version:
+
+    ./bin/tn3270proxy version
+
+Plain `go build` without ldflags still reports a useful version — a short VCS commit
+hash from `runtime/debug.ReadBuildInfo`, with a `-dirty` suffix when the working tree
+has uncommitted changes.
+
 ## Bootstrap (first admin account)
 
 A fresh database has no admin, so the admin UI (menu entry `A`) is unreachable. Create the

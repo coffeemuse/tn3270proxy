@@ -52,6 +52,10 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "bootstrap" {
 		return runBootstrap(args[1:], os.Stdout)
 	}
+	if len(args) > 0 && args[0] == "version" {
+		runVersion()
+		return nil
+	}
 	if len(args) > 0 && args[0] == "serve" {
 		args = args[1:]
 	}
@@ -70,6 +74,8 @@ func runServe(args []string) error {
 		return err
 	}
 	defer closer.Close()
+
+	logger.Info("starting", "version", resolvedVersion())
 
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
