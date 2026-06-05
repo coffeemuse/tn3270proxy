@@ -68,3 +68,25 @@ func TestGeometryMenuCapacity(t *testing.T) {
 		}
 	}
 }
+
+func TestNewsLinesPerPage(t *testing.T) {
+	cases := []struct {
+		name string
+		geom Geometry
+		want int
+	}{
+		{"mod2", Geometry{Rows: 24, Cols: 80}, 22},
+		{"mod3", Geometry{Rows: 32, Cols: 80}, 30},
+		{"mod4", Geometry{Rows: 43, Cols: 80}, 41},
+		{"mod5", Geometry{Rows: 27, Cols: 132}, 25},
+		{"zero normalizes to mod2", Geometry{}, 22},
+		{"sub-mod2 normalizes to mod2", Geometry{Rows: 10, Cols: 40}, 22},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.geom.NewsLinesPerPage(); got != tc.want {
+				t.Errorf("NewsLinesPerPage() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
