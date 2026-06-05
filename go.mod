@@ -3,6 +3,7 @@ module github.com/CoffeeMuse/tn3270proxy
 go 1.25.0
 
 require (
+	github.com/pquerna/otp v1.5.0
 	github.com/racingmars/go3270 v0.9.13
 	golang.org/x/crypto v0.52.0
 	modernc.org/sqlite v1.51.0
@@ -14,7 +15,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/pquerna/otp v1.5.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	modernc.org/libc v1.72.3 // indirect
