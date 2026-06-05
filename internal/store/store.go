@@ -305,17 +305,9 @@ func (s *Store) CreateService(ctx context.Context, name, description, host strin
 	if err := ValidateDescription(description); err != nil {
 		return 0, err
 	}
-	tlsInt := 0
-	if tls {
-		tlsInt = 1
-	}
-	verifyInt := 0
-	if verify {
-		verifyInt = 1
-	}
 	return s.insertOrGet(ctx,
 		"INSERT OR IGNORE INTO services (name, description, host, port, tls, tls_verify) VALUES (?, ?, ?, ?, ?, ?)",
-		[]any{name, description, host, port, tlsInt, verifyInt},
+		[]any{name, description, host, port, tls, verify},
 		"SELECT id FROM services WHERE name = ?",
 		[]any{name})
 }

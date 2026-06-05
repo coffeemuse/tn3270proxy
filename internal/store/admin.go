@@ -172,16 +172,9 @@ func (s *Store) UpdateService(ctx context.Context, id int64, name, description, 
 	if err := ValidateDescription(description); err != nil {
 		return err
 	}
-	tlsInt, verifyInt := 0, 0
-	if tls {
-		tlsInt = 1
-	}
-	if verify {
-		verifyInt = 1
-	}
 	return s.execExpectingRow(ctx,
 		"UPDATE services SET name = ?, description = ?, host = ?, port = ?, tls = ?, tls_verify = ? WHERE id = ?",
-		name, description, host, port, tlsInt, verifyInt, id)
+		name, description, host, port, tls, verify, id)
 }
 
 // execExpectingRow runs a statement that must affect exactly one row, mapping
@@ -201,42 +194,39 @@ func (s *Store) execExpectingRow(ctx context.Context, query string, args ...any)
 
 // DeleteUser removes the user and its group memberships in one transaction.
 func (s *Store) DeleteUser(ctx context.Context, userID int64) error {
-	return s.deleteCascade(ctx, [][2]any{
-		{"DELETE FROM user_groups WHERE user_id = ?", userID},
-		{"DELETE FROM users WHERE id = ?", userID},
-	})
+	return s.deleteCascade(ctx, userID,
+		"DELETE FROM user_groups WHERE user_id = ?",
+		"DELETE FROM users WHERE id = ?")
 }
 
 // DeleteGroup removes the group, its memberships, and its service links in one
 // transaction. Callers enforce the ZZ* reservation; the store stays mechanical.
 func (s *Store) DeleteGroup(ctx context.Context, groupID int64) error {
-	return s.deleteCascade(ctx, [][2]any{
-		{"DELETE FROM user_groups WHERE group_id = ?", groupID},
-		{"DELETE FROM group_services WHERE group_id = ?", groupID},
-		{"DELETE FROM groups WHERE id = ?", groupID},
-	})
+	return s.deleteCascade(ctx, groupID,
+		"DELETE FROM user_groups WHERE group_id = ?",
+		"DELETE FROM group_services WHERE group_id = ?",
+		"DELETE FROM groups WHERE id = ?")
 }
 
 // DeleteService removes the service and its group links in one transaction.
 func (s *Store) DeleteService(ctx context.Context, serviceID int64) error {
-	return s.deleteCascade(ctx, [][2]any{
-		{"DELETE FROM group_services WHERE service_id = ?", serviceID},
-		{"DELETE FROM services WHERE id = ?", serviceID},
-	})
+	return s.deleteCascade(ctx, serviceID,
+		"DELETE FROM group_services WHERE service_id = ?",
+		"DELETE FROM services WHERE id = ?")
 }
 
-// deleteCascade runs each statement in a single transaction. Deleting an
-// absent id is a silent no-op (unlike SetPassword/UpdateService): admin callers
-// always delete rows they just listed, so a missing id means concurrent removal,
-// not a caller bug.
-func (s *Store) deleteCascade(ctx context.Context, stmts [][2]any) error {
+// deleteCascade runs each query in a single transaction, binding the same id to
+// each. Deleting an absent id is a silent no-op (unlike SetPassword/
+// UpdateService): admin callers always delete rows they just listed, so a
+// missing id means concurrent removal, not a caller bug.
+func (s *Store) deleteCascade(ctx context.Context, id int64, queries ...string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	for _, st := range stmts {
-		if _, err := tx.ExecContext(ctx, st[0].(string), st[1]); err != nil {
+	for _, q := range queries {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
 			return err
 		}
 	}

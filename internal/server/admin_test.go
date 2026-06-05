@@ -580,7 +580,7 @@ func TestAdminServiceEditPrefillAndUpdate(t *testing.T) {
 	if form.Fields[0].Value != "PROD" || form.Fields[1].Value != "Production" || form.Fields[2].Value != "h" || form.Fields[3].Value != "23" {
 		t.Errorf("pre-fill = %+v", form.Fields)
 	}
-	svc, _ := f.store.GetService(ctx, ids["prod"])
+	svc, _ := f.store.(*store.Store).GetService(ctx, ids["prod"])
 	if svc.Host != "h2" || svc.Port != 1023 || !svc.TLS || !svc.TLSVerify {
 		t.Errorf("updated = %+v", svc)
 	}
@@ -695,7 +695,7 @@ func TestAdminServiceDeleteCascades(t *testing.T) {
 	if err := f.Run(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.store.GetService(ctx, ids["prod"]); !errors.Is(err, store.ErrNotFound) {
+	if _, err := f.store.(*store.Store).GetService(ctx, ids["prod"]); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("PROD should be deleted: %v", err)
 	}
 }
@@ -707,7 +707,7 @@ func TestAdminServiceDeleteCancel(t *testing.T) {
 	}
 	f, ids := newAdminFixture(t, p)
 	f.Run(context.Background(), nil)
-	if _, err := f.store.GetService(context.Background(), ids["prod"]); err != nil {
+	if _, err := f.store.(*store.Store).GetService(context.Background(), ids["prod"]); err != nil {
 		t.Errorf("PROD should survive PF3 cancel: %v", err)
 	}
 }
@@ -719,7 +719,7 @@ func TestAdminServiceDeleteOtherActionCancelsConfirm(t *testing.T) {
 	}
 	f, ids := newAdminFixture(t, p)
 	f.Run(context.Background(), nil)
-	if _, err := f.store.GetService(context.Background(), ids["prod"]); err != nil {
+	if _, err := f.store.(*store.Store).GetService(context.Background(), ids["prod"]); err != nil {
 		t.Errorf("PROD should survive a non-Enter action after D: %v", err)
 	}
 }
