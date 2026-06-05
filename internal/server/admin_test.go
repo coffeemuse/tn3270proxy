@@ -243,6 +243,97 @@ func TestAdminSetPassword(t *testing.T) {
 	}
 }
 
+func TestAdminEditUserDetails(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}}, // S on alice (row 0)
+		forms: []ui3270.FormAction{{Values: map[string]string{
+			screens.FieldFullName: "Alice Doe",
+			screens.FieldEmail:    "Alice@Example.COM",
+			// password + retype blank → keep current
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	u, err := f.store.GetUserByUsername(ctx, "alice")
+	if err != nil {
+		t.Fatalf("alice: %v", err)
+	}
+	if u.FullName != "Alice Doe" || u.Email != "alice@example.com" {
+		t.Errorf("details = %q/%q", u.FullName, u.Email)
+	}
+	if u.PasswordHash != "h" {
+		t.Errorf("blank password should keep current hash, got %q", u.PasswordHash)
+	}
+}
+
+func TestAdminEditUserChangesPassword(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}},
+		forms: []ui3270.FormAction{{Values: map[string]string{
+			screens.FieldPassword: "newpw", screens.FieldRetype: "newpw",
+		}}},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.Authenticate(ctx, f.store, "alice", "newpw"); err != nil {
+		t.Errorf("authenticate with new password: %v", err)
+	}
+}
+
+func TestAdminEditUserUsernameReadOnly(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}},
+		forms: []ui3270.FormAction{{Cancel: true}},
+	}
+	f, _ := newAdminFixture(t, p)
+	if err := f.Run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	form := p.gotForms[len(p.gotForms)-1]
+	var uf *ui3270.FormField
+	for i := range form.Fields {
+		if form.Fields[i].Name == screens.FieldUsername {
+			uf = &form.Fields[i]
+		}
+	}
+	if uf == nil {
+		t.Fatal("username field missing from edit form")
+	}
+	if !uf.ReadOnly {
+		t.Errorf("username should be read-only on edit")
+	}
+	if uf.Value != "ALICE" {
+		t.Errorf("username value = %q, want ALICE", uf.Value)
+	}
+}
+
+func TestAdminEditUserInvalidEmail(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}},
+		forms: []ui3270.FormAction{
+			{Values: map[string]string{screens.FieldEmail: "not-an-email"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	if err := f.Run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if msg := p.gotForms[len(p.gotForms)-1].ErrMsg; msg == "" {
+		t.Errorf("expected a validation error message, got empty")
+	}
+}
+
 func TestAdminDeleteUserConfirmFlow(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},
@@ -983,7 +1074,7 @@ func TestAdminAuditUserCreate(t *testing.T) {
 	var got []store.AuditEvent
 	f.audit = func(_ context.Context, ev store.AuditEvent) { got = append(got, ev) }
 
-	if err := f.userAdd(context.Background(), p); err != nil {
+	if err := f.userEdit(context.Background(), p, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].Kind != store.AuditAdmin ||
@@ -1006,7 +1097,7 @@ func TestAdminAuditValidationFailureRecordsNothing(t *testing.T) {
 	var got []store.AuditEvent
 	f.audit = func(_ context.Context, ev store.AuditEvent) { got = append(got, ev) }
 
-	if err := f.userAdd(context.Background(), p); err != nil {
+	if err := f.userEdit(context.Background(), p, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 0 {
