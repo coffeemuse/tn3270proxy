@@ -55,6 +55,11 @@ type Presenter interface {
 	// non-nil error is a disconnect or an idle timeout (classified by the
 	// caller). News is only called with at least one page.
 	News(conn net.Conn, term Term, pages [][]string) error
+	// EnrollMFA shows the chunked secret and prompts for a confirmation code.
+	// Returns the entered code; quit=true on PF3 (cancel to login).
+	EnrollMFA(conn net.Conn, term Term, issuer, account, chunkedSecret, errMsg string) (code string, quit bool, err error)
+	// VerifyMFA prompts an enrolled user for a code. quit=true on PF3.
+	VerifyMFA(conn net.Conn, term Term, errMsg string) (code string, quit bool, err error)
 }
 
 // BackendTLS expresses a service's backend-TLS intent. The server layer keeps

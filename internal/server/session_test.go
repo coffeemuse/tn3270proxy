@@ -48,12 +48,22 @@ type fakePresenter struct {
 	gotTerms     []Term       // every term passed to Login/Menu, in call order
 	newsCalls    [][][]string // pages passed to each News call, in order
 	newsResults  []error      // queued News return values; default nil
+	enrolls      []mfaResult
+	verifies     []mfaResult
+	enrollErrors []string // errMsg passed to each EnrollMFA call
+	verifyErrors []string // errMsg passed to each VerifyMFA call
+	gotChunked   []string // chunkedSecret passed to each EnrollMFA call
 }
 
 type loginResult struct {
 	user, pass string
 	quit       bool
 	err        error
+}
+type mfaResult struct {
+	code string
+	quit bool
+	err  error
 }
 type menuResult struct {
 	sel   *store.Service
@@ -99,6 +109,21 @@ func (f *fakePresenter) News(conn net.Conn, term Term, pages [][]string) error {
 		return r
 	}
 	return nil
+}
+
+func (f *fakePresenter) EnrollMFA(conn net.Conn, term Term, issuer, account, chunkedSecret, errMsg string) (string, bool, error) {
+	f.enrollErrors = append(f.enrollErrors, errMsg)
+	f.gotChunked = append(f.gotChunked, chunkedSecret)
+	r := f.enrolls[0]
+	f.enrolls = f.enrolls[1:]
+	return r.code, r.quit, r.err
+}
+
+func (f *fakePresenter) VerifyMFA(conn net.Conn, term Term, errMsg string) (string, bool, error) {
+	f.verifyErrors = append(f.verifyErrors, errMsg)
+	r := f.verifies[0]
+	f.verifies = f.verifies[1:]
+	return r.code, r.quit, r.err
 }
 
 type fakeBridger struct {
