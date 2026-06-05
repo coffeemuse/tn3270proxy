@@ -336,6 +336,37 @@ func ValidateFullName(name string) error {
 	return nil
 }
 
+// NormalizeEmail trims surrounding space and lower-cases the address, so the
+// column is a clean key for future email lookups. Empty in, empty out.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// ValidateEmail does a deliberately permissive "looks like an address" check:
+// empty is allowed (the field is optional); otherwise exactly one "@", a
+// non-empty local part, a domain that is non-empty and contains a ".", and no
+// spaces. This is intentionally loose and is expected to loosen further later
+// for legacy / pre-SMTP address forms — keep the rule in this one function.
+func ValidateEmail(email string) error {
+	if email == "" {
+		return nil
+	}
+	if strings.ContainsAny(email, " \t") {
+		return errors.New("email must not contain spaces")
+	}
+	local, domain, found := strings.Cut(email, "@")
+	if !found || strings.Contains(domain, "@") {
+		return errors.New("email must contain exactly one @")
+	}
+	if local == "" || domain == "" {
+		return errors.New("email must have text before and after the @")
+	}
+	if !strings.Contains(domain, ".") {
+		return errors.New("email domain must contain a .")
+	}
+	return nil
+}
+
 // CreateService inserts a service, or returns the existing service's id.
 func (s *Store) CreateService(ctx context.Context, name, description, host string, port int, tls, verify bool) (int64, error) {
 	name, err := NormalizeServiceName(name)
