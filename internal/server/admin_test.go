@@ -186,6 +186,33 @@ func TestAdminUserAddDuplicatePreservesInput(t *testing.T) {
 	}
 }
 
+func TestAdminUserAddInvalidEmailPreservesUsername(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 1}, {back: true}},
+		lists: []ui3270.ListAction{{PF: 4}, {PF: 3}}, // PF4 = add (create mode)
+		forms: []ui3270.FormAction{
+			{Values: map[string]string{
+				screens.FieldUsername: "carol",
+				screens.FieldEmail:    "not-an-email",
+				screens.FieldPassword: "pw",
+				screens.FieldRetype:   "pw",
+			}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	if err := f.Run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	last := p.gotForms[len(p.gotForms)-1]
+	if last.ErrMsg == "" {
+		t.Errorf("expected validation error, got none")
+	}
+	if last.Fields[0].Value != "carol" {
+		t.Errorf("username not preserved on validation error: %+v", last.Fields[0])
+	}
+}
+
 func TestAdminUserAddPasswordMismatch(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},

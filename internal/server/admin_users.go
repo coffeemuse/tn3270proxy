@@ -174,6 +174,9 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 			emailVal := vals[screens.FieldEmail]
 			fields[1].Value = fullNameVal // preserve typed input on re-render
 			fields[2].Value = emailVal
+			if create {
+				fields[0].Value = vals[screens.FieldUsername] // preserve typed username on re-render
+			}
 			if err := store.ValidateFullName(fullNameVal); err != nil {
 				return "FULL NAME TOO LONG (MAX 40)", nil
 			}
@@ -181,7 +184,7 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 				return "INVALID EMAIL ADDRESS", nil
 			}
 			if create {
-				return f.userCreate(ctx, vals, fields, fullNameVal, emailVal)
+				return f.userCreate(ctx, vals, fullNameVal, emailVal)
 			}
 			return f.userSaveEdit(ctx, *u, vals, fullNameVal, emailVal)
 		},
@@ -190,9 +193,8 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 
 // userCreate handles the create-mode submit: requires + confirms password,
 // rejects duplicates, then creates the user and writes the optional details.
-func (f *adminFlow) userCreate(ctx context.Context, vals map[string]string, fields []ui3270.FormField, fullName, email string) (string, error) {
+func (f *adminFlow) userCreate(ctx context.Context, vals map[string]string, fullName, email string) (string, error) {
 	username := vals[screens.FieldUsername]
-	fields[0].Value = username // preserve typed input on re-render
 	if username == "" {
 		return "USERID IS REQUIRED", nil
 	}
