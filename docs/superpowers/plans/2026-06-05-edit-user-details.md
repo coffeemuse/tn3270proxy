@@ -360,12 +360,16 @@ func (s *Store) UpdateUserDetails(ctx context.Context, userID int64, fullName, e
 	if err := ValidateFullName(fullName); err != nil {
 		return err
 	}
+	// Normalize BEFORE validating: ValidateEmail rejects surrounding spaces, but
+	// callers (and the test) may pass an untrimmed value that is valid once
+	// trimmed/lower-cased.
+	email = NormalizeEmail(email)
 	if err := ValidateEmail(email); err != nil {
 		return err
 	}
 	return s.execExpectingRow(ctx,
 		"UPDATE users SET full_name = ?, email = ? WHERE id = ?",
-		fullName, NormalizeEmail(email), userID)
+		fullName, email, userID)
 }
 ```
 
