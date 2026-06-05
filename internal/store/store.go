@@ -327,6 +327,15 @@ func ValidateDescription(desc string) error {
 	return nil
 }
 
+// ValidateFullName checks the optional display name: empty is allowed; a
+// non-empty value reuses the description length cap (MaxDescriptionLen bytes).
+func ValidateFullName(name string) error {
+	if len(name) > MaxDescriptionLen {
+		return errors.New("full name must be 40 characters or fewer")
+	}
+	return nil
+}
+
 // CreateService inserts a service, or returns the existing service's id.
 func (s *Store) CreateService(ctx context.Context, name, description, host string, port int, tls, verify bool) (int64, error) {
 	name, err := NormalizeServiceName(name)

@@ -22,8 +22,22 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
+
+func TestValidateFullName(t *testing.T) {
+	if err := ValidateFullName(""); err != nil {
+		t.Errorf("empty full name should be allowed: %v", err)
+	}
+	if err := ValidateFullName("Robert Lawrence"); err != nil {
+		t.Errorf("normal full name rejected: %v", err)
+	}
+	long := strings.Repeat("a", MaxDescriptionLen+1)
+	if err := ValidateFullName(long); err == nil {
+		t.Errorf("over-length full name should be rejected")
+	}
+}
 
 func TestUserAndGroupRoundTrip(t *testing.T) {
 	ctx := context.Background()
