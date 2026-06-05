@@ -997,3 +997,85 @@ func TestMFADisabledWhenNoCipher(t *testing.T) {
 		t.Fatal("with MFA cipher nil, user should pass straight to the menu")
 	}
 }
+
+// fixedNow returns a deterministic clock for throttle tests.
+func fixedNow() time.Time { return time.Unix(1_700_000_000, 0) }
+
+func TestLoginThrottleBacksOffAndResets(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "bad"},  // fail 1 → 2s
+			{user: "alice", pass: "bad"},  // fail 2 → 4s
+			{user: "alice", pass: "good"}, // success → reset
+			{quit: true},                  // logoff at next login
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.Throttle = newAuthThrottle()
+	s.Now = fixedNow
+	var slept []time.Duration
+	s.Sleep = func(d time.Duration) { slept = append(slept, d) }
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	want := []time.Duration{2 * time.Second, 4 * time.Second}
+	if len(slept) != len(want) || slept[0] != want[0] || slept[1] != want[1] {
+		t.Fatalf("delays = %v, want %v", slept, want)
+	}
+	if n, ok := s.Throttle.peek("alice"); ok {
+		t.Errorf("counter not reset on success: count=%d", n)
+	}
+}
+
+func TestLoginThrottleDisabledWhenBaseZero(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins:   []loginResult{{user: "alice", pass: "bad"}, {quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.Throttle = newAuthThrottle()
+	s.Now = fixedNow
+	var slept []time.Duration
+	s.Sleep = func(d time.Duration) { slept = append(slept, d) }
+	if err := s.Store.SetConfig(context.Background(), "AUTH_DELAY_BASE_SECS", "0"); err != nil {
+		t.Fatal(err)
+	}
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(slept) != 0 {
+		t.Errorf("base=0 should disable throttling, slept=%v", slept)
+	}
+}
+
+func TestLoginThrottleEnumerationSafe(t *testing.T) {
+	// A first failure for an unknown username and for a known one must produce
+	// the same delay — the throttle must not reveal whether a user exists.
+	delayFor := func(user string) time.Duration {
+		p := &fakePresenter{
+			termType: "IBM-3278-2-E",
+			logins:   []loginResult{{user: user, pass: "bad"}, {quit: true}},
+		}
+		s := newTestSession(t, p, &fakeBridger{})
+		s.Throttle = newAuthThrottle()
+		s.Now = fixedNow
+		var slept []time.Duration
+		s.Sleep = func(d time.Duration) { slept = append(slept, d) }
+		client, _ := net.Pipe()
+		defer client.Close()
+		s.Run(client)
+		if len(slept) != 1 {
+			t.Fatalf("%s: expected one delay, got %v", user, slept)
+		}
+		return slept[0]
+	}
+	if delayFor("ghost") != delayFor("alice") {
+		t.Error("unknown vs known username produced different delays")
+	}
+}

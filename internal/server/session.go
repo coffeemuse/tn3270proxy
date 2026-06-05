@@ -586,6 +586,7 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		}
 		identity, err := s.Authenticate(ctx, s.Store, user, pass)
 		if err == nil {
+			s.Throttle.Reset(user)
 			aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthOK, Username: identity.Username})
 			return identity, true, ""
 		}
@@ -599,10 +600,14 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 			errMsg = "Temporary error; try again"
 			continue
 		}
-		// Auth fail: log the attempted username only — never the password.
+		// Auth fail: per-username backoff (GH #48). Compute before auditing so
+		// the audit detail records the applied delay; never log the password.
+		delay, count := s.failDelay(ctx, user)
 		s.log().Warn("auth failed", "user", user)
 		// Attempted username only — never the password (CLAUDE.md hard rule).
-		aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthFail, Username: user})
+		aud.record(ctx, store.AuditEvent{
+			Kind: store.AuditAuthFail, Username: user, Detail: throttleDetail("", delay, count)})
+		s.sleepFor(delay)
 		// Generic message — never reveals whether the username exists (spec §7).
 		errMsg = "Invalid userid or password"
 	}
