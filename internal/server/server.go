@@ -56,6 +56,8 @@ type Server struct {
 	Handler  connHandler
 	// Limiter bounds concurrent connections; nil means unlimited.
 	Limiter *connLimiter
+	// Trust exempts matching client IPs from the per-IP cap (GH #18).
+	Trust trustList
 }
 
 // Serve runs the accept loop until the listener is closed. The global
@@ -70,24 +72,25 @@ func (s *Server) Serve() error {
 			s.Limiter.releaseGlobal()
 			return err
 		}
-		if !s.Limiter.admitIP(conn.RemoteAddr()) {
+		trusted := s.Trust.Contains(conn.RemoteAddr())
+		if !s.Limiter.admitIP(conn.RemoteAddr(), trusted) {
 			log.Printf("per-ip connection cap reached; rejecting %s", conn.RemoteAddr())
 			conn.Close()
 			s.Limiter.releaseGlobal()
 			continue
 		}
 		log.Printf("accepted connection from %s", conn.RemoteAddr())
-		go s.handle(conn)
+		go s.handle(conn, trusted)
 	}
 }
 
-func (s *Server) handle(conn net.Conn) {
+func (s *Server) handle(conn net.Conn, trusted bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("session panic from %s: %v", conn.RemoteAddr(), r)
 		}
 		conn.Close()
-		s.Limiter.releaseIP(conn.RemoteAddr())
+		s.Limiter.releaseIP(conn.RemoteAddr(), trusted)
 		s.Limiter.releaseGlobal()
 	}()
 	s.Handler.Handle(conn)
@@ -141,9 +144,10 @@ func newServers(listeners []net.Listener, handler connHandler, limits Limits) []
 	if limits.MaxConns > 0 {
 		limiter = newConnLimiter(limits.MaxConns, limits.MaxPerIP)
 	}
+	trust := trustList(limits.TrustedCIDRs)
 	servers := make([]*Server, len(listeners))
 	for i, ln := range listeners {
-		servers[i] = &Server{Listener: ln, Handler: handler, Limiter: limiter}
+		servers[i] = &Server{Listener: ln, Handler: handler, Limiter: limiter, Trust: trust}
 	}
 	return servers
 }
