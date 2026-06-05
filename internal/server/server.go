@@ -23,7 +23,6 @@ import (
 	"errors"
 	"log"
 	"net"
-	"net/netip"
 	"sync"
 	"time"
 
@@ -35,13 +34,15 @@ import (
 // layer; it mirrors config.Limits without importing the config package. Zero
 // values disable the corresponding control.
 type Limits struct {
-	PreAuthIdle      time.Duration  // idle deadline before login
-	Idle             time.Duration  // idle deadline after login (incl. bridges unless BridgeIdleExempt)
-	MaxConns         int            // global concurrent-connection cap
-	MaxPerIP         int            // per-client-IP cap
-	PreAuthMax       time.Duration  // absolute deadline to authenticate (GH #18)
-	TrustedCIDRs     []netip.Prefix // trusted client networks
-	BridgeIdleExempt bool           // no idle timeout during an active bridge
+	PreAuthIdle      time.Duration // idle deadline before login
+	Idle             time.Duration // idle deadline after login (incl. bridges unless BridgeIdleExempt)
+	MaxConns         int           // global concurrent-connection cap
+	MaxPerIP         int           // per-client-IP cap
+	PreAuthMax       time.Duration // absolute deadline to authenticate (GH #18)
+	BridgeIdleExempt bool          // no idle timeout during an active bridge
+	// Trust decides whether a connecting client is exempt from the pre-auth
+	// timers and the per-IP connection cap. nil trusts nobody.
+	Trust TrustChecker
 }
 
 // connHandler handles a single accepted connection.
@@ -56,8 +57,9 @@ type Server struct {
 	Handler  connHandler
 	// Limiter bounds concurrent connections; nil means unlimited.
 	Limiter *connLimiter
-	// Trust exempts matching client IPs from the per-IP cap (GH #18).
-	Trust trustList
+	// Trust exempts matching client IPs from the pre-auth timers and the
+	// per-IP cap (GH #18). nil trusts nobody.
+	Trust TrustChecker
 }
 
 // Serve runs the accept loop until the listener is closed. The global
@@ -72,7 +74,7 @@ func (s *Server) Serve() error {
 			s.Limiter.releaseGlobal()
 			return err
 		}
-		trusted := s.Trust.Contains(conn.RemoteAddr())
+		trusted := s.Trust != nil && s.Trust.IsTrusted(conn.RemoteAddr())
 		if !s.Limiter.admitIP(conn.RemoteAddr(), trusted) {
 			log.Printf("per-ip connection cap reached; rejecting %s", conn.RemoteAddr())
 			conn.Close()
@@ -114,6 +116,7 @@ func wrapIdle(conn net.Conn, preAuthIdle time.Duration) net.Conn {
 // sessionFor builds the Session for a connection from addr, deciding trust and
 // carrying the regime knobs from limits.
 func (h sessionHandler) sessionFor(addr net.Addr) *Session {
+	trusted := h.limits.Trust != nil && h.limits.Trust.IsTrusted(addr)
 	return &Session{
 		Store:            h.store,
 		Authenticate:     auth.Authenticate,
@@ -125,7 +128,7 @@ func (h sessionHandler) sessionFor(addr net.Addr) *Session {
 		PreAuthIdle:      h.limits.PreAuthIdle,
 		Idle:             h.limits.Idle,
 		PreAuthMax:       h.limits.PreAuthMax,
-		Trusted:          trustList(h.limits.TrustedCIDRs).Contains(addr),
+		Trusted:          trusted,
 		BridgeIdleExempt: h.limits.BridgeIdleExempt,
 	}
 }
@@ -149,10 +152,9 @@ func newServers(listeners []net.Listener, handler connHandler, limits Limits) []
 	if limits.MaxConns > 0 {
 		limiter = newConnLimiter(limits.MaxConns, limits.MaxPerIP)
 	}
-	trust := trustList(limits.TrustedCIDRs)
 	servers := make([]*Server, len(listeners))
 	for i, ln := range listeners {
-		servers[i] = &Server{Listener: ln, Handler: handler, Limiter: limiter, Trust: trust}
+		servers[i] = &Server{Listener: ln, Handler: handler, Limiter: limiter, Trust: limits.Trust}
 	}
 	return servers
 }

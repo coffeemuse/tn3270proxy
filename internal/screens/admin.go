@@ -33,6 +33,8 @@ const (
 	FieldPort        = "port"        // service form inputs
 	FieldTLS         = "tls"         // service form inputs
 	FieldVerify      = "verify"      // service form inputs
+	FieldCIDR        = "cidr"        // trusted networks form: network CIDR or bare IP
+	FieldComment     = "comment"     // trusted networks form: operator annotation
 )
 
 // AdminMenuScreen renders the top-level admin menu sized for geom. The caller
@@ -46,6 +48,7 @@ func AdminMenuScreen(geom Geometry, errMsg string) (go3270.Screen, Cursor) {
 		{Row: 4, Col: 4, Content: "2.  Groups"},
 		{Row: 5, Col: 4, Content: "3.  Services"},
 		{Row: 6, Col: 4, Content: "4.  System Parameters"},
+		{Row: 7, Col: 4, Content: "5.  Trusted Networks"},
 		{Row: geom.InputRow(), Col: 2, Content: "===>"},
 		option,
 		{Row: geom.InputRow(), Col: 11}, // stop field

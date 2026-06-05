@@ -58,6 +58,11 @@ type AdminStore interface {
 
 	GetConfig(ctx context.Context, key string) (string, error)
 	SetConfig(ctx context.Context, key, value string) error
+
+	ListTrustedNetworks(ctx context.Context) ([]store.TrustedNetwork, error)
+	CreateTrustedNetwork(ctx context.Context, cidr, comment string) (int64, error)
+	UpdateTrustedNetwork(ctx context.Context, id int64, cidr, comment string) error
+	DeleteTrustedNetwork(ctx context.Context, id int64) error
 }
 
 var _ AdminStore = (*store.Store)(nil)
@@ -102,6 +107,8 @@ func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 			err = f.services(ctx, conn)
 		case 4:
 			err = f.systemParams(ctx, conn)
+		case 5:
+			err = f.networks(ctx, conn)
 		}
 		if err != nil {
 			return err
@@ -146,3 +153,4 @@ func (f *adminFlow) recordAdmin(ctx context.Context, detail string) {
 // groups is implemented in admin_groups.go.
 // services is implemented in admin_services.go.
 // systemParams is implemented in admin_system.go.
+// networks is implemented in admin_networks.go.

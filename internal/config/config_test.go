@@ -20,7 +20,6 @@
 package config
 
 import (
-	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -234,9 +233,6 @@ func TestLimitsDefaults(t *testing.T) {
 	if c.Limits.PreAuthMax != 5*time.Minute {
 		t.Errorf("PreAuthMax = %v, want 5m", c.Limits.PreAuthMax)
 	}
-	if len(c.Limits.TrustedCIDRs) != 0 {
-		t.Errorf("TrustedCIDRs = %v, want empty", c.Limits.TrustedCIDRs)
-	}
 	if c.Limits.BridgeIdleExempt {
 		t.Errorf("BridgeIdleExempt = true, want false")
 	}
@@ -345,34 +341,18 @@ func TestLoadDefaultsNewLimits(t *testing.T) {
 	if cfg.Limits.PreAuthMax != 5*time.Minute {
 		t.Errorf("PreAuthMax default = %v, want 5m", cfg.Limits.PreAuthMax)
 	}
-	if len(cfg.Limits.TrustedCIDRs) != 0 {
-		t.Errorf("TrustedCIDRs default = %v, want empty", cfg.Limits.TrustedCIDRs)
-	}
 	if cfg.Limits.BridgeIdleExempt {
 		t.Error("BridgeIdleExempt default = true, want false")
 	}
 }
 
-func TestLoadTrustedCIDRsParsesIPAndCIDR(t *testing.T) {
-	path := writeConfig(t, `{"limits":{"trusted_cidrs":["10.0.0.0/24","192.168.1.5"]}}`)
-	cfg, err := Load([]string{"-config", path})
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []netip.Prefix{
-		netip.MustParsePrefix("10.0.0.0/24"),
-		netip.MustParsePrefix("192.168.1.5/32"),
-	}
-	if len(cfg.Limits.TrustedCIDRs) != 2 ||
-		cfg.Limits.TrustedCIDRs[0] != want[0] || cfg.Limits.TrustedCIDRs[1] != want[1] {
-		t.Errorf("TrustedCIDRs = %v, want %v", cfg.Limits.TrustedCIDRs, want)
-	}
-}
-
-func TestLoadTrustedCIDRsRejectsGarbage(t *testing.T) {
-	path := writeConfig(t, `{"limits":{"trusted_cidrs":["not-an-ip"]}}`)
+// TestTrustedCIDRsConfigKeyIsGone confirms that a config file with the old
+// trusted_cidrs key now fails fast via DisallowUnknownFields — the intended
+// "it moved" signal (trusted networks are now DB-managed via the admin UI).
+func TestTrustedCIDRsConfigKeyIsGone(t *testing.T) {
+	path := writeConfig(t, `{"limits":{"trusted_cidrs":["10.0.0.0/24"]}}`)
 	if _, err := Load([]string{"-config", path}); err == nil {
-		t.Fatal("expected error for malformed trusted_cidrs")
+		t.Fatal("expected error for removed trusted_cidrs key, got nil")
 	}
 }
 
