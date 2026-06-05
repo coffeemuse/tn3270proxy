@@ -29,7 +29,10 @@ go build ./...                 # build
 go test ./...                  # all tests
 go test ./... -race            # tests with race detector (bridge is concurrent — use this)
 go build -o bin/tn3270proxy ./cmd/tn3270proxy
+# release build (stamps version):
+go build -ldflags "-X main.version=v1.2.3" -o bin/tn3270proxy ./cmd/tn3270proxy
 
+./bin/tn3270proxy version                                      # print resolved version and exit
 ./bin/tn3270proxy bootstrap -db proxy.db                      # create first admin (fresh system)
 ./bin/tn3270proxy seed -db proxy.db -file seed.example.json   # optional: bulk-load users/groups/services
 ./bin/tn3270proxy serve -db proxy.db -listen :2323            # run the proxy
@@ -46,10 +49,12 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 ## Architecture (package map)
 
 ```
-cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, `audit list|prune`,
-                  and `mfa reset-all` (break-glass); wires everything. serve runs the fail-closed
-                  MFA key check (mfaStartup: refuse to start if enrolled users exist but no key, or
-                  if the key can't decrypt the MFA_KEY_CHECK sentinel) and injects the *mfa.Cipher.
+cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, `version`,
+                  `audit list|prune`, and `mfa reset-all` (break-glass); wires everything.
+                  `var version = "dev"` is the ldflags injection point (`-X main.version=vX.Y.Z`);
+                  resolved via internal/version. serve runs the fail-closed MFA key check
+                  (mfaStartup: refuse to start if enrolled users exist but no key, or if the key
+                  can't decrypt the MFA_KEY_CHECK sentinel) and injects the *mfa.Cipher.
 internal/config   Config{DBPath, Plain, TLS, Limits}; Load(args) merges defaults<file<flags.
                   Optional JSON file (tn3270proxy.json) defines plain+tls listeners and a
                   `limits` section (pre_auth_idle/idle/pre_auth_max as Go duration
@@ -97,6 +102,10 @@ internal/bridge   The bespoke core. telnetProcessor parses one Telnet leg (forwa
                   Cause = {Error,BackendClosed,ClientClosed,UserEscaped}.
                   Exported escape key: EscapeAIDPA3.
 internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative, idempotent seeding.
+internal/version  Resolve(injected) string: returns injected when set by ldflags, otherwise
+                  falls back to a 12-char VCS revision from runtime/debug.ReadBuildInfo
+                  (+"-dirty" suffix when the working tree is modified). Importable by
+                  internal/server or internal/screens for the #53 status block.
 internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop) behind
                   Presenter/Bridger/Authenticator seams; go3270Presenter + realBridger are
                   the real impls; Server is the TCP accept loop (recovers per-conn panics);
