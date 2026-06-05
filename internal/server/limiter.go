@@ -33,8 +33,8 @@ import (
 // A single limiter is shared by every listener (ServeAll).
 type connLimiter struct {
 	sem      chan struct{} // global cap
-	maxPerIP int          // 0 disables the per-IP check
-	logger   *slog.Logger // nil → slog.Default()
+	maxPerIP int           // 0 disables the per-IP check
+	logger   *slog.Logger  // nil → slog.Default()
 
 	mu    sync.Mutex
 	perIP map[string]int

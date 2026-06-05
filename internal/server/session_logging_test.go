@@ -45,7 +45,7 @@ func TestSessionAuthFailLogsUserNotPassword(t *testing.T) {
 		termType: "IBM-3278-2-E",
 		logins: []loginResult{
 			{user: "alice", pass: submittedPassword}, // wrong password → auth fail
-			{quit: true},                              // next login render: quit
+			{quit: true},                             // next login render: quit
 		},
 		menuPicks: []menuResult{},
 	}

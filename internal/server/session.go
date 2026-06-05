@@ -238,7 +238,7 @@ func (s *Session) Run(conn net.Conn) {
 		}
 		currentUser = identity.Username
 		s.Logger = baseLog.With("user", identity.Username) // enrich with user
-		s.armPostAuth(conn)                                 // authenticated: post-auth idle window
+		s.armPostAuth(conn)                                // authenticated: post-auth idle window
 
 		// MOTD/NEWS gate: shown once per login, before the menu.
 		enterMenu, nerr := s.maybeShowNews(ctx, conn, term, identity, aud)
