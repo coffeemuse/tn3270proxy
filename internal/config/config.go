@@ -21,11 +21,13 @@ package config
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/logging"
@@ -62,6 +64,17 @@ type Log struct {
 	File  string // when non-empty, JSON output is written here in addition to stderr
 }
 
+// EnvMFAKey is the environment variable holding the base64-encoded 32-byte
+// AES-256 master key for MFA secret encryption. It takes precedence over the
+// config file.
+const EnvMFAKey = "TN3270PROXY_MFA_KEY"
+
+// MFAConfig holds the resolved MFA master key. Key is nil when MFA is not
+// configured (no enrolled users may then exist — enforced at startup).
+type MFAConfig struct {
+	Key []byte // 32-byte AES-256 key, or nil
+}
+
 // Config holds runtime configuration for the proxy.
 type Config struct {
 	DBPath string
@@ -69,6 +82,7 @@ type Config struct {
 	TLS    TLSListener
 	Limits Limits
 	Log    Log
+	MFA    MFAConfig
 }
 
 // fileConfig is the on-disk JSON shape. Pointer fields distinguish
@@ -99,6 +113,10 @@ type fileConfig struct {
 		Level *string `json:"level"` // "error", "warn", "info", "debug"
 		File  *string `json:"file"`  // path for JSON log file output
 	} `json:"log"`
+	MFA *struct {
+		Key     *string `json:"key"`      // base64 of 32 bytes
+		KeyFile *string `json:"key_file"` // path to a file containing the base64 key
+	} `json:"mfa"`
 }
 
 const (
@@ -190,10 +208,30 @@ func Load(args []string) (Config, error) {
 		cfg.Log.File = *logFile
 	}
 
+	if env := os.Getenv(EnvMFAKey); env != "" {
+		k, err := decodeMFAKey(env)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.MFA.Key = k
+	}
+
 	if err := validate(cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// decodeMFAKey decodes a base64 master key and enforces the 32-byte length.
+func decodeMFAKey(b64 string) ([]byte, error) {
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64))
+	if err != nil {
+		return nil, fmt.Errorf("config: mfa key: not valid base64: %w", err)
+	}
+	if len(raw) != 32 {
+		return nil, fmt.Errorf("config: mfa key: must decode to 32 bytes, got %d", len(raw))
+	}
+	return raw, nil
 }
 
 func mergeFile(cfg *Config, path string, explicit bool) error {
@@ -241,6 +279,26 @@ func mergeFile(cfg *Config, path string, explicit bool) error {
 		}
 		if lg.File != nil {
 			cfg.Log.File = *lg.File
+		}
+	}
+	if m := fc.MFA; m != nil {
+		switch {
+		case m.Key != nil && *m.Key != "":
+			k, err := decodeMFAKey(*m.Key)
+			if err != nil {
+				return err
+			}
+			cfg.MFA.Key = k
+		case m.KeyFile != nil && *m.KeyFile != "":
+			raw, err := os.ReadFile(*m.KeyFile)
+			if err != nil {
+				return fmt.Errorf("config: mfa key_file: %w", err)
+			}
+			k, err := decodeMFAKey(string(raw))
+			if err != nil {
+				return err
+			}
+			cfg.MFA.Key = k
 		}
 	}
 	if l := fc.Limits; l != nil {
