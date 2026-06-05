@@ -115,7 +115,11 @@ func (s *Session) armPreAuth(conn net.Conn) {
 	if s.PreAuthIdle <= 0 {
 		return
 	}
-	r.setPreAuth(s.PreAuthIdle, s.PreAuthMax)
+	if s.PreAuthMax > 0 {
+		r.setPreAuth(s.PreAuthIdle, s.PreAuthMax)
+	} else {
+		r.setWindow(s.PreAuthIdle) // no absolute ceiling configured: idle window only
+	}
 }
 
 // armPostAuth enters the post-auth regime (menu/admin): a plain idle window.

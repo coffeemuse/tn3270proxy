@@ -22,6 +22,7 @@ package server
 import (
 	"net"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -67,7 +68,7 @@ func TestSessionRegimeTransitions(t *testing.T) {
 		"window:30m0s",      // auth ok → post-auth
 		"preauth:2m0s/5m0s", // PF3 logoff → back to pre-auth
 	}
-	if !equalStrings(client.calls, want) {
+	if !slices.Equal(client.calls, want) {
 		t.Errorf("regime calls = %v, want %v", client.calls, want)
 	}
 }
@@ -88,18 +89,6 @@ func TestSessionZeroIdleConfigLeavesConnAlone(t *testing.T) {
 	if len(client.calls) != 0 {
 		t.Errorf("regime calls = %v, want none when idle config is zero", client.calls)
 	}
-}
-
-func equalStrings(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func TestSessionAuditsIdleTimeoutAtLogin(t *testing.T) {
@@ -194,7 +183,7 @@ func TestSessionTrustedIsExemptPreAuth(t *testing.T) {
 	s.Run(client)
 
 	want := []string{"window:0s", "window:30m0s", "window:0s"}
-	if !equalStrings(client.calls, want) {
+	if !slices.Equal(client.calls, want) {
 		t.Errorf("trusted regime calls = %v, want %v", client.calls, want)
 	}
 }
@@ -220,18 +209,9 @@ func TestSessionBridgeIdleExemptDisablesTimeout(t *testing.T) {
 	client := &idleRecordingConn{Conn: pipe}
 	s.Run(client)
 
-	if !containsStr(client.calls, "window:0s") {
+	if !slices.Contains(client.calls, "window:0s") {
 		t.Errorf("bridge-exempt did not disable idle; calls=%v", client.calls)
 	}
-}
-
-func containsStr(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
 }
 
 func TestSessionAuditsIdleTimeoutAtNegotiate(t *testing.T) {
