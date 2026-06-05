@@ -23,7 +23,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"log"
+	"log/slog"
 	"net"
 	"time"
 
@@ -39,13 +39,21 @@ type Auditor interface {
 // storeAuditor writes audit events to the store, stamping the time. Failures
 // are logged and swallowed (best-effort — a DB hiccup must not kick users off).
 type storeAuditor struct {
-	store *store.Store
+	store  *store.Store
+	logger *slog.Logger // nil → slog.Default()
+}
+
+func (a storeAuditor) log() *slog.Logger {
+	if a.logger != nil {
+		return a.logger
+	}
+	return slog.Default()
 }
 
 func (a storeAuditor) Record(ctx context.Context, ev store.AuditEvent) {
 	ev.At = time.Now().UTC()
 	if err := a.store.RecordAudit(ctx, ev); err != nil {
-		log.Printf("audit: recording %s failed: %v", ev.Kind, err)
+		a.log().Error("audit record failed", "event", ev.Kind, "error", err)
 	}
 }
 

@@ -393,3 +393,59 @@ func TestLoadPreAuthMaxFlagOverrides(t *testing.T) {
 		t.Errorf("PreAuthMax = %v, want 90s (flag overrides file)", cfg.Limits.PreAuthMax)
 	}
 }
+
+func TestLogLevelDefault(t *testing.T) {
+	t.Chdir(t.TempDir())
+	cfg, err := Load(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Log.Level != "info" {
+		t.Errorf("Log.Level = %q, want \"info\"", cfg.Log.Level)
+	}
+	if cfg.Log.File != "" {
+		t.Errorf("Log.File = %q, want empty", cfg.Log.File)
+	}
+}
+
+func TestLogLevelFromFile(t *testing.T) {
+	path := writeConfig(t, `{"log":{"level":"debug","file":"/var/log/proxy.log"}}`)
+	cfg, err := Load([]string{"-config", path})
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if cfg.Log.Level != "debug" {
+		t.Errorf("Log.Level = %q, want \"debug\"", cfg.Log.Level)
+	}
+	if cfg.Log.File != "/var/log/proxy.log" {
+		t.Errorf("Log.File = %q, want \"/var/log/proxy.log\"", cfg.Log.File)
+	}
+}
+
+func TestLogLevelFlagOverridesFile(t *testing.T) {
+	path := writeConfig(t, `{"log":{"level":"debug"}}`)
+	cfg, err := Load([]string{"-config", path, "-log-level", "warn", "-log-file", "/tmp/x.log"})
+	if err != nil {
+		t.Fatalf("Load error: %v", err)
+	}
+	if cfg.Log.Level != "warn" {
+		t.Errorf("Log.Level = %q, want \"warn\" (flag overrides file)", cfg.Log.Level)
+	}
+	if cfg.Log.File != "/tmp/x.log" {
+		t.Errorf("Log.File = %q, want \"/tmp/x.log\" (flag overrides file)", cfg.Log.File)
+	}
+}
+
+func TestLogBadLevelIsError(t *testing.T) {
+	path := writeConfig(t, `{"log":{"level":"verbose"}}`)
+	if _, err := Load([]string{"-config", path}); err == nil {
+		t.Fatal("want error for unknown log level, got nil")
+	}
+}
+
+func TestLogBadLevelFlagIsError(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if _, err := Load([]string{"-log-level", "trace"}); err == nil {
+		t.Fatal("want error for unknown log level via flag, got nil")
+	}
+}

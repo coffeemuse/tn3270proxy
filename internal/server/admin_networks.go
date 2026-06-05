@@ -42,7 +42,7 @@ func (f *adminFlow) networks(ctx context.Context, conn net.Conn) error {
 		Fetch: func(ctx context.Context) ([]ui3270.Row[store.TrustedNetwork], string) {
 			nets, err := f.store.ListTrustedNetworks(ctx)
 			if err != nil {
-				return nil, logStoreErr("list trusted networks", err)
+				return nil, f.storeErr("list trusted networks", err)
 			}
 			rows := make([]ui3270.Row[store.TrustedNetwork], len(nets))
 			for i, n := range nets {
@@ -66,7 +66,7 @@ func (f *adminFlow) networks(ctx context.Context, conn net.Conn) error {
 				},
 				Commit: func(ctx context.Context, _ ui3270.Renderer, n store.TrustedNetwork) (string, error) {
 					if err := f.store.DeleteTrustedNetwork(ctx, n.ID); err != nil {
-						return logStoreErr("delete trusted network", err), nil
+						return f.storeErr("delete trusted network", err), nil
 					}
 					f.recordAdmin(ctx, "trust delete "+n.CIDR)
 					return "", nil
@@ -105,12 +105,12 @@ func (f *adminFlow) networkForm(ctx context.Context, r ui3270.Renderer, existing
 
 			if existing == nil {
 				if _, err := f.store.CreateTrustedNetwork(ctx, cidrVal, commentVal); err != nil {
-					return logStoreErr("create trusted network", err), nil
+					return f.storeErr("create trusted network", err), nil
 				}
 				f.recordAdmin(ctx, "trust create "+cidrVal)
 			} else {
 				if err := f.store.UpdateTrustedNetwork(ctx, existing.ID, cidrVal, commentVal); err != nil {
-					return logStoreErr("update trusted network", err), nil
+					return f.storeErr("update trusted network", err), nil
 				}
 				f.recordAdmin(ctx, "trust update "+cidrVal)
 			}

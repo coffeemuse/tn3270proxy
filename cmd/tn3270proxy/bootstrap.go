@@ -25,7 +25,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math/big"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
@@ -62,7 +62,7 @@ type adminCounter interface {
 func warnIfNoAdmin(ctx context.Context, st adminCounter, w io.Writer) {
 	n, err := st.CountAdminMembers(ctx)
 	if err != nil {
-		log.Printf("tn3270proxy: could not check admin group: %v", err)
+		slog.Default().Error("could not check admin group", "error", err)
 		return
 	}
 	if n == 0 {

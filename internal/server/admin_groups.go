@@ -48,7 +48,7 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 		Fetch: func(ctx context.Context) ([]ui3270.Row[store.Group], string) {
 			groups, err := f.store.ListGroups(ctx)
 			if err != nil {
-				return nil, logStoreErr("list groups", err)
+				return nil, f.storeErr("list groups", err)
 			}
 			rows := make([]ui3270.Row[store.Group], len(groups))
 			for i, g := range groups {
@@ -77,7 +77,7 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 				},
 				Commit: func(ctx context.Context, _ ui3270.Renderer, g store.Group) (string, error) {
 					if err := f.store.DeleteGroup(ctx, g.ID); err != nil {
-						return logStoreErr("delete group", err), nil
+						return f.storeErr("delete group", err), nil
 					}
 					f.recordAdmin(ctx, "group delete "+g.Name)
 					return "", nil
@@ -100,12 +100,12 @@ func (f *adminFlow) groupMembers(ctx context.Context, r ui3270.Renderer, g store
 		Fetch: func(ctx context.Context) ([]ui3270.Row[store.User], string) {
 			users, err := f.store.ListUsers(ctx)
 			if err != nil {
-				return nil, logStoreErr("list users", err)
+				return nil, f.storeErr("list users", err)
 			}
 			members, merr := f.store.ListUsersInGroup(ctx, g.ID)
 			errMsg := ""
 			if merr != nil {
-				errMsg = logStoreErr("list group members", merr)
+				errMsg = f.storeErr("list group members", merr)
 			}
 			memberSet := make(map[int64]bool, len(members))
 			for _, m := range members {
@@ -124,7 +124,7 @@ func (f *adminFlow) groupMembers(ctx context.Context, r ui3270.Renderer, g store
 		Cmds: []ui3270.Command[store.User]{
 			{Key: 'A', Commit: func(ctx context.Context, _ ui3270.Renderer, u store.User) (string, error) {
 				if err := f.store.AddUserToGroup(ctx, u.ID, g.ID); err != nil {
-					return logStoreErr("add membership", err), nil
+					return f.storeErr("add membership", err), nil
 				}
 				f.recordAdmin(ctx, "group "+g.Name+" add-member "+u.Username)
 				return "", nil
@@ -142,7 +142,7 @@ func (f *adminFlow) groupMembers(ctx context.Context, r ui3270.Renderer, g store
 					}
 				}
 				if err := f.store.RemoveUserFromGroup(ctx, u.ID, g.ID); err != nil {
-					return logStoreErr("remove membership", err), nil
+					return f.storeErr("remove membership", err), nil
 				}
 				f.recordAdmin(ctx, "group "+g.Name+" remove-member "+u.Username)
 				return "", nil
@@ -168,12 +168,12 @@ func (f *adminFlow) groupAdd(ctx context.Context, r ui3270.Renderer) error {
 				return "ZZ* GROUP NAMES ARE RESERVED", nil
 			}
 			if _, exists, err := f.groupIDByName(ctx, name); err != nil {
-				return logStoreErr("check group", err), nil
+				return f.storeErr("check group", err), nil
 			} else if exists {
 				return "'" + name + "' ALREADY EXISTS", nil
 			}
 			if _, err := f.store.CreateGroup(ctx, name); err != nil {
-				return logStoreErr("create group", err), nil
+				return f.storeErr("create group", err), nil
 			}
 			f.recordAdmin(ctx, "group create "+name)
 			return "", nil

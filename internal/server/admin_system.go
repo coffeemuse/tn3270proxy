@@ -68,7 +68,7 @@ func (f *adminFlow) systemParams(ctx context.Context, conn net.Conn) error {
 					continue
 				}
 				if err := f.store.SetConfig(ctx, e.Key, newVal); err != nil {
-					return logStoreErr("set config "+e.Key, err), nil
+					return f.storeErr("set config "+e.Key, err), nil
 				}
 				f.recordAdmin(ctx, "sysconfig set "+e.Key+": "+oldVal+" -> "+newVal)
 				fields[i].Value = newVal // keep in-slice value current for next render

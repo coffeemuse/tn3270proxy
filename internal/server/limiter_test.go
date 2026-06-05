@@ -83,7 +83,7 @@ func assertNotStarted(t *testing.T, h *blockingHandler) {
 }
 
 func TestServerGlobalCapDefersAccept(t *testing.T) {
-	addr, h := startLimitedServer(t, newConnLimiter(1, 0))
+	addr, h := startLimitedServer(t, newConnLimiter(1, 0, nil))
 
 	dialT(t, addr)
 	waitStarted(t, h)
@@ -96,7 +96,7 @@ func TestServerGlobalCapDefersAccept(t *testing.T) {
 }
 
 func TestServerPerIPCapRejects(t *testing.T) {
-	addr, h := startLimitedServer(t, newConnLimiter(8, 1))
+	addr, h := startLimitedServer(t, newConnLimiter(8, 1, nil))
 
 	dialT(t, addr)
 	waitStarted(t, h)
@@ -126,7 +126,7 @@ func TestServerNilLimiterUnlimited(t *testing.T) {
 }
 
 func TestConnLimiterPerIPCounting(t *testing.T) {
-	l := newConnLimiter(8, 2)
+	l := newConnLimiter(8, 2, nil)
 	a := &net.TCPAddr{IP: net.IPv4(10, 0, 0, 1), Port: 1}
 	b := &net.TCPAddr{IP: net.IPv4(10, 0, 0, 2), Port: 1}
 
@@ -148,7 +148,7 @@ func TestConnLimiterPerIPCounting(t *testing.T) {
 }
 
 func TestAdmitIPTrustedBypassesCap(t *testing.T) {
-	l := newConnLimiter(10, 1) // per-IP cap of 1
+	l := newConnLimiter(10, 1, nil) // per-IP cap of 1
 	addr := &net.TCPAddr{IP: net.ParseIP("10.0.0.5"), Port: 5000}
 
 	if !l.admitIP(addr, false) {

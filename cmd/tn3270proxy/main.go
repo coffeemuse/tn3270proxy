@@ -29,6 +29,7 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
 	"github.com/CoffeeMuse/tn3270proxy/internal/config"
 	"github.com/CoffeeMuse/tn3270proxy/internal/listen"
+	"github.com/CoffeeMuse/tn3270proxy/internal/logging"
 	"github.com/CoffeeMuse/tn3270proxy/internal/seed"
 	"github.com/CoffeeMuse/tn3270proxy/internal/server"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -62,6 +63,14 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
+
+	level, _ := logging.ParseLevel(cfg.Log.Level) // already validated by config.Load
+	logger, closer, err := logging.New(level, cfg.Log.File)
+	if err != nil {
+		return err
+	}
+	defer closer.Close()
+
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
 		return err
@@ -76,10 +85,10 @@ func runServe(args []string) error {
 	}
 
 	if cfg.Plain.Enabled {
-		fmt.Printf("tn3270proxy listening (plain) on %s (db=%s)\n", cfg.Plain.Addr, cfg.DBPath)
+		logger.Info("listening", "proto", "plain", "addr", cfg.Plain.Addr, "db", cfg.DBPath)
 	}
 	if cfg.TLS.Enabled {
-		fmt.Printf("tn3270proxy listening (tls) on %s (db=%s)\n", cfg.TLS.Addr, cfg.DBPath)
+		logger.Info("listening", "proto", "tls", "addr", cfg.TLS.Addr, "db", cfg.DBPath)
 	}
 
 	limits := server.Limits{
@@ -91,7 +100,7 @@ func runServe(args []string) error {
 		BridgeIdleExempt: cfg.Limits.BridgeIdleExempt,
 		Trust:            server.NewStoreTrustChecker(st),
 	}
-	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits)
+	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits, logger)
 	return server.ServeAll(listeners, handler, limits)
 }
 
