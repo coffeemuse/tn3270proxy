@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
@@ -64,8 +63,6 @@ func run(args []string) error {
 }
 
 func runServe(args []string) error {
-	log.Printf("tn3270proxy %s", resolvedVersion())
-
 	cfg, err := config.Load(args)
 	if err != nil {
 		return err
@@ -77,6 +74,8 @@ func runServe(args []string) error {
 		return err
 	}
 	defer closer.Close()
+
+	logger.Info("starting", "version", resolvedVersion())
 
 	st, err := store.Open(cfg.DBPath)
 	if err != nil {
