@@ -78,3 +78,11 @@ func (g Geometry) MenuCapacity(admin bool) int {
 // above it (22 on MOD 2). The "***" sits on row NewsLinesPerPage()+1 (the last
 // row); see NewsScreen.
 func (g Geometry) NewsLinesPerPage() int { return g.norm().Rows - 2 }
+
+// StatusBlockCol is the left column of the menu's right-hand status block
+// (the per-session User ID / Date / Time / Terminal / System ID / Release
+// panel). It is fixed at 57: the service grid (number col 0, name col 4,
+// description col 13 hard-cut to 40) ends near col 53, and the block's 10-char
+// labels + 7-rune values fit within cols 57-79. Content is always within cols
+// 0-79 (rows-only adaptation), so this does not widen on taller models.
+func (g Geometry) StatusBlockCol() int { return 57 }
