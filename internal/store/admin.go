@@ -162,6 +162,22 @@ func (s *Store) SetPassword(ctx context.Context, userID int64, passwordHash stri
 		"UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, userID)
 }
 
+// UpdateUserDetails replaces the user's optional display name and email.
+// Email is normalized (trim + lower-case). Returns ErrNotFound for an unknown
+// user id. The password is updated separately via SetPassword.
+func (s *Store) UpdateUserDetails(ctx context.Context, userID int64, fullName, email string) error {
+	if err := ValidateFullName(fullName); err != nil {
+		return err
+	}
+	email = NormalizeEmail(email)
+	if err := ValidateEmail(email); err != nil {
+		return err
+	}
+	return s.execExpectingRow(ctx,
+		"UPDATE users SET full_name = ?, email = ? WHERE id = ?",
+		fullName, email, userID)
+}
+
 // UpdateService replaces every editable field of the service. Returns
 // ErrNotFound for an unknown service id.
 func (s *Store) UpdateService(ctx context.Context, id int64, name, description, host string, port int, tls, verify bool) error {
