@@ -35,6 +35,7 @@ type ListView struct {
 type FormField struct {
 	Name, Label, Value string
 	Hidden             bool // non-display (passwords)
+	ReadOnly           bool // display-only: rendered as static content, never an input
 	Length             int  // input columns; effective max 62 (stop field clamps at col 79)
 }
 
