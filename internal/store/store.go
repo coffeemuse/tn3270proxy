@@ -63,7 +63,9 @@ const schema = `
 CREATE TABLE IF NOT EXISTS users (
 	id            INTEGER PRIMARY KEY,
 	username      TEXT UNIQUE COLLATE NOCASE NOT NULL,
-	password_hash TEXT NOT NULL
+	password_hash TEXT NOT NULL,
+	full_name     TEXT NOT NULL DEFAULT '',
+	email         TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS groups (
 	id   INTEGER PRIMARY KEY,
@@ -128,6 +130,14 @@ func (s *Store) migrate() error {
 		"ALTER TABLE services ADD COLUMN description TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn("users", "full_name",
+		"ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("users", "email",
+		"ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	// The reserved admin group always exists; seeding only assigns members.
 	if _, err := s.db.Exec("INSERT OR IGNORE INTO groups (name) VALUES (?)", AdminGroup); err != nil {
 		return fmt.Errorf("ensure %s group: %w", AdminGroup, err)
@@ -183,6 +193,8 @@ type User struct {
 	ID           int64
 	Username     string
 	PasswordHash string
+	FullName     string
+	Email        string
 }
 
 // CreateUser inserts a user, or returns the existing user's id if the
@@ -219,8 +231,8 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (User, e
 	username = strings.ToUpper(username)
 	var u User
 	err := s.db.QueryRowContext(ctx,
-		"SELECT id, username, password_hash FROM users WHERE username = ?", username).
-		Scan(&u.ID, &u.Username, &u.PasswordHash)
+		"SELECT id, username, password_hash, full_name, email FROM users WHERE username = ?", username).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Email)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}

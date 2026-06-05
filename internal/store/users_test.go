@@ -58,6 +58,21 @@ func TestUserAndGroupRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUserDetailsDefaultEmpty(t *testing.T) {
+	ctx := context.Background()
+	st := newTestStore(t)
+	if _, err := st.CreateUser(ctx, "alice", "hash-a"); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	u, err := st.GetUserByUsername(ctx, "alice")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+	if u.FullName != "" || u.Email != "" {
+		t.Errorf("new user details = %q/%q, want empty/empty", u.FullName, u.Email)
+	}
+}
+
 func TestGetUserByUsernameNotFound(t *testing.T) {
 	st := newTestStore(t)
 	_, err := st.GetUserByUsername(context.Background(), "nobody")
