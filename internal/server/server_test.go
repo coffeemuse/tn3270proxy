@@ -20,6 +20,7 @@
 package server
 
 import (
+	"log/slog"
 	"net"
 	"net/netip"
 	"sync"
@@ -83,16 +84,17 @@ func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
 		BridgeIdleExempt: true,
 		Trust:            StaticTrustChecker(netip.MustParsePrefix("10.0.0.0/24")),
 	}
-	h := NewSessionHandler(st, 0x6B, limits).(sessionHandler)
+	h := NewSessionHandler(st, 0x6B, limits, slog.Default()).(sessionHandler)
+	connLog := slog.Default()
 
-	got := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.0.0.9"), Port: 1})
+	got := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.0.0.9"), Port: 1}, connLog)
 	if !got.Trusted {
 		t.Error("client in trusted CIDR should yield Trusted session")
 	}
 	if got.PreAuthMax != 5*time.Minute || !got.BridgeIdleExempt {
 		t.Errorf("regime fields not propagated: %+v", got)
 	}
-	untrusted := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.9.9.9"), Port: 1})
+	untrusted := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.9.9.9"), Port: 1}, connLog)
 	if untrusted.Trusted {
 		t.Error("client outside trusted CIDRs must not be Trusted")
 	}

@@ -25,7 +25,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -104,6 +104,17 @@ type Session struct {
 	// MOTDRead reads the MOTD file for maybeShowNews; nil selects the capped
 	// os.ReadFile default (readMOTDCapped). Tests inject a fake.
 	MOTDRead func(path string) ([]byte, error)
+	// Logger is the per-connection structured logger. nil falls back to
+	// slog.Default(). The session enriches it with "user" after authentication.
+	Logger *slog.Logger
+}
+
+// log returns the session's logger (slog.Default() when Logger is nil).
+func (s *Session) log() *slog.Logger {
+	if s.Logger != nil {
+		return s.Logger
+	}
+	return slog.Default()
 }
 
 // motdReadCap bounds how much of the MOTD file is read. A legitimate notice is
@@ -203,13 +214,17 @@ func (s *Session) Run(conn net.Conn) {
 
 	term, err := s.Presenter.Negotiate(conn)
 	if err != nil {
-		log.Printf("telnet negotiation failed: %v", err)
+		s.log().Error("negotiation failed", "error", err)
 		endDetail = "negotiation failed"
 		if isTimeoutErr(err) {
 			endDetail = "idle timeout"
 		}
 		return
 	}
+
+	// baseLog is the pre-auth logger (tagged with "remote"); after login the
+	// session enriches it with "user". On logoff the session reverts to baseLog.
+	baseLog := s.log()
 
 	// Each outer iteration is one login → menu lifetime: PF3 at the menu logs
 	// off (back to the login screen); PF3 at the login screen disconnects.
@@ -222,7 +237,8 @@ func (s *Session) Run(conn net.Conn) {
 			return
 		}
 		currentUser = identity.Username
-		s.armPostAuth(conn) // authenticated: post-auth idle window
+		s.Logger = baseLog.With("user", identity.Username) // enrich with user
+		s.armPostAuth(conn)                                // authenticated: post-auth idle window
 
 		// MOTD/NEWS gate: shown once per login, before the menu.
 		enterMenu, nerr := s.maybeShowNews(ctx, conn, term, identity, aud)
@@ -232,6 +248,7 @@ func (s *Session) Run(conn net.Conn) {
 		}
 		if !enterMenu { // idled out during the gate: back to the login screen
 			currentUser = ""
+			s.Logger = baseLog // revert to pre-user logger
 			continue
 		}
 
@@ -241,7 +258,7 @@ func (s *Session) Run(conn net.Conn) {
 		for {
 			services, err := s.Store.ListServicesForGroups(ctx, identity.Groups)
 			if err != nil {
-				log.Printf("listing services for user %s failed: %v", identity.Username, err)
+				s.log().Error("list services failed", "error", err)
 				services = nil
 				errMsg = "Temporary error retrieving services; try again"
 			}
@@ -251,6 +268,7 @@ func (s *Session) Run(conn net.Conn) {
 					aud.record(ctx, store.AuditEvent{
 						Kind: store.AuditLogout, Username: identity.Username, Detail: "idle logout"})
 					currentUser = ""
+					s.Logger = baseLog // revert to pre-user logger
 					s.armPreAuth(conn)
 					break menu
 				}
@@ -261,6 +279,7 @@ func (s *Session) Run(conn net.Conn) {
 				aud.record(ctx, store.AuditEvent{
 					Kind: store.AuditLogout, Username: identity.Username, Detail: "user logoff"})
 				currentUser = ""
+				s.Logger = baseLog // revert to pre-user logger
 				s.armPreAuth(conn) // logoff: back to the pre-auth regime
 				break menu         // logoff: back to the login screen
 			}
@@ -274,16 +293,18 @@ func (s *Session) Run(conn net.Conn) {
 				}
 				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter,
 					renderer: renderer,
-					identity: identity, term: term, audit: aud.record}
+					identity: identity, term: term, audit: aud.record,
+					logger: s.log()}
 				if aerr := flow.Run(ctx, conn); aerr != nil {
 					if isTimeoutErr(aerr) {
 						aud.record(ctx, store.AuditEvent{
 							Kind: store.AuditLogout, Username: identity.Username, Detail: "idle logout"})
 						currentUser = ""
+						s.Logger = baseLog // revert to pre-user logger
 						s.armPreAuth(conn)
 						break menu
 					}
-					log.Printf("admin flow for %s ended: %v", identity.Username, aerr)
+					s.log().Error("admin flow error", "error", aerr)
 					endDetail = "admin flow error"
 					return
 				}
@@ -307,7 +328,7 @@ func (s *Session) Run(conn net.Conn) {
 				endDetail = "client closed during bridge"
 				return
 			case bridge.CauseError:
-				log.Printf("bridge error to %s (%s): %v", selected.Name, addr, berr)
+				s.log().Error("bridge error", "service", selected.Name, "addr", addr, "error", berr)
 				errMsg = "Could not connect to " + selected.Name
 				if berr == nil {
 					errMsg = "Session error on " + selected.Name
@@ -330,7 +351,7 @@ func (s *Session) maybeShowNews(ctx context.Context, conn net.Conn, term Term, i
 	path, err := s.Store.GetConfig(ctx, sysconfig.KeyMOTDFile)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			log.Printf("MOTD: reading config key failed; skipping: %v", err)
+			s.log().Warn("MOTD config key unreadable; skipping", "error", err)
 		}
 		return true, nil
 	}
@@ -338,7 +359,7 @@ func (s *Session) maybeShowNews(ctx context.Context, conn net.Conn, term Term, i
 		return true, nil // disabled → straight to the menu
 	}
 	if !filepath.IsAbs(path) {
-		log.Printf("MOTD file %q is not absolute; skipping", path)
+		s.log().Warn("MOTD path not absolute; skipping", "path", path)
 		return true, nil
 	}
 	read := s.MOTDRead
@@ -347,7 +368,7 @@ func (s *Session) maybeShowNews(ctx context.Context, conn net.Conn, term Term, i
 	}
 	data, err := read(path)
 	if err != nil {
-		log.Printf("MOTD file %q unreadable; skipping: %v", path, err)
+		s.log().Warn("MOTD file unreadable; skipping", "path", path, "error", err)
 		return true, nil
 	}
 	pages := screens.PaginateNews(term.Geometry(), string(data))
@@ -391,12 +412,15 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		if !errors.Is(err, auth.ErrInvalidCredentials) {
 			// Infrastructure error (e.g. transient DB failure): log it, audit
 			// it, and re-present the login screen. Do not disconnect.
-			log.Printf("auth infrastructure error for user %q: %v", user, err)
+			// Username only — never the password (CLAUDE.md hard rule).
+			s.log().Error("auth error", "user", user, "error", err)
 			aud.record(ctx, store.AuditEvent{
 				Kind: store.AuditAuthError, Username: user, Detail: err.Error()})
 			errMsg = "Temporary error; try again"
 			continue
 		}
+		// Auth fail: log the attempted username only — never the password.
+		s.log().Warn("auth failed", "user", user)
 		// Attempted username only — never the password (CLAUDE.md hard rule).
 		aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthFail, Username: user})
 		// Generic message — never reveals whether the username exists (spec §7).

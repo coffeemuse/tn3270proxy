@@ -21,7 +21,7 @@ package server
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -60,6 +60,15 @@ type Server struct {
 	// Trust exempts matching client IPs from the pre-auth timers and the
 	// per-IP cap (GH #18). nil trusts nobody.
 	Trust TrustChecker
+	// Logger is used for accept/reject log lines; nil falls back to slog.Default().
+	Logger *slog.Logger
+}
+
+func (s *Server) log() *slog.Logger {
+	if s.Logger != nil {
+		return s.Logger
+	}
+	return slog.Default()
 }
 
 // Serve runs the accept loop until the listener is closed. The global
@@ -76,12 +85,12 @@ func (s *Server) Serve() error {
 		}
 		trusted := s.Trust != nil && s.Trust.IsTrusted(conn.RemoteAddr())
 		if !s.Limiter.admitIP(conn.RemoteAddr(), trusted) {
-			log.Printf("per-ip connection cap reached; rejecting %s", conn.RemoteAddr())
+			s.log().Warn("per-IP connection cap reached; closing connection", "remote", conn.RemoteAddr())
 			conn.Close()
 			s.Limiter.releaseGlobal()
 			continue
 		}
-		log.Printf("accepted connection from %s", conn.RemoteAddr())
+		s.log().Info("accepted connection", "remote", conn.RemoteAddr(), "trusted", trusted)
 		go s.handle(conn, trusted)
 	}
 }
@@ -89,7 +98,7 @@ func (s *Server) Serve() error {
 func (s *Server) handle(conn net.Conn, trusted bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("session panic from %s: %v", conn.RemoteAddr(), r)
+			s.log().Error("session panic", "remote", conn.RemoteAddr(), "panic", r)
 		}
 		conn.Close()
 		s.Limiter.releaseIP(conn.RemoteAddr(), trusted)
@@ -103,6 +112,7 @@ type sessionHandler struct {
 	store     *store.Store
 	escapeAID byte
 	limits    Limits
+	logger    *slog.Logger
 }
 
 // wrapIdle installs the idle-deadline wrapper when an idle window is set.
@@ -114,8 +124,9 @@ func wrapIdle(conn net.Conn, preAuthIdle time.Duration) net.Conn {
 }
 
 // sessionFor builds the Session for a connection from addr, deciding trust and
-// carrying the regime knobs from limits.
-func (h sessionHandler) sessionFor(addr net.Addr) *Session {
+// carrying the regime knobs from limits. connLog is the per-connection logger
+// (already enriched with "remote").
+func (h sessionHandler) sessionFor(addr net.Addr, connLog *slog.Logger) *Session {
 	trusted := h.limits.Trust != nil && h.limits.Trust.IsTrusted(addr)
 	return &Session{
 		Store:            h.store,
@@ -124,7 +135,8 @@ func (h sessionHandler) sessionFor(addr net.Addr) *Session {
 		Bridger:          realBridger{},
 		EscapeAID:        h.escapeAID,
 		AdminPresenter:   go3270Presenter{},
-		Auditor:          storeAuditor{store: h.store},
+		Auditor:          storeAuditor{store: h.store, logger: connLog},
+		Logger:           connLog,
 		PreAuthIdle:      h.limits.PreAuthIdle,
 		Idle:             h.limits.Idle,
 		PreAuthMax:       h.limits.PreAuthMax,
@@ -134,27 +146,39 @@ func (h sessionHandler) sessionFor(addr net.Addr) *Session {
 }
 
 func (h sessionHandler) Handle(conn net.Conn) {
-	s := h.sessionFor(conn.RemoteAddr())
+	connLog := h.logger.With("remote", conn.RemoteAddr().String())
+	s := h.sessionFor(conn.RemoteAddr(), connLog)
 	s.Run(wrapIdle(conn, h.limits.PreAuthIdle))
 }
 
 // NewSessionHandler returns a connHandler that runs a full proxy session.
 // Connections are wrapped with the idle-deadline enforcer per limits.
-func NewSessionHandler(st *store.Store, escapeAID byte, limits Limits) connHandler {
-	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits}
+// logger is the base logger; each accepted connection receives a child logger
+// tagged with "remote" (and later "user" after authentication).
+func NewSessionHandler(st *store.Store, escapeAID byte, limits Limits, logger *slog.Logger) connHandler {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits, logger: logger}
 }
 
 // newServers builds one Server per listener, all sharing handler and one
 // connection limiter (the caps in limits are process-wide, not per-listener;
 // MaxConns 0 means unlimited).
 func newServers(listeners []net.Listener, handler connHandler, limits Limits) []*Server {
+	// Extract the logger from the handler when it is a sessionHandler, so that
+	// accept-level log lines share the same logger as the session pipeline.
+	var logger *slog.Logger
+	if sh, ok := handler.(sessionHandler); ok {
+		logger = sh.logger
+	}
 	var limiter *connLimiter
 	if limits.MaxConns > 0 {
-		limiter = newConnLimiter(limits.MaxConns, limits.MaxPerIP)
+		limiter = newConnLimiter(limits.MaxConns, limits.MaxPerIP, logger)
 	}
 	servers := make([]*Server, len(listeners))
 	for i, ln := range listeners {
-		servers[i] = &Server{Listener: ln, Handler: handler, Limiter: limiter, Trust: limits.Trust}
+		servers[i] = &Server{Listener: ln, Handler: handler, Limiter: limiter, Trust: limits.Trust, Logger: logger}
 	}
 	return servers
 }

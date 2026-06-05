@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/CoffeeMuse/tn3270proxy/internal/logging"
 )
 
 // Listener describes a plaintext TCP listener.
@@ -54,12 +56,19 @@ type Limits struct {
 	BridgeIdleExempt bool          // true → no idle timeout during an active bridge
 }
 
+// Log holds logging configuration.
+type Log struct {
+	Level string // "error", "warn", "info", "debug"; default "info"
+	File  string // when non-empty, JSON output is written here in addition to stderr
+}
+
 // Config holds runtime configuration for the proxy.
 type Config struct {
 	DBPath string
 	Plain  Listener
 	TLS    TLSListener
 	Limits Limits
+	Log    Log
 }
 
 // fileConfig is the on-disk JSON shape. Pointer fields distinguish
@@ -86,6 +95,10 @@ type fileConfig struct {
 		PreAuthMax  *string `json:"pre_auth_max"` // Go duration string, e.g. "5m"
 		BridgeIdle  *string `json:"bridge_idle"`  // "disconnect" (default) | "exempt"
 	} `json:"limits"`
+	Log *struct {
+		Level *string `json:"level"` // "error", "warn", "info", "debug"
+		File  *string `json:"file"`  // path for JSON log file output
+	} `json:"log"`
 }
 
 const (
@@ -111,6 +124,7 @@ func defaults() Config {
 			MaxPerIP:    defaultMaxPerIP,
 			PreAuthMax:  defaultPreAuthMax,
 		},
+		Log: Log{Level: "info"},
 	}
 }
 
@@ -126,6 +140,8 @@ func Load(args []string) (Config, error) {
 	maxConns := fs.Int("max-conns", 0, "max concurrent connections (overrides config)")
 	maxPerIP := fs.Int("max-per-ip", -1, "max concurrent connections per client IP, 0 disables (overrides config)")
 	preAuthMax := fs.Duration("pre-auth-max", 0, "absolute deadline to authenticate (overrides config)")
+	logLevel := fs.String("log-level", "", "log level: error, warn, info, debug (overrides config)")
+	logFile := fs.String("log-file", "", "write JSON logs to this file in addition to stderr (overrides config)")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
 	}
@@ -166,6 +182,12 @@ func Load(args []string) (Config, error) {
 	}
 	if set["max-per-ip"] {
 		cfg.Limits.MaxPerIP = *maxPerIP
+	}
+	if set["log-level"] {
+		cfg.Log.Level = *logLevel
+	}
+	if set["log-file"] {
+		cfg.Log.File = *logFile
 	}
 
 	if err := validate(cfg); err != nil {
@@ -213,6 +235,14 @@ func mergeFile(cfg *Config, path string, explicit bool) error {
 			cfg.TLS.Key = *tl.Key
 		}
 	}
+	if lg := fc.Log; lg != nil {
+		if lg.Level != nil {
+			cfg.Log.Level = *lg.Level
+		}
+		if lg.File != nil {
+			cfg.Log.File = *lg.File
+		}
+	}
 	if l := fc.Limits; l != nil {
 		if l.PreAuthIdle != nil {
 			d, err := time.ParseDuration(*l.PreAuthIdle)
@@ -256,6 +286,9 @@ func mergeFile(cfg *Config, path string, explicit bool) error {
 }
 
 func validate(cfg Config) error {
+	if _, err := logging.ParseLevel(cfg.Log.Level); err != nil {
+		return fmt.Errorf("config: log.level: %q (want \"error\", \"warn\", \"info\", or \"debug\")", cfg.Log.Level)
+	}
 	if !cfg.Plain.Enabled && !cfg.TLS.Enabled {
 		return errors.New("config: no listener enabled (enable plain and/or tls)")
 	}

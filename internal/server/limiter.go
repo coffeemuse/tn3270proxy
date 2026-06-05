@@ -20,7 +20,7 @@
 package server
 
 import (
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 )
@@ -34,17 +34,26 @@ import (
 type connLimiter struct {
 	sem      chan struct{} // global cap
 	maxPerIP int           // 0 disables the per-IP check
+	logger   *slog.Logger  // nil → slog.Default()
 
 	mu    sync.Mutex
 	perIP map[string]int
 }
 
-func newConnLimiter(maxConns, maxPerIP int) *connLimiter {
+func newConnLimiter(maxConns, maxPerIP int, logger *slog.Logger) *connLimiter {
 	return &connLimiter{
 		sem:      make(chan struct{}, maxConns),
 		maxPerIP: maxPerIP,
 		perIP:    make(map[string]int),
+		logger:   logger,
 	}
+}
+
+func (l *connLimiter) log() *slog.Logger {
+	if l != nil && l.logger != nil {
+		return l.logger
+	}
+	return slog.Default()
 }
 
 // acquire claims a global slot, blocking while the cap is full. Logs once per
@@ -57,7 +66,7 @@ func (l *connLimiter) acquire() {
 	case l.sem <- struct{}{}:
 		return
 	default:
-		log.Printf("connection cap (%d) reached; deferring accepts", cap(l.sem))
+		l.log().Warn("global connection cap reached; deferring accepts", "cap", cap(l.sem))
 		l.sem <- struct{}{}
 	}
 }

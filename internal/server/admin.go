@@ -21,7 +21,7 @@ package server
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net"
 	"strings"
 
@@ -82,7 +82,8 @@ type adminFlow struct {
 	identity  auth.Identity
 	term      Term // negotiated client terminal; drives page size + screen rendering
 	// audit records admin CRUD events; nil (direct tests) disables auditing.
-	audit func(ctx context.Context, ev store.AuditEvent)
+	audit  func(ctx context.Context, ev store.AuditEvent)
+	logger *slog.Logger // nil → slog.Default()
 }
 
 // Run loops on the admin menu until the user leaves via PF3 (back to the
@@ -133,10 +134,14 @@ func (f *adminFlow) groupIDByName(ctx context.Context, name string) (int64, bool
 	return 0, false, nil
 }
 
-// logStoreErr logs a store failure (never credentials) and returns the generic
+// storeErr logs a store failure (never credentials) and returns the generic
 // screen message.
-func logStoreErr(op string, err error) string {
-	log.Printf("admin: %s failed: %v", op, err)
+func (f *adminFlow) storeErr(op string, err error) string {
+	l := f.logger
+	if l == nil {
+		l = slog.Default()
+	}
+	l.Error("admin op failed", "op", op, "error", err)
 	return msgTempError
 }
 

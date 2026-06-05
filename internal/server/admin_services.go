@@ -61,7 +61,7 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 		Fetch: func(ctx context.Context) ([]ui3270.Row[store.Service], string) {
 			svcs, err := f.store.ListAllServices(ctx)
 			if err != nil {
-				return nil, logStoreErr("list services", err)
+				return nil, f.storeErr("list services", err)
 			}
 			rows := make([]ui3270.Row[store.Service], len(svcs))
 			for i, s := range svcs {
@@ -87,7 +87,7 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 				},
 				Commit: func(ctx context.Context, _ ui3270.Renderer, s store.Service) (string, error) {
 					if err := f.store.DeleteService(ctx, s.ID); err != nil {
-						return logStoreErr("delete service", err), nil
+						return f.storeErr("delete service", err), nil
 					}
 					f.recordAdmin(ctx, "service delete "+s.Name)
 					return "", nil
@@ -152,11 +152,11 @@ func (f *adminFlow) serviceForm(ctx context.Context, r ui3270.Renderer, existing
 			}
 			if existing == nil {
 				if _, err := f.store.CreateService(ctx, normName, description, host, p, tlsB, verifyB); err != nil {
-					return logStoreErr("create service", err), nil
+					return f.storeErr("create service", err), nil
 				}
 				f.recordAdmin(ctx, "service create "+normName)
 			} else if err := f.store.UpdateService(ctx, existing.ID, normName, description, host, p, tlsB, verifyB); err != nil {
-				return logStoreErr("update service", err), nil
+				return f.storeErr("update service", err), nil
 			} else {
 				f.recordAdmin(ctx, "service update "+normName)
 			}
@@ -171,7 +171,7 @@ func (f *adminFlow) serviceForm(ctx context.Context, r ui3270.Renderer, existing
 func (f *adminFlow) checkServiceNameFree(ctx context.Context, name string, existing *store.Service) string {
 	svcs, err := f.store.ListAllServices(ctx)
 	if err != nil {
-		return logStoreErr("list services", err)
+		return f.storeErr("list services", err)
 	}
 	for _, s := range svcs {
 		if s.Name == name && (existing == nil || s.ID != existing.ID) {
@@ -194,12 +194,12 @@ func (f *adminFlow) serviceGroups(ctx context.Context, r ui3270.Renderer, svc st
 		Fetch: func(ctx context.Context) ([]ui3270.Row[store.Group], string) {
 			groups, err := f.store.ListGroups(ctx)
 			if err != nil {
-				return nil, logStoreErr("list groups", err)
+				return nil, f.storeErr("list groups", err)
 			}
 			linked, lerr := f.store.ListGroupsForService(ctx, svc.ID)
 			errMsg := ""
 			if lerr != nil {
-				errMsg = logStoreErr("list service groups", lerr)
+				errMsg = f.storeErr("list service groups", lerr)
 			}
 			linkSet := make(map[int64]bool, len(linked))
 			for _, g := range linked {
@@ -218,14 +218,14 @@ func (f *adminFlow) serviceGroups(ctx context.Context, r ui3270.Renderer, svc st
 		Cmds: []ui3270.Command[store.Group]{
 			{Key: 'A', Commit: func(ctx context.Context, _ ui3270.Renderer, g store.Group) (string, error) {
 				if err := f.store.LinkGroupService(ctx, g.ID, svc.ID); err != nil {
-					return logStoreErr("grant access", err), nil
+					return f.storeErr("grant access", err), nil
 				}
 				f.recordAdmin(ctx, "service "+svc.Name+" grant "+g.Name)
 				return "", nil
 			}},
 			{Key: 'R', Commit: func(ctx context.Context, _ ui3270.Renderer, g store.Group) (string, error) {
 				if err := f.store.UnlinkGroupService(ctx, g.ID, svc.ID); err != nil {
-					return logStoreErr("revoke access", err), nil
+					return f.storeErr("revoke access", err), nil
 				}
 				f.recordAdmin(ctx, "service "+svc.Name+" revoke "+g.Name)
 				return "", nil
