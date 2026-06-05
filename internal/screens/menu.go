@@ -21,10 +21,53 @@ package screens
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 	"github.com/racingmars/go3270"
 )
+
+// MenuStatus carries the values shown in the menu's right-hand status block.
+// Now is the paint-time clock; the presenter stamps it on every render so the
+// builder stays deterministic (no hidden time source). Username/SystemID/
+// Release are supplied by the session; TermType is filled by the presenter
+// from the negotiated terminal.
+type MenuStatus struct {
+	Username string
+	TermType string
+	SystemID string
+	Release  string
+	Now      time.Time
+}
+
+// julianDate formats t as YY.DDD (two-digit year, three-digit day-of-year),
+// e.g. 2026-06-05 -> "26.156". Six runes, so it fits the 7-rune value column.
+func julianDate(t time.Time) string {
+	return fmt.Sprintf("%02d.%03d", t.Year()%100, t.YearDay())
+}
+
+// clockHM formats t as 24-hour HH:MM.
+func clockHM(t time.Time) string { return t.Format("15:04") }
+
+// termDisplay prepares a terminal type for the status block: strip a leading
+// "IBM-", hard-cut to 7 runes, then trim a trailing "-" so "IBM-3278-2-E"
+// becomes "3278-2".
+func termDisplay(t string) string {
+	t = strings.TrimPrefix(t, "IBM-")
+	t = truncateRunes(t, 7)
+	return strings.TrimRight(t, "-")
+}
+
+// truncateRunes hard-cuts s to at most n runes. Status values and descriptions
+// are ASCII in this EBCDIC display context, but rune-safe to match news.go.
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		return string(r[:n])
+	}
+	return s
+}
 
 // FieldSelection is the name of the menu's numeric input field.
 const FieldSelection = "selection"
