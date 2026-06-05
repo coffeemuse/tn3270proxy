@@ -90,8 +90,9 @@ internal/bridge   The bespoke core. telnetProcessor parses one Telnet leg (forwa
 internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative, idempotent seeding.
 internal/version  Resolve(injected) string: returns injected when set by ldflags, otherwise
                   falls back to a 12-char VCS revision from runtime/debug.ReadBuildInfo
-                  (+"-dirty" suffix when the working tree is modified). Importable by
-                  internal/server or internal/screens for the #53 status block.
+                  (+"-dirty" suffix when the working tree is modified). Resolved in
+                  cmd/tn3270proxy and threaded as a string into Session.Release (the #53
+                  menu status block); no lower package imports it.
 internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop) behind
                   Presenter/Bridger/Authenticator seams; go3270Presenter + realBridger are
                   the real impls; Server is the TCP accept loop (recovers per-conn panics);

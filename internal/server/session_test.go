@@ -45,9 +45,10 @@ type fakePresenter struct {
 	menuErrors   []string
 	loginErrors  []string
 	gotAdminFlag []bool
-	gotTerms     []Term       // every term passed to Login/Menu, in call order
-	newsCalls    [][][]string // pages passed to each News call, in order
-	newsResults  []error      // queued News return values; default nil
+	gotTerms     []Term              // every term passed to Login/Menu, in call order
+	gotStatus    []screens.MenuStatus // every status passed to Menu, in call order
+	newsCalls    [][][]string         // pages passed to each News call, in order
+	newsResults  []error              // queued News return values; default nil
 }
 
 type loginResult struct {
@@ -85,6 +86,7 @@ func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, adm
 	f.gotTerms = append(f.gotTerms, term)
 	f.menuErrors = append(f.menuErrors, errMsg)
 	f.gotAdminFlag = append(f.gotAdminFlag, admin)
+	f.gotStatus = append(f.gotStatus, status)
 	r := f.menuPicks[0]
 	f.menuPicks = f.menuPicks[1:]
 	return r.sel, r.admin, r.quit, r.err
@@ -784,5 +786,43 @@ func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
 	if len(admins) != 1 || admins[0].Detail != "group create newgrp" ||
 		admins[0].Username != "root" || admins[0].SessionID == "" {
 		t.Errorf("admin events = %+v, want one 'group create newgrp' by root with a session id", admins)
+	}
+}
+
+func TestSessionPopulatesMenuStatus(t *testing.T) {
+	// Verify that the session builds screens.MenuStatus with the correct
+	// Username (from the identity), SystemID ("PROXY"), and Release (from
+	// Session.Release) before calling Presenter.Menu.
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true}, // second login render after menu logoff
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	b := &fakeBridger{}
+	s := newTestSession(t, p, b)
+	s.Release = "vTEST"
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(p.gotStatus) == 0 {
+		t.Fatal("Menu was never called")
+	}
+	got := p.gotStatus[0]
+	if got.Release != "vTEST" {
+		t.Errorf("status.Release = %q, want vTEST", got.Release)
+	}
+	if got.SystemID != "PROXY" {
+		t.Errorf("status.SystemID = %q, want PROXY", got.SystemID)
+	}
+	// authStub returns Username: "alice" (lowercase) — the store layer would
+	// canonicalize to uppercase, but this test exercises the session seam, not
+	// the store, so the identity flows through unchanged.
+	if got.Username != "alice" {
+		t.Errorf("status.Username = %q, want alice", got.Username)
 	}
 }
