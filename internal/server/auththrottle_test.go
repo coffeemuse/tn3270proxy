@@ -20,9 +20,12 @@
 package server
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
 var throttleEpoch = time.Unix(1_700_000_000, 0)
@@ -155,5 +158,36 @@ func TestThrottleDetail(t *testing.T) {
 	}
 	if d := throttleDetail("login", 0, 0); d != "login" {
 		t.Errorf("base-only detail = %q, want \"login\"", d)
+	}
+}
+
+func TestThrottleDelayCapsAtCeiling(t *testing.T) {
+	s := &Session{}
+	// Absurd values that would overflow time.Duration if multiplied naively.
+	cfg := throttleConfig{baseSecs: 2_000_000_000, maxTries: 2_000_000_000, window: testWindow}
+	got := s.throttleDelay(5, cfg)
+	if got != time.Hour {
+		t.Errorf("absurd config delay = %s, want 1h ceiling (never negative/zero)", got)
+	}
+	if got <= 0 {
+		t.Fatalf("delay must never be <= 0 for a real failure (got %s) — that would silently disable throttling", got)
+	}
+}
+
+func TestLoadThrottleFloorsWindow(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/s.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	ctx := context.Background()
+	// Simulate a hand-edited DB with a 0 window (the admin form would reject this).
+	if err := st.SetConfig(ctx, "AUTH_FAIL_WINDOW_MINS", "0"); err != nil {
+		t.Fatal(err)
+	}
+	s := &Session{Store: st}
+	cfg := s.loadThrottle(ctx)
+	if cfg.window < time.Minute {
+		t.Errorf("window = %s, want floored to >= 1m", cfg.window)
 	}
 }

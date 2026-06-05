@@ -118,6 +118,13 @@ func (t *authThrottle) sweepLocked(now time.Time, window time.Duration) {
 	}
 }
 
+// maxThrottleDelay caps the computed backoff. Any delay this large is already an
+// effective hard stop for an interactive login (far beyond the default pre-auth
+// ceiling), and the cap makes the seconds*time.Second math overflow-proof for
+// pathological admin values — without it an overflow could yield a negative
+// duration that sleepFor would silently skip, disabling throttling entirely.
+const maxThrottleDelay = time.Hour
+
 // throttleConfig is a snapshot of the three throttle params, read live per
 // failure so admin edits take effect without a restart.
 type throttleConfig struct {
@@ -129,10 +136,14 @@ type throttleConfig struct {
 // loadThrottle reads the throttle params from system_config, falling back to the
 // catalog defaults on a missing key or parse error (mirrors mfaIssuer).
 func (s *Session) loadThrottle(ctx context.Context) throttleConfig {
+	mins := s.throttleInt(ctx, sysconfig.KeyAuthFailWindowMins, sysconfig.DefaultAuthFailWindowMins)
+	if mins < 1 {
+		mins = sysconfig.DefaultAuthFailWindowMins // floor: the form validates >=1; guard a hand-edited DB
+	}
 	return throttleConfig{
 		baseSecs: s.throttleInt(ctx, sysconfig.KeyAuthDelayBaseSecs, sysconfig.DefaultAuthDelayBaseSecs),
 		maxTries: s.throttleInt(ctx, sysconfig.KeyAuthMaxTries, sysconfig.DefaultAuthMaxTries),
-		window:   time.Duration(s.throttleInt(ctx, sysconfig.KeyAuthFailWindowMins, sysconfig.DefaultAuthFailWindowMins)) * time.Minute,
+		window:   time.Duration(mins) * time.Minute,
 	}
 }
 
@@ -149,7 +160,10 @@ func (s *Session) throttleInt(ctx context.Context, key string, def int) int {
 }
 
 // throttleDelay implements delay = baseSecs * min(count, maxTries) seconds. A
-// base or max-tries of 0 yields 0 (throttling disabled).
+// base or max-tries of 0 yields 0 (throttling disabled). The result is capped
+// at maxThrottleDelay to prevent int64 overflow for absurd admin values — an
+// overflow without the cap would produce a negative duration that sleepFor
+// would silently skip, effectively disabling throttling.
 func (s *Session) throttleDelay(count int, cfg throttleConfig) time.Duration {
 	if cfg.baseSecs <= 0 {
 		return 0
@@ -161,7 +175,15 @@ func (s *Session) throttleDelay(count int, cfg throttleConfig) time.Duration {
 	if mult <= 0 {
 		return 0
 	}
-	return time.Duration(cfg.baseSecs*mult) * time.Second
+	secs := int64(cfg.baseSecs) * int64(mult)
+	if secs > int64(maxThrottleDelay/time.Second) {
+		return maxThrottleDelay
+	}
+	d := time.Duration(secs) * time.Second
+	if d > maxThrottleDelay {
+		return maxThrottleDelay
+	}
+	return d
 }
 
 // failDelay records a failed attempt for username and returns how long to delay
