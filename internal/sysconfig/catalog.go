@@ -30,12 +30,16 @@ type Entry struct {
 	Validate func(string) string // returns an errMsg (uppercase) or "" if valid
 }
 
+// KeyMOTDFile is the system_config key whose value is the absolute path to the
+// MOTD/NEWS file shown after login. Empty disables the feature.
+const KeyMOTDFile = "MOTD_FILE"
+
 // Catalog is the application-defined set of valid system parameters. The store
 // seeds every key with its Default via INSERT OR IGNORE; admins may change the
 // values through the admin UI. Keys are canonical uppercase.
 var Catalog = []Entry{
 	{
-		Key:     "MOTD_FILE",
+		Key:     KeyMOTDFile,
 		Label:   "MOTD File:",
 		Default: "",
 		// Empty value disables the feature; any non-empty path is accepted.

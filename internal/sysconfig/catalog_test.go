@@ -69,3 +69,18 @@ func TestCatalogLabelsNonEmpty(t *testing.T) {
 		}
 	}
 }
+
+func TestKeyMOTDFileConstant(t *testing.T) {
+	if KeyMOTDFile != "MOTD_FILE" {
+		t.Errorf("KeyMOTDFile = %q, want MOTD_FILE", KeyMOTDFile)
+	}
+	found := false
+	for _, e := range Catalog {
+		if e.Key == KeyMOTDFile {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Catalog has no entry keyed by KeyMOTDFile")
+	}
+}
