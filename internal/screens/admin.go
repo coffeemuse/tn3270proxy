@@ -45,6 +45,7 @@ func AdminMenuScreen(geom Geometry, errMsg string) (go3270.Screen, Cursor) {
 		{Row: 3, Col: 4, Content: "1.  Users"},
 		{Row: 4, Col: 4, Content: "2.  Groups"},
 		{Row: 5, Col: 4, Content: "3.  Services"},
+		{Row: 6, Col: 4, Content: "4.  System Parameters"},
 		{Row: geom.InputRow(), Col: 2, Content: "===>"},
 		option,
 		{Row: geom.InputRow(), Col: 11}, // stop field

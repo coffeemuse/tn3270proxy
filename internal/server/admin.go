@@ -55,6 +55,9 @@ type AdminStore interface {
 	ListGroupsForService(ctx context.Context, serviceID int64) ([]store.Group, error)
 	LinkGroupService(ctx context.Context, groupID, serviceID int64) error
 	UnlinkGroupService(ctx context.Context, groupID, serviceID int64) error
+
+	GetConfig(ctx context.Context, key string) (string, error)
+	SetConfig(ctx context.Context, key, value string) error
 }
 
 var _ AdminStore = (*store.Store)(nil)
@@ -97,6 +100,8 @@ func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 			err = f.groups(ctx, conn)
 		case 3:
 			err = f.services(ctx, conn)
+		case 4:
+			err = f.systemParams(ctx, conn)
 		}
 		if err != nil {
 			return err
@@ -137,6 +142,7 @@ func (f *adminFlow) recordAdmin(ctx context.Context, detail string) {
 		Kind: store.AuditAdmin, Username: f.identity.Username, Detail: detail})
 }
 
-// users is implemented in admin_users.go (Task 11).
-// groups is implemented in admin_groups.go (Task 13).
-// services is implemented in admin_services.go (Task 14).
+// users is implemented in admin_users.go.
+// groups is implemented in admin_groups.go.
+// services is implemented in admin_services.go.
+// systemParams is implemented in admin_system.go.

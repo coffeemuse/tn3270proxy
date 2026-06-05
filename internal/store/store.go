@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
 	_ "modernc.org/sqlite"
 )
 
@@ -99,6 +100,10 @@ CREATE TABLE IF NOT EXISTS audit (
 );
 CREATE INDEX IF NOT EXISTS audit_at ON audit(at);
 CREATE INDEX IF NOT EXISTS audit_username ON audit(username);
+CREATE TABLE IF NOT EXISTS system_config (
+	key   TEXT PRIMARY KEY COLLATE NOCASE NOT NULL,
+	value TEXT NOT NULL DEFAULT ''
+);
 `
 
 func (s *Store) migrate() error {
@@ -121,6 +126,15 @@ func (s *Store) migrate() error {
 	// The reserved admin group always exists; seeding only assigns members.
 	if _, err := s.db.Exec("INSERT OR IGNORE INTO groups (name) VALUES (?)", AdminGroup); err != nil {
 		return fmt.Errorf("ensure %s group: %w", AdminGroup, err)
+	}
+	// Seed sysconfig catalog defaults (idempotent: INSERT OR IGNORE).
+	for _, e := range sysconfig.Catalog {
+		if _, err := s.db.Exec(
+			"INSERT OR IGNORE INTO system_config (key, value) VALUES (?, ?)",
+			e.Key, e.Default,
+		); err != nil {
+			return fmt.Errorf("seed system_config %s: %w", e.Key, err)
+		}
 	}
 	return nil
 }
