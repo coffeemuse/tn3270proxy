@@ -142,6 +142,46 @@ func TestMigrateAddsDescriptionToLegacyDB(t *testing.T) {
 	}
 }
 
+func TestMigrateAddsUserDetailsToLegacyDB(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy_userdetails.db")
+
+	// Simulate a pre-details database: users table WITHOUT full_name/email.
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = raw.Exec(`CREATE TABLE users (
+		id            INTEGER PRIMARY KEY,
+		username      TEXT UNIQUE COLLATE NOCASE NOT NULL,
+		password_hash TEXT NOT NULL
+	);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Open through the store: migrate() must ALTER in full_name/email (default '').
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open legacy db: %v", err)
+	}
+	defer st.Close()
+
+	if _, err := st.CreateUser(ctx, "alice", "hash-a"); err != nil {
+		t.Fatalf("CreateUser on migrated db: %v", err)
+	}
+	u, err := st.GetUserByUsername(ctx, "alice")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+	if u.FullName != "" || u.Email != "" {
+		t.Fatalf("legacy migration: want empty details, got %q/%q", u.FullName, u.Email)
+	}
+}
+
 func TestOpenCreatesTables(t *testing.T) {
 	st := newTestStore(t)
 	want := []string{"users", "groups", "user_groups", "services", "group_services"}

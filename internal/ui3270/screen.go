@@ -79,12 +79,21 @@ func buildFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 	cur := Cursor{Row: 0, Col: 0}
 	for i, f := range fields {
 		row := 3 + 2*i
+		if f.ReadOnly {
+			// Display-only: label + static value, no writable input, never the
+			// cursor target.
+			screen = append(screen,
+				go3270.Field{Row: row, Col: 2, Content: f.Label},
+				go3270.Field{Row: row, Col: 16, Content: f.Value},
+			)
+			continue
+		}
 		stopCol := 17 + f.Length
 		if stopCol > 79 {
 			stopCol = 79
 		}
 		input := go3270.Field{Row: row, Col: 16, Name: f.Name, Write: true, Hidden: f.Hidden, Content: f.Value, Highlighting: go3270.Underscore}
-		if i == 0 {
+		if cur == (Cursor{Row: 0, Col: 0}) {
 			cur = Cursor{Row: input.Row, Col: input.Col + 1}
 		}
 		screen = append(screen,

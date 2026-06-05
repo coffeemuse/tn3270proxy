@@ -39,14 +39,14 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) error {
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.User]{
 		Title:  "TN3270 GATEWAY ADMIN: USERS",
 		Header: "CMD  USERNAME         GROUPS",
-		Legend: "S = set password   G = groups   D = delete",
+		Legend: "S = edit user   G = groups   D = delete",
 		PFHelp: "PF3=Admin Menu    PF4=Add User    PF7=PgUp    PF8=PgDn",
 		Rows:   f.term.Rows,
 		Fetch:  f.fetchUsers,
-		Add:    func(ctx context.Context, r ui3270.Renderer) (string, error) { return "", f.userAdd(ctx, r) },
+		Add:    func(ctx context.Context, r ui3270.Renderer) (string, error) { return "", f.userEdit(ctx, r, nil) },
 		Cmds: []ui3270.Command[store.User]{
 			{Key: 'S', Commit: func(ctx context.Context, r ui3270.Renderer, u store.User) (string, error) {
-				return "", f.setPassword(ctx, r, u)
+				return "", f.userEdit(ctx, r, &u)
 			}},
 			{Key: 'G', Commit: func(ctx context.Context, r ui3270.Renderer, u store.User) (string, error) {
 				return "", f.userGroups(ctx, r, u)
@@ -124,86 +124,125 @@ func (f *adminFlow) guardLastAdmin(ctx context.Context) string {
 	return ""
 }
 
-// passwordFromForm validates the password/retype pair from form values,
-// returning the password or an error-line message. Passwords are never
+// passwordFromForm validates the password/retype pair. When required is false
+// (edit mode) a blank password means "keep current": it returns change=false
+// and no error. A non-blank password must match its retype. Passwords are never
 // trimmed, logged, or echoed.
-func passwordFromForm(values map[string]string) (string, string) {
+func passwordFromForm(values map[string]string, required bool) (pass string, change bool, errMsg string) {
 	pass, retype := values[screens.FieldPassword], values[screens.FieldRetype]
 	if pass == "" {
-		return "", "PASSWORD IS REQUIRED"
+		if required {
+			return "", false, "PASSWORD IS REQUIRED"
+		}
+		return "", false, "" // keep current
 	}
 	if pass != retype {
-		return "", "PASSWORDS DO NOT MATCH"
+		return "", false, "PASSWORDS DO NOT MATCH"
 	}
 	if errors.Is(auth.ValidatePassword(pass), auth.ErrPasswordTooLong) {
-		return "", fmt.Sprintf("PASSWORD TOO LONG (MAX %d BYTES)", auth.MaxPasswordLen)
+		return "", false, fmt.Sprintf("PASSWORD TOO LONG (MAX %d BYTES)", auth.MaxPasswordLen)
 	}
-	return pass, ""
+	return pass, true, ""
 }
 
-func (f *adminFlow) userAdd(ctx context.Context, r ui3270.Renderer) error {
-	// fields is rebuilt-by-reference so a rejected submit re-seeds the typed
-	// username on the next render (RunForm re-sends the same slice each loop).
+// userEdit drives the unified Edit User Details form. u == nil → create mode
+// (username editable + required, password required); u != nil → edit mode
+// (username display-only, blank password keeps the current hash). Full name and
+// email are optional in both modes.
+func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.User) error {
+	create := u == nil
+	title := "TN3270 GATEWAY ADMIN: ADD USER"
+	username, fullName, email := "", "", ""
+	if !create {
+		title = "TN3270 GATEWAY ADMIN: EDIT USER " + u.Username
+		username, fullName, email = u.Username, u.FullName, u.Email
+	}
+	// Rebuilt-by-reference so a rejected submit re-seeds typed input on the next
+	// render (RunForm re-sends the same slice each loop).
 	fields := []ui3270.FormField{
-		{Name: screens.FieldUsername, Label: "Userid . . .", Length: 32},
+		{Name: screens.FieldUsername, Label: "Userid . . .", Length: 32, Value: username, ReadOnly: !create},
+		{Name: screens.FieldFullName, Label: "Full name .", Length: 40, Value: fullName},
+		{Name: screens.FieldEmail, Label: "Email  . . .", Length: 40, Value: email},
 		{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
 		{Name: screens.FieldRetype, Label: "Retype . . .", Hidden: true, Length: 32},
 	}
 	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
-		Title:  "TN3270 GATEWAY ADMIN: ADD USER",
+		Title:  title,
 		Fields: fields,
 		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
-			username := vals[screens.FieldUsername]
-			fields[0].Value = username // preserve typed input on re-render
-			if username == "" {
-				return "USERID IS REQUIRED", nil
+			fullNameVal := vals[screens.FieldFullName]
+			emailVal := vals[screens.FieldEmail]
+			fields[1].Value = fullNameVal // preserve typed input on re-render
+			fields[2].Value = emailVal
+			if create {
+				fields[0].Value = vals[screens.FieldUsername] // preserve typed username on re-render
 			}
-			pass, msg := passwordFromForm(vals)
-			if msg != "" {
-				return msg, nil
+			if err := store.ValidateFullName(fullNameVal); err != nil {
+				return "FULL NAME TOO LONG (MAX 40)", nil
 			}
-			// Pre-check: CreateUser is INSERT OR IGNORE and would silently no-op.
-			if _, err := f.store.GetUserByUsername(ctx, username); err == nil {
-				return "'" + username + "' ALREADY EXISTS", nil
-			} else if !errors.Is(err, store.ErrNotFound) {
-				return f.storeErr("check user", err), nil
+			if err := store.ValidateEmail(emailVal); err != nil {
+				return "INVALID EMAIL ADDRESS", nil
 			}
-			hash, err := auth.HashPassword(pass)
-			if err != nil {
-				return f.storeErr("hash password", err), nil
+			if create {
+				return f.userCreate(ctx, vals, fullNameVal, emailVal)
 			}
-			if _, err := f.store.CreateUser(ctx, username, hash); err != nil {
-				return f.storeErr("create user", err), nil
-			}
-			f.recordAdmin(ctx, "user create "+username)
-			return "", nil
+			return f.userSaveEdit(ctx, *u, vals, fullNameVal, emailVal)
 		},
 	})
 }
 
-func (f *adminFlow) setPassword(ctx context.Context, r ui3270.Renderer, u store.User) error {
-	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
-		Title: "TN3270 GATEWAY ADMIN: SET PASSWORD FOR " + u.Username,
-		Fields: []ui3270.FormField{
-			{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
-			{Name: screens.FieldRetype, Label: "Retype . . .", Hidden: true, Length: 32},
-		},
-		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
-			pass, msg := passwordFromForm(vals)
-			if msg != "" {
-				return msg, nil
-			}
-			hash, err := auth.HashPassword(pass)
-			if err != nil {
-				return f.storeErr("hash password", err), nil
-			}
-			if err := f.store.SetPassword(ctx, u.ID, hash); err != nil {
-				return f.storeErr("set password", err), nil
-			}
-			f.recordAdmin(ctx, "user set-password "+u.Username)
-			return "", nil
-		},
-	})
+// userCreate handles the create-mode submit: requires + confirms password,
+// rejects duplicates, then creates the user and writes the optional details.
+func (f *adminFlow) userCreate(ctx context.Context, vals map[string]string, fullName, email string) (string, error) {
+	username := vals[screens.FieldUsername]
+	if username == "" {
+		return "USERID IS REQUIRED", nil
+	}
+	pass, _, msg := passwordFromForm(vals, true)
+	if msg != "" {
+		return msg, nil
+	}
+	if _, err := f.store.GetUserByUsername(ctx, username); err == nil {
+		return "'" + username + "' ALREADY EXISTS", nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return f.storeErr("check user", err), nil
+	}
+	hash, err := auth.HashPassword(pass)
+	if err != nil {
+		return f.storeErr("hash password", err), nil
+	}
+	uid, err := f.store.CreateUser(ctx, username, hash)
+	if err != nil {
+		return f.storeErr("create user", err), nil
+	}
+	if err := f.store.UpdateUserDetails(ctx, uid, fullName, email); err != nil {
+		return f.storeErr("set user details", err), nil
+	}
+	f.recordAdmin(ctx, "user create "+username)
+	return "", nil
+}
+
+// userSaveEdit handles the edit-mode submit: optionally changes the password
+// (blank = keep), always writes the details, and audits a single edit record.
+func (f *adminFlow) userSaveEdit(ctx context.Context, u store.User, vals map[string]string, fullName, email string) (string, error) {
+	pass, change, msg := passwordFromForm(vals, false)
+	if msg != "" {
+		return msg, nil
+	}
+	if change {
+		hash, err := auth.HashPassword(pass)
+		if err != nil {
+			return f.storeErr("hash password", err), nil
+		}
+		if err := f.store.SetPassword(ctx, u.ID, hash); err != nil {
+			return f.storeErr("set password", err), nil
+		}
+	}
+	if err := f.store.UpdateUserDetails(ctx, u.ID, fullName, email); err != nil {
+		return f.storeErr("set user details", err), nil
+	}
+	f.recordAdmin(ctx, "user edit "+u.Username)
+	return "", nil
 }
 
 // userGroups shows every group with an X membership marker; line command A
