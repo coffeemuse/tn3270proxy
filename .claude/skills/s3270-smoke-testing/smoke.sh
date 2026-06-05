@@ -420,6 +420,57 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 12c saved value did not persist on re-entry"
 fi
 
+# --- 13. Edit User Details form (GH #46): the user-list `S` line command opens
+# a unified edit form whose USERNAME is display-only, so the cursor lands on the
+# first EDITABLE field (Full name, row 5) — distinct from every other form's
+# (3,17). Walk: login admin -> A -> users list (1) -> S on the first row -> edit
+# form, capture; PF3 -> users list, capture. First user by username is ADMIN
+# (ordered ADMIN, ALICE, CHARLIE); editing self renders fine and we exit via PF3
+# without saving. The list legend "S = edit user" is unique to the users list and
+# distinguishes it from the edit form (help "Enter = save"). ---
+s3 t13 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+String(A)
+Enter()
+Wait(5,InputField)
+String(1)
+Enter()
+Wait(5,InputField)
+Ascii()
+String(S)
+Enter()
+Wait(5,InputField)
+Ascii()
+PF(3)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "13a edit-user form renders" "EDIT USER" "$WORK/t13.out"
+check "13b full name label present" "Full name" "$WORK/t13.out"
+check "13c email label present" "Email" "$WORK/t13.out"
+# Username is display-only, so the cursor homes to Full name at row 5 col 17.
+# Assert a 5 17 cursor line AFTER the users-list 4 3 line so nothing earlier can
+# satisfy it vacuously.
+if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 5 17 /{ok=1} END{exit !ok}' "$WORK/t13.out"; then
+  PASS=$((PASS+1)); echo "PASS: 13d edit-user cursor on Full name (5,17), username read-only"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 13d edit-user cursor not at (5,17) after users list"
+fi
+# PF3 on the form returns to the users list: the edit-form title appears first,
+# then the list's distinctive legend ("S = edit user") reappears after it.
+if awk '/EDIT USER/{seen=1} seen && /S = edit user/{ok=1} END{exit !ok}' "$WORK/t13.out"; then
+  PASS=$((PASS+1)); echo "PASS: 13e PF3 on edit form returns to users list"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 13e PF3 on edit form did not return to users list"
+fi
+
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
 [ "$FAIL" -eq 0 ]
