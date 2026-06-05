@@ -40,13 +40,17 @@ type Group struct {
 // ListUsers returns all users ordered by username.
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	return s.queryUsers(ctx,
-		"SELECT id, username, password_hash, full_name, email FROM users ORDER BY username")
+		`SELECT id, username, password_hash, full_name, email,
+		        mfa_required, mfa_secret, mfa_enrolled_at, mfa_last_step
+		 FROM users ORDER BY username`)
 }
 
 // ListUsersInGroup returns the group's members ordered by username.
 func (s *Store) ListUsersInGroup(ctx context.Context, groupID int64) ([]User, error) {
 	return s.queryUsers(ctx,
-		`SELECT u.id, u.username, u.password_hash, u.full_name, u.email FROM users u
+		`SELECT u.id, u.username, u.password_hash, u.full_name, u.email,
+		        u.mfa_required, u.mfa_secret, u.mfa_enrolled_at, u.mfa_last_step
+		 FROM users u
 		 JOIN user_groups ug ON ug.user_id = u.id
 		 WHERE ug.group_id = ? ORDER BY u.username`, groupID)
 }
@@ -60,9 +64,12 @@ func (s *Store) queryUsers(ctx context.Context, query string, args ...any) ([]Us
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Email); err != nil {
+		var reqInt int
+		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Email,
+			&reqInt, &u.MFASecret, &u.MFAEnrolledAt, &u.MFALastStep); err != nil {
 			return nil, err
 		}
+		u.MFARequired = reqInt != 0
 		out = append(out, u)
 	}
 	return out, rows.Err()

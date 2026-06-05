@@ -61,11 +61,15 @@ func (s *Store) Close() error { return s.db.Close() }
 
 const schema = `
 CREATE TABLE IF NOT EXISTS users (
-	id            INTEGER PRIMARY KEY,
-	username      TEXT UNIQUE COLLATE NOCASE NOT NULL,
-	password_hash TEXT NOT NULL,
-	full_name     TEXT NOT NULL DEFAULT '',
-	email         TEXT NOT NULL DEFAULT ''
+	id              INTEGER PRIMARY KEY,
+	username        TEXT UNIQUE COLLATE NOCASE NOT NULL,
+	password_hash   TEXT NOT NULL,
+	full_name       TEXT NOT NULL DEFAULT '',
+	email           TEXT NOT NULL DEFAULT '',
+	mfa_required    INTEGER NOT NULL DEFAULT 0,
+	mfa_secret      TEXT NOT NULL DEFAULT '',
+	mfa_enrolled_at TEXT NOT NULL DEFAULT '',
+	mfa_last_step   INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS groups (
 	id   INTEGER PRIMARY KEY,
@@ -138,6 +142,22 @@ func (s *Store) migrate() error {
 		"ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn("users", "mfa_required",
+		"ALTER TABLE users ADD COLUMN mfa_required INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("users", "mfa_secret",
+		"ALTER TABLE users ADD COLUMN mfa_secret TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("users", "mfa_enrolled_at",
+		"ALTER TABLE users ADD COLUMN mfa_enrolled_at TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("users", "mfa_last_step",
+		"ALTER TABLE users ADD COLUMN mfa_last_step INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 	// The reserved admin group always exists; seeding only assigns members.
 	if _, err := s.db.Exec("INSERT OR IGNORE INTO groups (name) VALUES (?)", AdminGroup); err != nil {
 		return fmt.Errorf("ensure %s group: %w", AdminGroup, err)
@@ -190,11 +210,15 @@ func (s *Store) ensureColumn(table, column, alterSQL string) error {
 
 // User is an account record.
 type User struct {
-	ID           int64
-	Username     string
-	PasswordHash string
-	FullName     string
-	Email        string
+	ID            int64
+	Username      string
+	PasswordHash  string
+	FullName      string
+	Email         string
+	MFARequired   bool
+	MFASecret     string // AES-GCM ciphertext (base64); "" = not enrolled
+	MFAEnrolledAt string // UTC RFC3339; "" = not set
+	MFALastStep   int64  // replay floor: highest accepted TOTP step
 }
 
 // CreateUser inserts a user, or returns the existing user's id if the
@@ -230,15 +254,20 @@ func (s *Store) AddUserToGroup(ctx context.Context, userID, groupID int64) error
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (User, error) {
 	username = strings.ToUpper(username)
 	var u User
+	var reqInt int
 	err := s.db.QueryRowContext(ctx,
-		"SELECT id, username, password_hash, full_name, email FROM users WHERE username = ?", username).
-		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Email)
+		`SELECT id, username, password_hash, full_name, email,
+		        mfa_required, mfa_secret, mfa_enrolled_at, mfa_last_step
+		 FROM users WHERE username = ?`, username).
+		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Email,
+			&reqInt, &u.MFASecret, &u.MFAEnrolledAt, &u.MFALastStep)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
 	if err != nil {
 		return User{}, err
 	}
+	u.MFARequired = reqInt != 0
 	return u, nil
 }
 
