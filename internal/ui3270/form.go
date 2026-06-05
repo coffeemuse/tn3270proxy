@@ -22,8 +22,9 @@ package ui3270
 import "context"
 
 // RunForm loops a labeled-input form: render → on Cancel return nil → else
-// Submit. A non-"" errMsg re-renders with that message; success returns nil. A
-// non-nil error is a dead connection and propagates.
+// Submit. A non-"" errMsg re-renders with that message; success returns nil
+// (or, with cfg.StayOnSave, re-renders so the user saves in place and leaves
+// via PF3). A non-nil error is a dead connection and propagates.
 func RunForm(ctx context.Context, r Renderer, cfg FormConfig) error {
 	errMsg := ""
 	for {
@@ -40,6 +41,10 @@ func RunForm(ctx context.Context, r Renderer, cfg FormConfig) error {
 		}
 		if msg != "" {
 			errMsg = msg
+			continue
+		}
+		if cfg.StayOnSave {
+			errMsg = "" // clear any prior error; save succeeded, stay on the form
 			continue
 		}
 		return nil

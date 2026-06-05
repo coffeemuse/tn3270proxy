@@ -82,3 +82,36 @@ func TestRunFormErrorThenSuccess(t *testing.T) {
 		t.Errorf("second render ErrMsg = %q, want \"TRY AGAIN\"", r.gotForms[1].ErrMsg)
 	}
 }
+
+func TestRunFormStayOnSave(t *testing.T) {
+	// With StayOnSave, each successful submit re-renders the form (saves in
+	// place); only Cancel (PF3) leaves.
+	r := &fakeRenderer{forms: []FormAction{
+		{Values: map[string]string{"x": "v1"}}, // Enter: save, stay
+		{Values: map[string]string{"x": "v2"}}, // Enter: save, stay
+		{Cancel: true},                         // PF3: exit
+	}}
+	calls := 0
+	err := RunForm(context.Background(), r, FormConfig{
+		Fields:     []FormField{{Name: "x"}},
+		StayOnSave: true,
+		Submit: func(_ context.Context, _ map[string]string) (string, error) {
+			calls++
+			return "", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("err=%v, want nil", err)
+	}
+	if calls != 2 {
+		t.Errorf("Submit calls = %d, want 2 (each Enter saves and stays)", calls)
+	}
+	// Three renders: initial, after first save, after second save (then Cancel).
+	if len(r.gotForms) != 3 {
+		t.Errorf("form renders = %d, want 3 (initial + one per save)", len(r.gotForms))
+	}
+	// A successful save clears any prior error line on the re-render.
+	if last := r.gotForms[len(r.gotForms)-1]; last.ErrMsg != "" {
+		t.Errorf("re-render after save ErrMsg = %q, want empty", last.ErrMsg)
+	}
+}

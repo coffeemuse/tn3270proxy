@@ -48,8 +48,11 @@ func (f *adminFlow) systemParams(ctx context.Context, conn net.Conn) error {
 	}
 
 	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
-		Title:  "TN3270 GATEWAY ADMIN: SYSTEM PARAMETERS",
-		Fields: fields,
+		Title: "TN3270 GATEWAY ADMIN: SYSTEM PARAMETERS",
+		// Enter saves in place and stays on the form; PF3 returns to the admin
+		// menu. (Unlike the add/edit forms, there is no "done" terminal state.)
+		StayOnSave: true,
+		Fields:     fields,
 		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
 			// Validate all fields before touching the store (all-or-nothing).
 			for _, e := range sysconfig.Catalog {

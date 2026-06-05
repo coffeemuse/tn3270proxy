@@ -109,7 +109,8 @@ func TestAdminSystemParamsSaveHappyPath(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
-			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt"}},
+			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt"}}, // Enter: save, stay
+			{Cancel: true}, // PF3: leave to admin menu
 		},
 	}
 	f, _ := newAdminFixture(t, p)
@@ -119,6 +120,12 @@ func TestAdminSystemParamsSaveHappyPath(t *testing.T) {
 	ctx := context.Background()
 	if err := f.Run(ctx, nil); err != nil {
 		t.Fatal(err)
+	}
+
+	// Enter saves in place: the form re-renders (stays) rather than returning,
+	// so there are two renders before PF3 leaves.
+	if len(p.gotForms) != 2 {
+		t.Errorf("form renders = %d, want 2 (save stays, then PF3 leaves)", len(p.gotForms))
 	}
 
 	val, err := f.store.GetConfig(ctx, "MOTD_FILE")
@@ -146,7 +153,8 @@ func TestAdminSystemParamsNoAuditWhenUnchanged(t *testing.T) {
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
 			// MOTD_FILE default is "" — submit the same value
-			{Values: map[string]string{"MOTD_FILE": ""}},
+			{Values: map[string]string{"MOTD_FILE": ""}}, // Enter: no change, stay
+			{Cancel: true}, // PF3: leave
 		},
 	}
 	f, _ := newAdminFixture(t, p)
@@ -167,7 +175,8 @@ func TestAdminSystemParamsEmptyValueIsValid(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
-			{Values: map[string]string{"MOTD_FILE": ""}},
+			{Values: map[string]string{"MOTD_FILE": ""}}, // Enter: clear (disable), stay
+			{Cancel: true}, // PF3: leave
 		},
 	}
 	f, _ := newAdminFixture(t, p)
@@ -180,11 +189,17 @@ func TestAdminSystemParamsEmptyValueIsValid(t *testing.T) {
 	if err := f.Run(ctx, nil); err != nil {
 		t.Fatal(err)
 	}
-	// No error message on the form — it should have exited cleanly.
-	if len(p.gotForms) != 1 {
-		t.Fatalf("form renders = %d; expected exactly 1 (clean submit, no re-render)", len(p.gotForms))
+	// Empty path is valid, so the save succeeds and the form stays (re-renders)
+	// with no error line — two renders before PF3 leaves.
+	if len(p.gotForms) != 2 {
+		t.Fatalf("form renders = %d; expected 2 (valid save stays, then PF3)", len(p.gotForms))
 	}
-	if p.gotForms[0].ErrMsg != "" {
-		t.Errorf("errMsg = %q, want empty (empty path is valid)", p.gotForms[0].ErrMsg)
+	for i, fv := range p.gotForms {
+		if fv.ErrMsg != "" {
+			t.Errorf("render %d errMsg = %q, want empty (empty path is valid)", i, fv.ErrMsg)
+		}
+	}
+	if val, _ := f.store.GetConfig(ctx, "MOTD_FILE"); val != "" {
+		t.Errorf("MOTD_FILE = %q, want empty after clear", val)
 	}
 }

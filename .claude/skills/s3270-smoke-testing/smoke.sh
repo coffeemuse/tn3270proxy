@@ -371,9 +371,12 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 11d PF3 on form did not return to admin menu"
 fi
 
-# --- 12. System Parameters Enter-save round-trip (GH #44): type a value, Enter
-# to save (returns to admin menu), re-enter the form, and confirm the saved
-# value pre-populates the field — proving the store write + live read-back. ---
+# --- 12. System Parameters Enter-save behavior (GH #44): Enter SAVES IN PLACE
+# and stays on the form (it does NOT return to the admin menu); PF3 is the way
+# out. Then re-enter the form to prove the value persisted to the store. Walk:
+# type a path, Enter (stay), capture; PF3 -> admin menu, capture; re-enter (4),
+# capture. The form help line ("Enter = save") vs the admin menu help line
+# ("Enter = select") distinguishes the two screens in the accumulated output. ---
 s3 t12 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
 Wait(5,InputField)
@@ -391,13 +394,31 @@ Wait(5,InputField)
 String(/etc/motd.smoke)
 Enter()
 Wait(5,InputField)
+Ascii()
+PF(3)
+Wait(5,InputField)
+Ascii()
 String(4)
 Enter()
 Wait(5,InputField)
 Ascii()
 Quit()
 EOF
-check "12a saved MOTD value persists and pre-populates on re-entry" "/etc/motd.smoke" "$WORK/t12.out"
+check "12a saved MOTD value present" "/etc/motd.smoke" "$WORK/t12.out"
+# Enter stays on the form: the typed value appears BEFORE we ever reach the
+# admin menu ("Enter = select"), i.e. Enter did not pop back to the menu.
+if awk '/Enter = select/{menu=1} /\/etc\/motd\.smoke/ && !menu {ok=1} END{exit !ok}' "$WORK/t12.out"; then
+  PASS=$((PASS+1)); echo "PASS: 12b Enter saves in place (stays on form, not back to menu)"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 12b Enter did not stay on the form after save"
+fi
+# Persisted: after PF3 to the admin menu, re-entering rebuilds the form from the
+# store and the saved value shows AFTER the admin menu line — proves read-back.
+if awk '/Enter = select/{menu=1} menu && /\/etc\/motd\.smoke/{ok=1} END{exit !ok}' "$WORK/t12.out"; then
+  PASS=$((PASS+1)); echo "PASS: 12c saved value persists and pre-populates on re-entry"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 12c saved value did not persist on re-entry"
+fi
 
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
