@@ -122,19 +122,58 @@ func TestIdleConnZeroDeadlineResumesAutoArm(t *testing.T) {
 	}
 }
 
-func TestIdleConnSetIdleSwitchesWindow(t *testing.T) {
-	c, _ := net.Pipe()
+func TestIdleConnHardCeilingClampsBelowIdleWindow(t *testing.T) {
+	c, srv := net.Pipe()
 	defer c.Close()
-	ic := newIdleConn(c, 10*time.Second) // pre-auth value
+	defer srv.Close()
+	ic := newIdleConn(c, 10*time.Second)               // wide idle window
+	ic.setPreAuth(10*time.Second, 50*time.Millisecond) // tight absolute ceiling
 
-	ic.SetIdle(50 * time.Millisecond) // post-auth switch (inverted for test speed)
-
+	go func() { srv.Read(make([]byte, 1)) }() // never writes; ic.Read must time out at the ceiling
 	start := time.Now()
-	_, err := ic.Read(make([]byte, 1))
-	if !isTimeout(err) {
-		t.Fatalf("Read error = %v, want timeout", err)
-	}
+	ic.Read(make([]byte, 1))
 	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Errorf("Read blocked %v: SetIdle did not take effect", elapsed)
+		t.Errorf("read blocked %v; hard ceiling should fire ~50ms", elapsed)
+	}
+}
+
+func TestIdleConnSetWindowClearsCeiling(t *testing.T) {
+	c, srv := net.Pipe()
+	defer c.Close()
+	defer srv.Close()
+	ic := newIdleConn(c, 10*time.Second)
+	ic.setPreAuth(10*time.Second, 50*time.Millisecond) // ceiling armed...
+	ic.setWindow(10 * time.Second)                     // ...then post-auth clears it
+
+	go func() {
+		time.Sleep(120 * time.Millisecond) // past the old ceiling
+		srv.Write([]byte{0x00})
+	}()
+	start := time.Now()
+	if _, err := ic.Read(make([]byte, 1)); err != nil {
+		t.Fatalf("read errored after ceiling cleared: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 100*time.Millisecond {
+		t.Errorf("read returned too early (%v); ceiling should be gone", elapsed)
+	}
+}
+
+func TestIdleConnExemptWindowNeverFires(t *testing.T) {
+	c, srv := net.Pipe()
+	defer c.Close()
+	defer srv.Close()
+	ic := newIdleConn(c, 50*time.Millisecond)
+	ic.setWindow(0) // exempt: no deadline
+
+	go func() {
+		time.Sleep(120 * time.Millisecond) // past the old 50ms idle
+		srv.Write([]byte{0x00})
+	}()
+	start := time.Now()
+	if _, err := ic.Read(make([]byte, 1)); err != nil {
+		t.Fatalf("exempt read errored: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed < 100*time.Millisecond {
+		t.Errorf("exempt read returned too early (%v)", elapsed)
 	}
 }
