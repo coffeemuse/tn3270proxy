@@ -111,9 +111,10 @@ func wrapIdle(conn net.Conn, preAuthIdle time.Duration) net.Conn {
 	return newIdleConn(conn, preAuthIdle)
 }
 
-func (h sessionHandler) Handle(conn net.Conn) {
-	trusted := trustList(h.limits.TrustedCIDRs).Contains(conn.RemoteAddr())
-	s := &Session{
+// sessionFor builds the Session for a connection from addr, deciding trust and
+// carrying the regime knobs from limits.
+func (h sessionHandler) sessionFor(addr net.Addr) *Session {
+	return &Session{
 		Store:            h.store,
 		Authenticate:     auth.Authenticate,
 		Presenter:        go3270Presenter{},
@@ -124,9 +125,13 @@ func (h sessionHandler) Handle(conn net.Conn) {
 		PreAuthIdle:      h.limits.PreAuthIdle,
 		Idle:             h.limits.Idle,
 		PreAuthMax:       h.limits.PreAuthMax,
-		Trusted:          trusted,
+		Trusted:          trustList(h.limits.TrustedCIDRs).Contains(addr),
 		BridgeIdleExempt: h.limits.BridgeIdleExempt,
 	}
+}
+
+func (h sessionHandler) Handle(conn net.Conn) {
+	s := h.sessionFor(conn.RemoteAddr())
 	s.Run(wrapIdle(conn, h.limits.PreAuthIdle))
 }
 

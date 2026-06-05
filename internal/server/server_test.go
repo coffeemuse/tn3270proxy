@@ -21,9 +21,12 @@ package server
 
 import (
 	"net"
+	"net/netip"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
 type handlerFunc func(net.Conn)
@@ -64,4 +67,33 @@ func TestServerAcceptsAndDispatches(t *testing.T) {
 
 	ln.Close()
 	wg.Wait()
+}
+
+func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/s.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	limits := Limits{
+		PreAuthIdle:      2 * time.Minute,
+		Idle:             30 * time.Minute,
+		PreAuthMax:       5 * time.Minute,
+		BridgeIdleExempt: true,
+		TrustedCIDRs:     []netip.Prefix{netip.MustParsePrefix("10.0.0.0/24")},
+	}
+	h := NewSessionHandler(st, 0x6B, limits).(sessionHandler)
+
+	got := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.0.0.9"), Port: 1})
+	if !got.Trusted {
+		t.Error("client in trusted CIDR should yield Trusted session")
+	}
+	if got.PreAuthMax != 5*time.Minute || !got.BridgeIdleExempt {
+		t.Errorf("regime fields not propagated: %+v", got)
+	}
+	untrusted := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.9.9.9"), Port: 1})
+	if untrusted.Trusted {
+		t.Error("client outside trusted CIDRs must not be Trusted")
+	}
 }
