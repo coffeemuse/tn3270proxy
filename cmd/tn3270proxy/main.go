@@ -77,6 +77,11 @@ func runServe(args []string) error {
 	}
 	defer st.Close()
 
+	mfaCipher, err := mfaStartup(context.Background(), st, cfg.MFA.Key)
+	if err != nil {
+		return err
+	}
+
 	warnIfNoAdmin(context.Background(), st, os.Stderr)
 
 	listeners, err := listen.Build(cfg)
@@ -100,7 +105,7 @@ func runServe(args []string) error {
 		BridgeIdleExempt: cfg.Limits.BridgeIdleExempt,
 		Trust:            server.NewStoreTrustChecker(st),
 	}
-	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits, logger, nil)
+	handler := server.NewSessionHandler(st, bridge.EscapeAIDPA3, limits, logger, mfaCipher)
 	return server.ServeAll(listeners, handler, limits)
 }
 
