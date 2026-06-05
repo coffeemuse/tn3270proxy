@@ -57,6 +57,9 @@ type AdminStore interface {
 	LinkGroupService(ctx context.Context, groupID, serviceID int64) error
 	UnlinkGroupService(ctx context.Context, groupID, serviceID int64) error
 
+	SetMFARequired(ctx context.Context, userID int64, required bool) error
+	ClearMFA(ctx context.Context, userID int64) error
+
 	GetConfig(ctx context.Context, key string) (string, error)
 	SetConfig(ctx context.Context, key, value string) error
 
