@@ -134,7 +134,7 @@ func TestAdminSystemParamsSaveHappyPath(t *testing.T) {
 	if audited[0].Kind != store.AuditAdmin {
 		t.Errorf("audit kind = %q, want AuditAdmin", audited[0].Kind)
 	}
-	if audited[0].Detail != "sysconfig set MOTD_FILE = /etc/motd.txt" {
+	if audited[0].Detail != "sysconfig set MOTD_FILE:  -> /etc/motd.txt" {
 		t.Errorf("audit detail = %q", audited[0].Detail)
 	}
 }

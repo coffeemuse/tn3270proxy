@@ -60,13 +60,14 @@ func (f *adminFlow) systemParams(ctx context.Context, conn net.Conn) error {
 			// Persist only changed values; audit each effective change.
 			for i, e := range sysconfig.Catalog {
 				newVal := vals[e.Key]
-				if newVal == fields[i].Value {
+				oldVal := fields[i].Value
+				if newVal == oldVal {
 					continue
 				}
 				if err := f.store.SetConfig(ctx, e.Key, newVal); err != nil {
 					return logStoreErr("set config "+e.Key, err), nil
 				}
-				f.recordAdmin(ctx, "sysconfig set "+e.Key+" = "+newVal)
+				f.recordAdmin(ctx, "sysconfig set "+e.Key+": "+oldVal+" -> "+newVal)
 				fields[i].Value = newVal // keep in-slice value current for next render
 			}
 			return "", nil

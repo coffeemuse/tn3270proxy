@@ -24,9 +24,9 @@ package sysconfig
 
 // Entry describes one system parameter.
 type Entry struct {
-	Key      string          // canonical uppercase; used as the DB key and form field name
-	Label    string          // display label shown on the System Parameters form
-	Default  string          // initial value seeded into system_config by migrate()
+	Key      string              // canonical uppercase; used as the DB key and form field name
+	Label    string              // display label shown on the System Parameters form
+	Default  string              // initial value seeded into system_config by migrate()
 	Validate func(string) string // returns an errMsg (uppercase) or "" if valid
 }
 
