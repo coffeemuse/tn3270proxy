@@ -1093,6 +1093,44 @@ func TestMFAVerifyThrottleBacksOff(t *testing.T) {
 	}
 }
 
+func TestMFAEnrollThrottleBacksOff(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	now := time.Unix(1_700_000_000, 0)
+	step := uint64(now.Unix() / 30)
+	good := codeForServer(t, secret, step)
+
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		enrolls: []mfaResult{
+			{code: "000000"}, // wrong → 2s
+			{code: "111111"}, // wrong → 4s
+			{code: good},     // correct → reset
+		},
+		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s, st := newMFATestSession(t, p, &fakeBridger{})
+	s.MFAGenerate = func(_, _ string) (string, error) { return secret, nil }
+	s.Throttle = newAuthThrottle() // Now is already fixed by newMFATestSession
+	var slept []time.Duration
+	s.Sleep = func(d time.Duration) { slept = append(slept, d) }
+	ctx := context.Background()
+	uid, _ := st.CreateUser(ctx, "alice", "x")
+	st.SetMFARequired(ctx, uid, true)
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	want := []time.Duration{2 * time.Second, 4 * time.Second}
+	if len(slept) != len(want) || slept[0] != want[0] || slept[1] != want[1] {
+		t.Fatalf("enroll delays = %v, want %v", slept, want)
+	}
+	if n, ok := s.Throttle.peek("alice"); ok {
+		t.Errorf("counter not reset after successful enroll: count=%d", n)
+	}
+}
+
 func TestLoginThrottleEnumerationSafe(t *testing.T) {
 	// A first failure for an unknown username and for a known one must produce
 	// the same delay — the throttle must not reveal whether a user exists.
