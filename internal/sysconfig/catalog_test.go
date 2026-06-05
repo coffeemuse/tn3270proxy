@@ -158,6 +158,13 @@ func TestThrottleValidators(t *testing.T) {
 	if msg := base.Validate("x"); msg == "" {
 		t.Error("base x: want error")
 	}
+	tries := entryByKey(t, KeyAuthMaxTries)
+	if msg := tries.Validate("0"); msg != "" { // max-tries 0 disables, must be valid
+		t.Errorf("max-tries 0: got %q, want valid", msg)
+	}
+	if msg := tries.Validate("-1"); msg == "" {
+		t.Error("max-tries -1: want error")
+	}
 	win := entryByKey(t, KeyAuthFailWindowMins)
 	if msg := win.Validate("0"); msg == "" { // window must be >= 1
 		t.Error("window 0: want error")
