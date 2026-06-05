@@ -55,8 +55,8 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.Service]{
 		Title:  "TN3270 GATEWAY ADMIN: SERVICES",
 		Header: "CMD  NAME     DESCRIPTION          HOST:PORT          TLS VERIFY",
-		Legend: "S = edit   G = group access   D = delete   PF4 = add service",
-		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = admin menu",
+		Legend: "S = edit   G = group access   D = delete",
+		PFHelp: "PF3=Admin Menu    PF4=Add Service    PF7=PgUp    PF8=PgDn",
 		Rows:   f.term.Rows,
 		Fetch: func(ctx context.Context) ([]ui3270.Row[store.Service], string) {
 			svcs, err := f.store.ListAllServices(ctx)

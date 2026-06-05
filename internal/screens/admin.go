@@ -53,6 +53,6 @@ func AdminMenuScreen(geom Geometry, errMsg string) (go3270.Screen, Cursor) {
 		option,
 		{Row: geom.InputRow(), Col: 11}, // stop field
 		{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		{Row: geom.HelpRow(), Col: 2, Content: "Enter = select    PF3 = main menu"},
+		{Row: geom.HelpRow(), Col: 2, Content: "PF3=Main Menu"},
 	}, cursorAt(option)
 }

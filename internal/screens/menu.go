@@ -74,7 +74,7 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, errMsg stri
 		selection,
 		go3270.Field{Row: geom.InputRow(), Col: 15}, // stop field
 		go3270.Field{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		go3270.Field{Row: geom.HelpRow(), Col: 2, Content: "Enter = connect    PF3 = logoff    (PA3 returns here from a session)"},
+		go3270.Field{Row: geom.HelpRow(), Col: 2, Content: "PF3=Logoff    (PA3 returns here from a session)"},
 	)
 	return screen, mapping, cursorAt(selection)
 }

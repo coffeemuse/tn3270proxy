@@ -47,7 +47,7 @@ func LoginScreen(geom Geometry, errMsg string) (go3270.Screen, go3270.Rules, Cur
 		{Row: 5, Col: 16, Name: FieldPassword, Write: true, Hidden: true, Highlighting: go3270.Underscore},
 		{Row: 5, Col: 33}, // stop field
 		{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		{Row: geom.HelpRow(), Col: 2, Content: "Enter = sign on    PF3 = disconnect"},
+		{Row: geom.HelpRow(), Col: 2, Content: "PF3=Disconnect"},
 	}
 	rules := go3270.Rules{
 		FieldUsername: {Validator: go3270.NonBlank, ErrorText: "Userid is required"},
