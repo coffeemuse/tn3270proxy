@@ -241,6 +241,9 @@ Conscious departures from textbook ISPF, with rationale:
 5. **Command line at the top only.** Real ISPF can place the command line at top or
    bottom (a user setting). We fix it at the top (r1) and do not offer the bottom
    option, for layout simplicity.
+6. **No action bar.** Later ISPF versions show a pull-down action bar on row 0
+   (`Menu  Utilities  …`). We omit it: it post-dates the classic look we target and
+   is overkill for a single-purpose gateway. The title owns row 0.
 
 ---
 
