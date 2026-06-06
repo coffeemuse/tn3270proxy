@@ -566,6 +566,57 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 14e PF3 on edit form did not return to users list"
 fi
 
+# --- 15. User Settings menu entry (GH #63): the service menu shows a "0 User
+# Settings" meta-row for every user; selecting "0" opens the User Settings
+# screen whose first row is "1. Change Password"; PF3 returns to the service
+# menu. Scenario 13 activated the MOTD gate (front.db MOTD_FILE now points at
+# a real 2-page fixture), so this login must clear the gate with two ENTERs
+# (Wait(Unlock) after each — the MOTD page has no input field) before reaching
+# the service menu. Walk: login alice -> clear MOTD (2x Enter) -> service menu
+# (check "0 User Settings") -> type "0", Enter -> User Settings screen ->
+# assert title + "Change Password" + cursor at (19,8) -> PF3 -> service menu.
+s3 t15 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(alice)
+Tab()
+String(changeme)
+Enter()
+Wait(Unlock)
+Wait(1,seconds)
+Enter()
+Wait(Unlock)
+Wait(1,seconds)
+Enter()
+Wait(5,InputField)
+Ascii()
+String(0)
+Enter()
+Wait(5,InputField)
+Ascii()
+PF(3)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "15a service menu shows '0 User Settings' entry" "User Settings" "$WORK/t15.out"
+check "15b User Settings screen renders (title)" "USER SETTINGS" "$WORK/t15.out"
+check "15c User Settings shows Change Password option" "Change Password" "$WORK/t15.out"
+# Cursor on the option input field at (19,8): FieldUSOption col=7, cursorAt = col+1=8.
+# Assert a 19 8 cursor line AFTER the service menu's 19 8 line so the earlier
+# menu rendering can't satisfy it vacuously (awk tracks first-seen then second-seen).
+if awk '/I 2 24 80 19 8 /{count++} count==2{ok=1; exit} END{exit !ok}' "$WORK/t15.out"; then
+  PASS=$((PASS+1)); echo "PASS: 15d User Settings cursor on option field (19,8)"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 15d User Settings cursor not at (19,8) after service menu"
+fi
+# PF3 returns to the service menu: USER SETTINGS appears first, then GATEWAY MENU reappears.
+if awk '/USER SETTINGS/{seen=1} seen && /TN3270 GATEWAY MENU/{ok=1} END{exit !ok}' "$WORK/t15.out"; then
+  PASS=$((PASS+1)); echo "PASS: 15e PF3 on User Settings returns to service menu"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 15e PF3 on User Settings did not return to service menu"
+fi
+
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
 [ "$FAIL" -eq 0 ]
