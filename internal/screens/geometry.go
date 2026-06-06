@@ -106,8 +106,8 @@ func (g Geometry) CenterCol(n int) int {
 
 // StatusBlockCol is the left column of the menu's right-hand status block
 // (the per-session User ID / Date / Time / Terminal / System ID / Release
-// panel). It is fixed at 57: the service grid (number col 0, name col 4,
-// description col 13 hard-cut to 40) ends near col 53, and the block's 10-char
-// labels + 7-rune values fit within cols 57-79. Content is always within cols
+// panel). It is fixed at 60: the service grid (number col 0, name col 6,
+// description col 17 hard-cut to 40) ends at col 57, and the block's 10-char
+// labels + 7-rune values fit within cols 60-78. Content is always within cols
 // 0-79 (rows-only adaptation), so this does not widen on taller models.
-func (g Geometry) StatusBlockCol() int { return 57 }
+func (g Geometry) StatusBlockCol() int { return 60 }

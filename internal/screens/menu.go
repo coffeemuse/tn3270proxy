@@ -103,13 +103,13 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 		mapping[key] = svc
 		screen = append(screen,
 			go3270.Field{Row: row, Col: 0, Intense: true, Content: fmt.Sprintf("%3d", i+1)},
-			go3270.Field{Row: row, Col: 5, Color: go3270.Turquoise, Content: truncateRunes(svc.Name, 8)},
-			go3270.Field{Row: row, Col: 15, Color: go3270.Green, Content: truncateRunes(svc.Description, 40)},
+			go3270.Field{Row: row, Col: 6, Color: go3270.Turquoise, Content: truncateRunes(svc.Name, 8)},
+			go3270.Field{Row: row, Col: 17, Color: go3270.Green, Content: truncateRunes(svc.Description, 40)},
 		)
 		row++
 	}
 	if len(shown) == 0 {
-		screen = append(screen, go3270.Field{Row: geom.BodyTopRow() + 1, Col: 5, Content: "(no services available for your account)"})
+		screen = append(screen, go3270.Field{Row: geom.BodyTopRow() + 1, Col: 6, Content: "(no services available for your account)"})
 		row = geom.BodyTopRow() + 2
 	}
 	// Bottom "meta" entries below the service list: User Settings (0) is shown
@@ -126,13 +126,13 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 	}
 	screen = append(screen,
 		go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  0"},
-		go3270.Field{Row: metaRow, Col: 15, Color: go3270.Green, Content: "User Settings"},
+		go3270.Field{Row: metaRow, Col: 17, Color: go3270.Green, Content: "User Settings"},
 	)
 	if admin {
 		adminRow := metaRow + 1
 		screen = append(screen,
 			go3270.Field{Row: adminRow, Col: 0, Intense: true, Content: "  A"},
-			go3270.Field{Row: adminRow, Col: 15, Color: go3270.Green, Content: "Administration"},
+			go3270.Field{Row: adminRow, Col: 17, Color: go3270.Green, Content: "Administration"},
 		)
 	}
 

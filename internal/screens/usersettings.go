@@ -48,8 +48,8 @@ func UserSettingsScreen(geom Geometry, username string, rows []UserSettingsRow, 
 	for _, r := range rows {
 		screen = append(screen,
 			go3270.Field{Row: row, Col: 0, Color: go3270.White, Intense: true, Content: "  " + r.Key},
-			go3270.Field{Row: row, Col: 5, Color: go3270.Turquoise, Content: r.Name},
-			go3270.Field{Row: row, Col: 15, Color: go3270.Green, Content: r.Description},
+			go3270.Field{Row: row, Col: 6, Color: go3270.Turquoise, Content: r.Name},
+			go3270.Field{Row: row, Col: 17, Color: go3270.Green, Content: r.Description},
 		)
 		row++
 	}

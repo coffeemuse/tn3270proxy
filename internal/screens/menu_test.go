@@ -315,21 +315,21 @@ func TestMenuShowsUserSettingsEntry(t *testing.T) {
 }
 
 func TestMenuGridColumns(t *testing.T) {
-	// Tri-color grid spacing (GH #65 QA): number col 0, name col 5, description
-	// col 15 — two blank columns at each gap.
+	// Tri-color grid spacing (GH #65 QA): number col 0, name col 6, description
+	// col 17 — three blank columns at each gap.
 	svcs := []store.Service{{ID: 1, Name: "PRODCICS", Description: "Production CICS Region"}}
 	screen, _, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "")
 	name, ok := fieldByContent(screen, "PRODCICS")
-	if !ok || name.Col != 5 {
-		t.Errorf("service name col = %d ok=%v, want 5", name.Col, ok)
+	if !ok || name.Col != 6 {
+		t.Errorf("service name col = %d ok=%v, want 6", name.Col, ok)
 	}
 	desc, ok := fieldByContent(screen, "Production CICS Region")
-	if !ok || desc.Col != 15 {
-		t.Errorf("service desc col = %d ok=%v, want 15", desc.Col, ok)
+	if !ok || desc.Col != 17 {
+		t.Errorf("service desc col = %d ok=%v, want 17", desc.Col, ok)
 	}
 	us, ok := fieldByContent(screen, "User Settings")
-	if !ok || us.Col != 15 {
-		t.Errorf("meta label col = %d ok=%v, want 15", us.Col, ok)
+	if !ok || us.Col != 17 {
+		t.Errorf("meta label col = %d ok=%v, want 17", us.Col, ok)
 	}
 }
 

@@ -62,8 +62,8 @@ func AdminMenuScreen(geom Geometry, errMsg string) (go3270.Screen, Cursor) {
 		row := geom.BodyTopRow() + i
 		screen = append(screen,
 			go3270.Field{Row: row, Col: 0, Color: go3270.White, Intense: true, Content: "  " + o.key},
-			go3270.Field{Row: row, Col: 5, Color: go3270.Turquoise, Content: o.name},
-			go3270.Field{Row: row, Col: 15, Color: go3270.Green, Content: o.desc},
+			go3270.Field{Row: row, Col: 6, Color: go3270.Turquoise, Content: o.name},
+			go3270.Field{Row: row, Col: 17, Color: go3270.Green, Content: o.desc},
 		)
 	}
 	promptF, option, stopF := commandLine(geom, "Option ===>", FieldOption)

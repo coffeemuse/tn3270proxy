@@ -74,12 +74,12 @@ func TestAdminMenuTriColor(t *testing.T) {
 		t.Errorf("option key = %+v ok=%v, want white intense", key, ok)
 	}
 	name, ok := fieldByContent(screen, "Users")
-	if !ok || name.Col != 5 || name.Color != go3270.Turquoise {
-		t.Errorf("option name = %+v ok=%v, want col 5 turquoise", name, ok)
+	if !ok || name.Col != 6 || name.Color != go3270.Turquoise {
+		t.Errorf("option name = %+v ok=%v, want col 6 turquoise", name, ok)
 	}
 	desc, ok := fieldByContent(screen, "User accounts and group membership")
-	if !ok || desc.Col != 15 || desc.Color != go3270.Green {
-		t.Errorf("option desc = %+v ok=%v, want col 15 green", desc, ok)
+	if !ok || desc.Col != 17 || desc.Color != go3270.Green {
+		t.Errorf("option desc = %+v ok=%v, want col 17 green", desc, ok)
 	}
 	for _, kw := range []string{"Sysparms", "Networks", "Audit"} {
 		if _, ok := fieldByContent(screen, kw); !ok {
