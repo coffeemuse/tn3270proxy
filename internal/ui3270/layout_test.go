@@ -56,3 +56,51 @@ func TestLayoutFormulas(t *testing.T) {
 		t.Errorf("listPageSize(10) = %d, want 14", got)
 	}
 }
+
+func TestFormInputCol(t *testing.T) {
+	// max(16, 2+1+maxLabel+1), clamped to the ceiling (79-16 = 63).
+	cases := []struct{ maxLabel, want int }{
+		{0, 16},   // empty label → floor
+		{11, 16},  // short → floor
+		{12, 16},  // dot-leader convention → exactly the historical col 16
+		{13, 17},  // first width that pushes right
+		{15, 19},  // "Max Auth Tries:"
+		{22, 26},  // "Auth Delay Base (sec):"
+		{23, 27},  // "Auth Fail Window (min):" — the worst real label
+		{80, 63},  // pathological → clamped to ceiling
+	}
+	for _, c := range cases {
+		if got := formInputCol(c.maxLabel); got != c.want {
+			t.Errorf("formInputCol(%d) = %d, want %d", c.maxLabel, got, c.want)
+		}
+	}
+}
+
+func TestFormLabelMax(t *testing.T) {
+	// inputCol - labelGutter - labelAttrCol - 1.
+	cases := []struct{ inputCol, want int }{
+		{16, 12}, // historical 12-char dot-leader cap falls out naturally
+		{27, 23}, // worst real label fits exactly
+		{63, 59}, // at the ceiling
+	}
+	for _, c := range cases {
+		if got := formLabelMax(c.inputCol); got != c.want {
+			t.Errorf("formLabelMax(%d) = %d, want %d", c.inputCol, got, c.want)
+		}
+	}
+}
+
+func TestTruncRunes(t *testing.T) {
+	if got := truncRunes("abcdef", 3); got != "abc" {
+		t.Errorf("truncRunes(\"abcdef\",3) = %q, want \"abc\"", got)
+	}
+	if got := truncRunes("abc", 10); got != "abc" {
+		t.Errorf("truncRunes(\"abc\",10) = %q, want \"abc\"", got)
+	}
+	if got := truncRunes("abc", -1); got != "" {
+		t.Errorf("truncRunes(\"abc\",-1) = %q, want \"\"", got)
+	}
+	if got := truncRunes("日本語", 2); got != "日本" {
+		t.Errorf("truncRunes(\"日本語\",2) = %q, want \"日本\"", got)
+	}
+}
