@@ -34,9 +34,9 @@ const (
 // cursor (first CMD field, or home for an empty list).
 func buildListScreen(rows int, v ListView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
-		{Row: 0, Col: 2, Intense: true, Content: v.Title},
+		{Row: 0, Col: centerCol(len(v.Title)), Color: go3270.White, Intense: true, Content: v.Title},
 		{Row: 0, Col: 60, Content: v.RowInfo},
-		{Row: 2, Col: 2, Content: v.Header},
+		{Row: bodyTopRow(), Col: 2, Color: go3270.Blue, Content: v.Header},
 	}
 	data := v.Rows
 	if size := listPageSize(rows); len(data) > size {
@@ -45,23 +45,23 @@ func buildListScreen(rows int, v ListView) (go3270.Screen, Cursor) {
 	cur := Cursor{Row: 0, Col: 0}
 	for i, r := range data {
 		row := 4 + i
-		cmd := go3270.Field{Row: row, Col: 2, Name: fmt.Sprintf("%s%d", fieldCmdPrefix, i), Write: true, Highlighting: go3270.Underscore}
+		cmd := go3270.Field{Row: row, Col: 2, Name: fmt.Sprintf("%s%d", fieldCmdPrefix, i), Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 		if i == 0 {
 			cur = Cursor{Row: cmd.Row, Col: cmd.Col + 1}
 		}
 		screen = append(screen,
 			cmd,
 			go3270.Field{Row: row, Col: 4}, // stop field: 1-char command input
-			go3270.Field{Row: row, Col: 7, Content: r},
+			go3270.Field{Row: row, Col: 7, Color: go3270.Green, Content: r},
 		)
 	}
 	if len(data) == 0 {
 		screen = append(screen, go3270.Field{Row: 4, Col: 7, Content: "(none)"})
 	}
 	screen = append(screen,
-		go3270.Field{Row: legendRow(rows), Col: 2, Content: v.Legend},
-		go3270.Field{Row: errorRow(rows), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: helpRow(rows), Col: 2, Content: v.PFHelp},
+		go3270.Field{Row: legendRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.Legend},
+		go3270.Field{Row: messageRow(), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
+		go3270.Field{Row: helpRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.PFHelp},
 	)
 	return screen, cur
 }

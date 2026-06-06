@@ -257,6 +257,29 @@ func TestBuildFormScreenDotLeaderOffUnchanged(t *testing.T) {
 	}
 }
 
+func TestBuildListScreenPalette(t *testing.T) {
+	screen, cur := buildListScreen(24, ListView{
+		Title: "USER ADMINISTRATION", RowInfo: "ROW 1 TO 2 OF 2",
+		Header: "Userid    Name", Rows: []string{"ALICE  Alice"},
+		Legend: "S=Select", ErrMsg: "boom", PFHelp: "PF3=Back",
+	})
+	title, ok := fieldAt(screen, 0, centerCol(len("USER ADMINISTRATION")))
+	if !ok || title.Content != "USER ADMINISTRATION" || title.Color != go3270.White || !title.Intense {
+		t.Errorf("title = %+v ok=%v, want centered white intense", title, ok)
+	}
+	hdr, ok := fieldAt(screen, bodyTopRow(), 2)
+	if !ok || hdr.Color != go3270.Blue || hdr.Content != "Userid    Name" {
+		t.Errorf("header = %+v ok=%v, want row 3 blue", hdr, ok)
+	}
+	msg, ok := fieldByName(screen, fieldError)
+	if !ok || msg.Row != 2 {
+		t.Errorf("message row = %d ok=%v, want 2", msg.Row, ok)
+	}
+	if cur != (Cursor{Row: 4, Col: 3}) {
+		t.Errorf("cursor = %+v, want {4,3} (unchanged)", cur)
+	}
+}
+
 func TestBuildFormScreenPalette(t *testing.T) {
 	screen, _ := buildFormScreen(24, FormView{
 		Title:  "EDIT USER",
