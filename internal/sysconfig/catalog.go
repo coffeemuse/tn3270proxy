@@ -29,10 +29,12 @@ import (
 
 // Entry describes one system parameter.
 type Entry struct {
-	Key      string              // canonical uppercase; used as the DB key and form field name
-	Label    string              // display label shown on the System Parameters form
-	Default  string              // initial value seeded into system_config by migrate()
-	Validate func(string) string // returns an errMsg (uppercase) or "" if valid
+	Key       string              // canonical uppercase; used as the DB key and form field name
+	Label     string              // display label shown on the System Parameters form
+	Default   string              // initial value seeded into system_config by migrate()
+	Length    int                 // admin form input width; 0 ⇒ default (64)
+	Normalize func(string) string // canonicalize before validate+store; nil ⇒ identity
+	Validate  func(string) string // returns an errMsg (uppercase) or "" if valid
 }
 
 // KeyMOTDFile is the system_config key whose value is the absolute path to the
@@ -42,6 +44,11 @@ const KeyMOTDFile = "MOTD_FILE"
 // KeyMFAIssuer is the system_config key holding the TOTP issuer label shown in
 // users' authenticator apps (and on the enrollment screen).
 const KeyMFAIssuer = "MFA_ISSUER"
+
+// KeySystemID is the system_config key holding the operator-set System ID shown
+// in the menu status block (#53/#64). Canonical form: trimmed, upper-cased, and
+// restricted to A-Z/0-9/'-' with a 7-rune budget (the status-block value column).
+const KeySystemID = "SYSTEM_ID"
 
 // Throttle params (GH #48): per-username failed-auth backoff. After each failed
 // password or MFA attempt the session delays the next prompt by
@@ -89,6 +96,14 @@ var Catalog = []Entry{
 		},
 	},
 	{
+		Key:       KeySystemID,
+		Label:     "System ID:",
+		Default:   "PROXY",
+		Length:    7,
+		Normalize: func(v string) string { return strings.ToUpper(strings.TrimSpace(v)) },
+		Validate:  validateSystemID,
+	},
+	{
 		Key:      KeyAuthDelayBaseSecs,
 		Label:    "Auth Delay Base (sec):",
 		Default:  strconv.Itoa(DefaultAuthDelayBaseSecs),
@@ -123,6 +138,28 @@ func positiveInt(v string) string {
 	n, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil || n < 1 {
 		return "MUST BE A POSITIVE INTEGER"
+	}
+	return ""
+}
+
+// validateSystemID enforces the 7-rune status-block budget and a mainframe-ish
+// charset. It re-normalizes defensively so it is correct regardless of whether
+// the caller already applied Normalize.
+func validateSystemID(v string) string {
+	v = strings.ToUpper(strings.TrimSpace(v))
+	if v == "" {
+		return "SYSTEM ID REQUIRED"
+	}
+	if len([]rune(v)) > 7 {
+		return "SYSTEM ID TOO LONG (MAX 7)"
+	}
+	if v[0] == '-' {
+		return "SYSTEM ID MUST NOT START WITH A DASH"
+	}
+	for _, r := range v {
+		if !((r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-') {
+			return "SYSTEM ID: USE A-Z 0-9 AND DASH"
+		}
 	}
 	return ""
 }

@@ -111,7 +111,7 @@ func TestAdminSystemParamsSaveHappyPath(t *testing.T) {
 		forms: []ui3270.FormAction{
 			// The real form submits every pre-populated field; MFA_ISSUER keeps its
 			// default so only MOTD_FILE changes.
-			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt", "MFA_ISSUER": "TN3270PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: save, stay
+			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: save, stay
 			{Cancel: true}, // PF3: leave to admin menu
 		},
 	}
@@ -155,7 +155,7 @@ func TestAdminSystemParamsNoAuditWhenUnchanged(t *testing.T) {
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
 			// MOTD_FILE default is "" — submit the same value; MFA_ISSUER keeps its default.
-			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: no change, stay
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: no change, stay
 			{Cancel: true}, // PF3: leave
 		},
 	}
@@ -178,7 +178,7 @@ func TestAdminSystemParamsEmptyValueIsValid(t *testing.T) {
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
 			// MFA_ISSUER keeps its default so only MOTD_FILE is cleared.
-			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: clear (disable), stay
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: clear (disable), stay
 			{Cancel: true}, // PF3: leave
 		},
 	}
@@ -204,5 +204,83 @@ func TestAdminSystemParamsEmptyValueIsValid(t *testing.T) {
 	}
 	if val, _ := f.store.GetConfig(ctx, "MOTD_FILE"); val != "" {
 		t.Errorf("MOTD_FILE = %q, want empty after clear", val)
+	}
+}
+
+// TestAdminSystemParamsFieldLength verifies the form uses each catalog entry's
+// Length (SYSTEM_ID caps at 7; entries with Length 0 default to 64).
+func TestAdminSystemParamsFieldLength(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 4}, {back: true}},
+		forms: []ui3270.FormAction{{Cancel: true}},
+	}
+	f, _ := newAdminFixture(t, p)
+	f.Run(context.Background(), nil)
+
+	if len(p.gotForms) == 0 {
+		t.Fatal("no form rendered")
+	}
+	for _, fld := range p.gotForms[0].Fields {
+		switch fld.Name {
+		case "SYSTEM_ID":
+			if fld.Length != 7 {
+				t.Errorf("SYSTEM_ID field length = %d, want 7", fld.Length)
+			}
+		default:
+			if fld.Length != 64 {
+				t.Errorf("%s field length = %d, want 64", fld.Name, fld.Length)
+			}
+		}
+	}
+}
+
+// TestAdminSystemParamsNormalizesSystemID verifies a lowercase/whitespace value
+// is canonicalized (trim + upper) before being stored and audited.
+func TestAdminSystemParamsNormalizesSystemID(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 4}, {back: true}},
+		forms: []ui3270.FormAction{
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": " sysa ", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	var audited []store.AuditEvent
+	f.audit = func(_ context.Context, ev store.AuditEvent) { audited = append(audited, ev) }
+
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if val, _ := f.store.GetConfig(ctx, "SYSTEM_ID"); val != "SYSA" {
+		t.Errorf("SYSTEM_ID = %q, want SYSA (normalized)", val)
+	}
+	if len(audited) != 1 || audited[0].Detail != "sysconfig set SYSTEM_ID: PROXY -> SYSA" {
+		t.Errorf("audit = %+v, want one 'sysconfig set SYSTEM_ID: PROXY -> SYSA'", audited)
+	}
+}
+
+// TestAdminSystemParamsRejectsInvalidSystemID verifies an invalid value blocks
+// the save (errMsg shown, nothing written).
+func TestAdminSystemParamsRejectsInvalidSystemID(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu: []adminMenuStep{{choice: 4}, {back: true}},
+		forms: []ui3270.FormAction{
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "-X", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}},
+			{Cancel: true},
+		},
+	}
+	f, _ := newAdminFixture(t, p)
+	ctx := context.Background()
+	if err := f.Run(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Save rejected: the form re-renders with the errMsg, then PF3 leaves.
+	if len(p.gotForms) < 2 || p.gotForms[1].ErrMsg != "SYSTEM ID MUST NOT START WITH A DASH" {
+		t.Errorf("expected errMsg on re-render, got forms = %+v", p.gotForms)
+	}
+	// Nothing persisted: SYSTEM_ID keeps its seeded default.
+	if val, _ := f.store.GetConfig(ctx, "SYSTEM_ID"); val != "PROXY" {
+		t.Errorf("SYSTEM_ID = %q, want PROXY (unchanged after rejected save)", val)
 	}
 }

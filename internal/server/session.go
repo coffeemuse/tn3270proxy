@@ -43,11 +43,6 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
-// systemIDPlaceholder is shown in the menu status block's "System ID" row.
-// TODO(#53): replace with a DB-backed system-config value entered via the
-// future System Configuration admin screen; hardcoded for now.
-const systemIDPlaceholder = "PROXY"
-
 // Presenter renders the proxy's own 3270 screens to the client. The real
 // implementation wraps go3270; tests use a fake. The Term returned by
 // Negotiate must be passed back into every subsequent call so screens render
@@ -112,6 +107,11 @@ type Session struct {
 	PreAuthMax       time.Duration
 	Trusted          bool
 	BridgeIdleExempt bool
+	// RemoteHost is the client IP (port stripped) for the fail2ban <HOST> on
+	// auth-failure log lines (see logAuthFailure). Set by the handler from the
+	// connection's RemoteAddr; empty in unit tests that construct Session
+	// directly unless set explicitly.
+	RemoteHost string
 	// MOTDRead reads the MOTD file for maybeShowNews; nil selects the capped
 	// os.ReadFile default (readMOTDCapped). Tests inject a fake.
 	MOTDRead func(path string) ([]byte, error)
@@ -161,12 +161,40 @@ func (s *Session) mfaIssuer(ctx context.Context) string {
 	return v
 }
 
+// systemID reads the configured System ID for the menu status block, falling
+// back to "PROXY" on any read error or empty value so the menu never renders a
+// blank System ID row.
+func (s *Session) systemID(ctx context.Context) string {
+	v, err := s.Store.GetConfig(ctx, sysconfig.KeySystemID)
+	if err != nil || strings.TrimSpace(v) == "" {
+		return "PROXY"
+	}
+	return v
+}
+
 // log returns the session's logger (slog.Default() when Logger is nil).
 func (s *Session) log() *slog.Logger {
 	if s.Logger != nil {
 		return s.Logger
 	}
 	return slog.Default()
+}
+
+// logAuthFailure emits the stable, fail2ban-friendly auth-failure line. The
+// field set — msg="auth failed" plus src, trusted, reason, and the user carried
+// by lg — is a DOCUMENTED STABLE CONTRACT (operators build log filters against
+// it); do not rename or drop fields without updating README and the shape test.
+// lg must already carry the attempted username as "user": pre-auth callers pass
+// s.log().With("user", user); post-auth callers pass s.log() (already enriched).
+// reason is coarse ("invalid_credentials" or "bad_mfa") so it never reveals
+// whether a username exists. Never pass credential content (password / TOTP
+// code / MFA secret).
+func (s *Session) logAuthFailure(lg *slog.Logger, reason string) {
+	lg.Warn("auth failed",
+		"src", s.RemoteHost,
+		"trusted", s.Trusted,
+		"reason", reason,
+	)
 }
 
 // motdReadCap bounds how much of the MOTD file is read. A legitimate notice is
@@ -328,7 +356,7 @@ func (s *Session) Run(conn net.Conn) {
 			}
 			status := screens.MenuStatus{
 				Username: identity.Username,
-				SystemID: systemIDPlaceholder,
+				SystemID: s.systemID(ctx),
 				Release:  s.Release,
 			}
 			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, status, errMsg)
@@ -509,6 +537,7 @@ func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u sto
 			continue
 		}
 		if !ok {
+			s.logAuthFailure(s.log(), "bad_mfa")
 			delay, count := s.failDelay(ctx, u.Username)
 			aud.record(ctx, store.AuditEvent{
 				Kind: store.AuditMFAFailed, Username: u.Username, Detail: throttleDetail("enroll", delay, count)})
@@ -559,6 +588,7 @@ func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u sto
 			continue
 		}
 		if !ok {
+			s.logAuthFailure(s.log(), "bad_mfa")
 			delay, count := s.failDelay(ctx, u.Username)
 			aud.record(ctx, store.AuditEvent{
 				Kind: store.AuditMFAFailed, Username: u.Username, Detail: throttleDetail("login", delay, count)})
@@ -611,7 +641,9 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		// Auth fail: per-username backoff (GH #48). Compute before auditing so
 		// the audit detail records the applied delay; never log the password.
 		delay, count := s.failDelay(ctx, user)
-		s.log().Warn("auth failed", "user", user)
+		// Auth fail: stable fail2ban line — attempted username only, never the
+		// password (CLAUDE.md hard rule). Coarse reason: no enumeration leak.
+		s.logAuthFailure(s.log().With("user", user), "invalid_credentials")
 		aud.record(ctx, store.AuditEvent{
 			Kind: store.AuditAuthFail, Username: user, Detail: throttleDetail("", delay, count)})
 		s.sleepFor(delay) // bounded well under pre_auth_idle by default; a tight pre-auth window could turn a large delay into a timeout

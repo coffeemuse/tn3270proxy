@@ -127,6 +127,20 @@ func wrapIdle(conn net.Conn, preAuthIdle time.Duration) net.Conn {
 	return newIdleConn(conn, preAuthIdle)
 }
 
+// hostOnly returns the IP/host portion of addr without the port — the bare
+// <HOST> a fail2ban filter binds to on auth-failure log lines (see
+// logAuthFailure). Returns "" for a nil addr. Falls back to the full address
+// string when addr has no host:port shape.
+func hostOnly(addr net.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(addr.String()); err == nil {
+		return host
+	}
+	return addr.String()
+}
+
 // sessionFor builds the Session for a connection from addr, deciding trust and
 // carrying the regime knobs from limits. connLog is the per-connection logger
 // (already enriched with "remote").
@@ -147,6 +161,7 @@ func (h sessionHandler) sessionFor(addr net.Addr, connLog *slog.Logger) *Session
 		PreAuthMax:       h.limits.PreAuthMax,
 		Trusted:          trusted,
 		BridgeIdleExempt: h.limits.BridgeIdleExempt,
+		RemoteHost:       hostOnly(addr),
 		MFA:              h.mfaCipher,
 		Throttle:         h.throttle,
 	}
