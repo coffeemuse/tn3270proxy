@@ -68,13 +68,13 @@ func (f *adminFlow) auditCap(ctx context.Context) int {
 }
 
 // auditReverseDNS reports whether the reverse-DNS lookup is enabled
-// (AUDIT_REVERSE_DNS == "ON"; default on when unreadable).
+// (AUDIT_REVERSE_DNS == "Y"; default on when unreadable).
 func (f *adminFlow) auditReverseDNS(ctx context.Context) bool {
 	v, err := f.store.GetConfig(ctx, sysconfig.KeyAuditReverseDNS)
 	if err != nil {
 		return true
 	}
-	return strings.EqualFold(strings.TrimSpace(v), "ON")
+	return strings.EqualFold(strings.TrimSpace(v), "Y")
 }
 
 // auditWindow is the bounded look-back of the RECENT view.
@@ -169,6 +169,7 @@ func (f *adminFlow) auditDetail(ctx context.Context, ev store.AuditEvent) ui3270
 		BodyLabel: "Detail",
 		Body:      ev.Detail,
 		PFHelp:    "PF3=Back",
+		DotLeader: true,
 	}
 }
 

@@ -75,43 +75,20 @@ const (
 )
 
 // KeyAuditReverseDNS toggles the reverse-DNS (PTR) lookup on the Audit Log
-// detail screen. "ON" (default) or "OFF"; OFF suppresses all outbound DNS the
+// detail screen. "Y" (default) or "N"; N suppresses all outbound DNS the
 // viewer would otherwise emit (air-gapped / egress-locked deployments).
 const (
 	KeyAuditReverseDNS     = "AUDIT_REVERSE_DNS"
-	DefaultAuditReverseDNS = "ON"
+	DefaultAuditReverseDNS = "Y"
 )
 
 // Catalog is the application-defined set of valid system parameters. The store
 // seeds every key with its Default via INSERT OR IGNORE; admins may change the
 // values through the admin UI. Keys are canonical uppercase.
+// Order is grouped for the System Parameters form: identity (System ID, MOTD
+// File), then the four auth parameters (the three failed-auth throttle knobs
+// plus the MFA issuer), then the audit parameters.
 var Catalog = []Entry{
-	{
-		Key:     KeyMOTDFile,
-		Label:   "MOTD File:",
-		Default: "",
-		// Empty value disables the feature; any non-empty path is accepted.
-		// Existence/readability of the file is checked at read time, not here.
-		Validate: func(_ string) string { return "" },
-	},
-	{
-		Key:     KeyMFAIssuer,
-		Label:   "MFA Issuer:",
-		Default: "TN3270PROXY",
-		Validate: func(v string) string {
-			v = strings.TrimSpace(v)
-			if v == "" {
-				return "MFA ISSUER REQUIRED"
-			}
-			if strings.Contains(v, ":") {
-				return "MFA ISSUER MUST NOT CONTAIN A COLON"
-			}
-			if len(v) > 40 {
-				return "MFA ISSUER TOO LONG (MAX 40)"
-			}
-			return ""
-		},
-	},
 	{
 		Key:       KeySystemID,
 		Label:     "System ID:",
@@ -119,6 +96,14 @@ var Catalog = []Entry{
 		Length:    7,
 		Normalize: func(v string) string { return strings.ToUpper(strings.TrimSpace(v)) },
 		Validate:  validateSystemID,
+	},
+	{
+		Key:     KeyMOTDFile,
+		Label:   "MOTD File:",
+		Default: "",
+		// Empty value disables the feature; any non-empty path is accepted.
+		// Existence/readability of the file is checked at read time, not here.
+		Validate: func(_ string) string { return "" },
 	},
 	{
 		Key:      KeyAuthDelayBaseSecs,
@@ -139,6 +124,24 @@ var Catalog = []Entry{
 		Validate: positiveInt,
 	},
 	{
+		Key:     KeyMFAIssuer,
+		Label:   "MFA Issuer:",
+		Default: "TN3270PROXY",
+		Validate: func(v string) string {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				return "MFA ISSUER REQUIRED"
+			}
+			if strings.Contains(v, ":") {
+				return "MFA ISSUER MUST NOT CONTAIN A COLON"
+			}
+			if len(v) > 40 {
+				return "MFA ISSUER TOO LONG (MAX 40)"
+			}
+			return ""
+		},
+	},
+	{
 		Key:      KeyAuditMaxRows,
 		Label:    "Audit View Max Rows:",
 		Default:  strconv.Itoa(DefaultAuditMaxRows),
@@ -148,9 +151,9 @@ var Catalog = []Entry{
 		Key:       KeyAuditReverseDNS,
 		Label:     "Audit Reverse DNS:",
 		Default:   DefaultAuditReverseDNS,
-		Length:    3,
+		Length:    1,
 		Normalize: func(v string) string { return strings.ToUpper(strings.TrimSpace(v)) },
-		Validate:  onOff,
+		Validate:  yesNo,
 	},
 }
 
@@ -165,14 +168,14 @@ func intInRange(min, max int) func(string) string {
 	}
 }
 
-// onOff accepts the literals ON or OFF (case-insensitive, surrounding space
+// yesNo accepts the single letters Y or N (case-insensitive, surrounding space
 // trimmed). Used by boolean-toggle parameters.
-func onOff(v string) string {
+func yesNo(v string) string {
 	switch strings.ToUpper(strings.TrimSpace(v)) {
-	case "ON", "OFF":
+	case "Y", "N":
 		return ""
 	}
-	return "MUST BE ON OR OFF"
+	return "MUST BE Y OR N"
 }
 
 // nonNegativeInt accepts "0" and positive integers (used by the delay base and

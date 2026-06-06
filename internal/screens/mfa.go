@@ -30,18 +30,20 @@ const FieldMFACode = "mfacode"
 // HandleScreenAlt (AIDEnter submits, AIDPF3 cancels), errorField = FieldError.
 func EnrollMFAScreen(geom Geometry, issuer, account, chunkedSecret, errMsg string) (go3270.Screen, go3270.Rules, Cursor) {
 	title := "MFA ENROLLMENT - SECURITY KEY SETUP"
-	code := go3270.Field{Row: 11, Col: 25, Name: FieldMFACode, Write: true, NumericOnly: true, Color: go3270.Green, Highlighting: go3270.Underscore}
+	// Row 5 left blank: one row of padding below the yellow notice; the body
+	// below it sits a row lower than its natural position.
+	code := go3270.Field{Row: 12, Col: 25, Name: FieldMFACode, Write: true, NumericOnly: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},
 		{Row: 4, Col: 2, Color: go3270.Yellow, Intense: true, Content: "Multi-factor authentication is now required for your account."},
-		{Row: 5, Col: 2, Color: go3270.Turquoise, Content: "Enter the key below into your authenticator app (any TOTP app),"},
-		{Row: 6, Col: 2, Color: go3270.Turquoise, Content: "then type the current 6-digit code to confirm enrollment."},
-		{Row: 8, Col: 5, Color: go3270.Turquoise, Content: "Issuer:   " + issuer},
-		{Row: 9, Col: 5, Color: go3270.Turquoise, Content: "Account:  " + account},
-		{Row: 10, Col: 5, Intense: true, Color: go3270.White, Content: "Key:      " + chunkedSecret},
-		{Row: 11, Col: 5, Color: go3270.Turquoise, Content: "Confirmation code:"},
+		{Row: 6, Col: 2, Color: go3270.Turquoise, Content: "Enter the key below into your authenticator app (any TOTP app),"},
+		{Row: 7, Col: 2, Color: go3270.Turquoise, Content: "then type the current 6-digit code to confirm enrollment."},
+		{Row: 9, Col: 5, Color: go3270.Turquoise, Content: "Issuer:   " + issuer},
+		{Row: 10, Col: 5, Color: go3270.Turquoise, Content: "Account:  " + account},
+		{Row: 11, Col: 5, Intense: true, Color: go3270.White, Content: "Key:      " + chunkedSecret},
+		{Row: 12, Col: 5, Color: go3270.Turquoise, Content: "Confirmation code:"},
 		code,
-		{Row: 11, Col: 32}, // stop field
+		{Row: 12, Col: 32}, // stop field
 		{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
 		{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "Enter=Confirm   PF3=Cancel"},
 	}

@@ -111,7 +111,7 @@ func TestAdminSystemParamsSaveHappyPath(t *testing.T) {
 		forms: []ui3270.FormAction{
 			// The real form submits every pre-populated field; MFA_ISSUER keeps its
 			// default so only MOTD_FILE changes.
-			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "ON"}}, // Enter: save, stay
+			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "Y"}}, // Enter: save, stay
 			{Cancel: true}, // PF3: leave to admin menu
 		},
 	}
@@ -155,7 +155,7 @@ func TestAdminSystemParamsNoAuditWhenUnchanged(t *testing.T) {
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
 			// MOTD_FILE default is "" — submit the same value; MFA_ISSUER keeps its default.
-			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "ON"}}, // Enter: no change, stay
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "Y"}}, // Enter: no change, stay
 			{Cancel: true}, // PF3: leave
 		},
 	}
@@ -178,7 +178,7 @@ func TestAdminSystemParamsEmptyValueIsValid(t *testing.T) {
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
 			// MFA_ISSUER keeps its default so only MOTD_FILE is cleared.
-			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "ON"}}, // Enter: clear (disable), stay
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "Y"}}, // Enter: clear (disable), stay
 			{Cancel: true}, // PF3: leave
 		},
 	}
@@ -244,7 +244,7 @@ func TestAdminSystemParamsNormalizesSystemID(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
-			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": " sysa ", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "ON"}},
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": " sysa ", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "Y"}},
 			{Cancel: true},
 		},
 	}
@@ -270,7 +270,7 @@ func TestAdminSystemParamsRejectsInvalidSystemID(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
-			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "-X", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "ON"}},
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "-X", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15", "AUDIT_MAX_ROWS": "1000", "AUDIT_REVERSE_DNS": "Y"}},
 			{Cancel: true},
 		},
 	}

@@ -234,7 +234,7 @@ func TestSystemIDValidate(t *testing.T) {
 func TestAuditCatalogEntries(t *testing.T) {
 	want := map[string]string{
 		KeyAuditMaxRows:    "1000",
-		KeyAuditReverseDNS: "ON",
+		KeyAuditReverseDNS: "Y",
 	}
 	got := map[string]string{}
 	for _, e := range Catalog {
@@ -285,15 +285,15 @@ func TestIntInRange(t *testing.T) {
 	}
 }
 
-func TestOnOff(t *testing.T) {
-	for _, ok := range []string{"ON", "OFF", " on ", "off"} {
-		if msg := onOff(ok); msg != "" {
-			t.Errorf("onOff(%q) = %q, want accept", ok, msg)
+func TestYesNo(t *testing.T) {
+	for _, ok := range []string{"Y", "N", " y ", "n"} {
+		if msg := yesNo(ok); msg != "" {
+			t.Errorf("yesNo(%q) = %q, want accept", ok, msg)
 		}
 	}
-	for _, bad := range []string{"", "YES", "1", "TRUE"} {
-		if onOff(bad) == "" {
-			t.Errorf("onOff(%q) accepted, want reject", bad)
+	for _, bad := range []string{"", "YES", "ON", "1", "TRUE"} {
+		if yesNo(bad) == "" {
+			t.Errorf("yesNo(%q) accepted, want reject", bad)
 		}
 	}
 }

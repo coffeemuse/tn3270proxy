@@ -49,8 +49,9 @@ type fakePresenter struct {
 	menuErrors   []string
 	loginErrors  []string
 	gotAdminFlag []bool
-	gotTerms     []Term               // every term passed to Login/Menu, in call order
-	gotStatus    []screens.MenuStatus // every status passed to Menu, in call order
+	gotTerms      []Term               // every term passed to Login/Menu, in call order
+	gotStatus     []screens.MenuStatus // every status passed to Menu, in call order
+	loginStatuses []screens.MenuStatus // every status passed to Login, in call order
 	newsCalls    [][][]string         // pages passed to each News call, in order
 	newsResults  []error              // queued News return values; default nil
 	enrolls           []mfaResult
@@ -95,8 +96,9 @@ func (f *fakePresenter) Negotiate(conn net.Conn) (Term, error) {
 	return Term{Type: f.termType, Rows: rows, Cols: cols}, nil
 }
 
-func (f *fakePresenter) Login(conn net.Conn, term Term, errMsg string) (string, string, bool, error) {
+func (f *fakePresenter) Login(conn net.Conn, term Term, status screens.MenuStatus, errMsg string) (string, string, bool, error) {
 	f.gotTerms = append(f.gotTerms, term)
+	f.loginStatuses = append(f.loginStatuses, status)
 	f.loginErrors = append(f.loginErrors, errMsg)
 	r := f.logins[0]
 	f.logins = f.logins[1:]
@@ -925,6 +927,19 @@ func TestSessionPopulatesMenuStatus(t *testing.T) {
 	// the store, so the identity flows through unchanged.
 	if got.Username != "alice" {
 		t.Errorf("status.Username = %q, want alice", got.Username)
+	}
+
+	// The login screen gets the same SystemID/Release for its info block (no
+	// Username pre-login).
+	if len(p.loginStatuses) == 0 {
+		t.Fatal("Login was never called")
+	}
+	ls := p.loginStatuses[0]
+	if ls.Release != "vTEST" || ls.SystemID != "PROXY" {
+		t.Errorf("login status = %+v, want Release vTEST / SystemID PROXY", ls)
+	}
+	if ls.Username != "" {
+		t.Errorf("login status Username = %q, want empty pre-login", ls.Username)
 	}
 }
 

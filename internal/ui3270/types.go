@@ -140,7 +140,10 @@ type DetailField struct {
 
 // DetailView is what to paint for a read-only detail screen: a column of
 // label/value fields, then a full-width wrapped free-text block under BodyLabel.
+// DotLeader renders the field labels with right-aligned colons and ISPF-style
+// dot leaders (matching the form view); off leaves them plain.
 type DetailView struct {
 	Title, BodyLabel, Body, PFHelp string
 	Fields                         []DetailField
+	DotLeader                      bool
 }
