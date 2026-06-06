@@ -49,7 +49,7 @@ const (
 	labelAttrCol  = 2  // label field attribute byte; content begins at col 3
 	labelGutter   = 1  // ≥1 blank column between label end and input attribute
 	minInputCol   = 16 // floor: preserves the historical layout for ≤12-char labels
-	minInputWidth = 16 // input data columns kept available at the ceiling
+	minInputWidth = 16 // columns reserved right of the ceiling input attr (~15 usable data cols)
 )
 
 // formInputCol returns the input field's attribute-byte column for a form whose
