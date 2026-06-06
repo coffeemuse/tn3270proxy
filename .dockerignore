@@ -1,0 +1,10 @@
+.git
+.github
+.claude
+docs
+bin
+dist
+*.db
+*.example.json
+*.md
+!README.md
