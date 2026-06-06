@@ -856,6 +856,59 @@ func TestSessionPopulatesMenuStatus(t *testing.T) {
 	}
 }
 
+func TestSessionMenuStatusUsesConfiguredSystemID(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true},
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	if err := s.Store.SetConfig(context.Background(), "SYSTEM_ID", "SYSA"); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(p.gotStatus) == 0 {
+		t.Fatal("Menu was never called")
+	}
+	if got := p.gotStatus[0].SystemID; got != "SYSA" {
+		t.Errorf("status.SystemID = %q, want SYSA", got)
+	}
+}
+
+func TestSessionMenuStatusSystemIDFallback(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true},
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	// An empty stored value must fall back to PROXY (menu never renders blank).
+	if err := s.Store.SetConfig(context.Background(), "SYSTEM_ID", ""); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(p.gotStatus) == 0 {
+		t.Fatal("Menu was never called")
+	}
+	if got := p.gotStatus[0].SystemID; got != "PROXY" {
+		t.Errorf("status.SystemID = %q, want PROXY (fallback)", got)
+	}
+}
+
 func newMFATestSession(t *testing.T, p *fakePresenter, b *fakeBridger) (*Session, *store.Store) {
 	t.Helper()
 	s := newTestSession(t, p, b)
