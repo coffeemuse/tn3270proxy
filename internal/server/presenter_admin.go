@@ -70,4 +70,3 @@ func (go3270Presenter) AdminMenu(conn net.Conn, term Term, errMsg string) (int, 
 		errMsg = "Invalid option"
 	}
 }
-

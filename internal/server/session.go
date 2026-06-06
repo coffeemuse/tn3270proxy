@@ -130,6 +130,12 @@ type Session struct {
 	// MFAGenerate creates a new TOTP secret; nil → mfa.GenerateSecret. Injected
 	// in tests so enrollment is deterministic.
 	MFAGenerate func(issuer, account string) (string, error)
+	// Throttle applies per-username backoff to failed auth attempts (GH #48);
+	// nil disables throttling (no delay). Shared across sessions by the handler.
+	Throttle *authThrottle
+	// Sleep delays the next prompt after a failed attempt; nil → time.Sleep.
+	// Tests inject a recorder to assert the computed delay without waiting.
+	Sleep func(time.Duration)
 }
 
 func (s *Session) now() time.Time {
@@ -503,7 +509,10 @@ func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u sto
 			continue
 		}
 		if !ok {
-			aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAFailed, Username: u.Username, Detail: "enroll"})
+			delay, count := s.failDelay(ctx, u.Username)
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditMFAFailed, Username: u.Username, Detail: throttleDetail("enroll", delay, count)})
+			s.sleepFor(delay)
 			errMsg = "Code incorrect - check the key and try again"
 			continue
 		}
@@ -515,6 +524,7 @@ func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u sto
 		if err := s.Store.StoreMFAEnrollment(ctx, u.ID, enc, enrolledAt, int64(step)); err != nil {
 			return false, "mfa store error", err
 		}
+		s.Throttle.Reset(u.Username)
 		aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAEnrolled, Username: u.Username})
 		return true, "", nil
 	}
@@ -549,13 +559,17 @@ func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u sto
 			continue
 		}
 		if !ok {
-			aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAFailed, Username: u.Username, Detail: "login"})
+			delay, count := s.failDelay(ctx, u.Username)
+			aud.record(ctx, store.AuditEvent{
+				Kind: store.AuditMFAFailed, Username: u.Username, Detail: throttleDetail("login", delay, count)})
+			s.sleepFor(delay)
 			errMsg = "Code incorrect - try again"
 			continue
 		}
 		if err := s.Store.UpdateMFAStep(ctx, u.ID, int64(step)); err != nil {
 			return false, "mfa store error", err
 		}
+		s.Throttle.Reset(u.Username)
 		aud.record(ctx, store.AuditEvent{Kind: store.AuditMFASuccess, Username: u.Username})
 		return true, "", nil
 	}
@@ -580,6 +594,7 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		}
 		identity, err := s.Authenticate(ctx, s.Store, user, pass)
 		if err == nil {
+			s.Throttle.Reset(user)
 			aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthOK, Username: identity.Username})
 			return identity, true, ""
 		}
@@ -593,10 +608,13 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 			errMsg = "Temporary error; try again"
 			continue
 		}
-		// Auth fail: log the attempted username only — never the password.
+		// Auth fail: per-username backoff (GH #48). Compute before auditing so
+		// the audit detail records the applied delay; never log the password.
+		delay, count := s.failDelay(ctx, user)
 		s.log().Warn("auth failed", "user", user)
-		// Attempted username only — never the password (CLAUDE.md hard rule).
-		aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthFail, Username: user})
+		aud.record(ctx, store.AuditEvent{
+			Kind: store.AuditAuthFail, Username: user, Detail: throttleDetail("", delay, count)})
+		s.sleepFor(delay) // bounded well under pre_auth_idle by default; a tight pre-auth window could turn a large delay into a timeout
 		// Generic message — never reveals whether the username exists (spec §7).
 		errMsg = "Invalid userid or password"
 	}

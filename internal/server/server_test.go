@@ -102,3 +102,24 @@ func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
 		t.Error("client outside trusted CIDRs must not be Trusted")
 	}
 }
+
+func TestHandlerSharesThrottleAcrossSessions(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/s.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	h := NewSessionHandler(st, 0x6B, Limits{}, nil, "", nil).(sessionHandler)
+	a1 := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1}
+	a2 := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 2), Port: 2}
+	s1 := h.sessionFor(a1, slog.Default())
+	s2 := h.sessionFor(a2, slog.Default())
+
+	if s1.Throttle == nil {
+		t.Fatal("session throttle is nil")
+	}
+	if s1.Throttle != s2.Throttle {
+		t.Error("sessions from one handler must share the throttle")
+	}
+}

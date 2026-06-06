@@ -97,7 +97,8 @@ internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, s
 internal/mfa      Pure TOTP (RFC 6238, pquerna/otp, 80-bit/16-char base32) + AES-256-GCM
                   secret-at-rest. NewCipher/Seal/Open (ErrDecrypt on wrong key), GenerateSecret,
                   Chunk (ABCD EFGH…), Validate(secret, code, lastStep, now) → (ok, step) with
-                  ±1-step skew + replay floor. No DB/network. Brute-force throttling is OUT (GH #48).
+                  ±1-step skew + replay floor. No DB/network. Brute-force throttling
+                  lives in internal/server (authThrottle, GH #48); mfa itself has none.
 internal/bridge   The bespoke core. telnetProcessor parses one Telnet leg (forward 3270
                   data + IAC IAC / IAC EOR framing; answer negotiation locally; detect PA3
                   escape). Bridge(client, addr, termType, escapeAID, *tls.Config) dials
@@ -141,6 +142,15 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   wait in the kernel backlog) and enforces the per-IP cap after Accept by
                   closing. (Residual: accept-loop rework + user-idle-during-bridge are
                   deferred follow-ups; see #18/#19.)
+                  Failed-auth throttling (GH #48): authThrottle (auththrottle.go)
+                  applies per-username linear backoff (delay = AUTH_DELAY_BASE_SECS
+                  * min(failcount, AUTH_MAX_TRIES), capped at 1h) shared across the
+                  password (doLogin) and MFA (mfaVerify/mfaEnroll) failure paths;
+                  one instance per handler, keyed on the normalized username
+                  (IP-agnostic, so the web client's shared IP is fine), counts
+                  reset on success and decay after AUTH_FAIL_WINDOW_MINS. The applied
+                  delay is recorded in the auth_fail/mfa_failed audit Detail
+                  (delay=Xs count=N). AUTH_DELAY_BASE_SECS=0 disables it.
 ```
 
 Data flow: `main → Server.Serve` (accept) → `Session.Run` → `Presenter` (go3270 screens) /
@@ -174,8 +184,8 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   refuses to start if enrolled users exist but no key is set, or if the key can't decrypt the
   `MFA_KEY_CHECK` sentinel (wrong/rotated key). Recover a lost key with `tn3270proxy mfa
   reset-all` (wipes all enrollments; everyone re-enrolls). TOTP secrets are stored AES-256-GCM
-  encrypted. Per-attempt throttling is deliberately deferred to GH #48 — ±1-step/replay is NOT
-  a brute-force defense.
+  encrypted. ±1-step/replay is NOT a brute-force defense; per-attempt throttling is in
+  internal/server (authThrottle, GH #48) — see the package map.
 - **Commits:** conventional-ish prefixes (`feat:`/`test:`/`chore:`/`docs:`), small and focused.
 - **Backend TLS:** implemented. A service dials over TLS when `services.tls` is set; the
   per-service `services.tls_verify` column (default on) controls certificate verification

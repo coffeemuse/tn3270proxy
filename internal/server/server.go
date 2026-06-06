@@ -116,6 +116,7 @@ type sessionHandler struct {
 	logger    *slog.Logger
 	release   string
 	mfaCipher *mfa.Cipher
+	throttle  *authThrottle
 }
 
 // wrapIdle installs the idle-deadline wrapper when an idle window is set.
@@ -147,6 +148,7 @@ func (h sessionHandler) sessionFor(addr net.Addr, connLog *slog.Logger) *Session
 		Trusted:          trusted,
 		BridgeIdleExempt: h.limits.BridgeIdleExempt,
 		MFA:              h.mfaCipher,
+		Throttle:         h.throttle,
 	}
 }
 
@@ -167,7 +169,7 @@ func NewSessionHandler(st *store.Store, escapeAID byte, limits Limits, logger *s
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits, logger: logger, release: release, mfaCipher: mfaCipher}
+	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits, logger: logger, release: release, mfaCipher: mfaCipher, throttle: newAuthThrottle()}
 }
 
 // newServers builds one Server per listener, all sharing handler and one
