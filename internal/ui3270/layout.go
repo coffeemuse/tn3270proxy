@@ -33,8 +33,23 @@ func normRows(rows int) int {
 // Bottom-anchored layout rows (CLAUDE.md convention; reproduce the historical
 // 24-row layout). 0-based; 24 rows = 0..23.
 func helpRow(rows int) int   { return normRows(rows) - 1 } // 23 on MOD 2
-func errorRow(rows int) int  { return normRows(rows) - 3 } // 21
 func legendRow(rows int) int { return normRows(rows) - 4 } // 20
+
+// Top-band layout rows (ISPF style guide §2): title at row 0, an optional command
+// line at row 1, the message line at row 2, body from row 3. Fixed on every model
+// (content stays within cols 0–79; ui3270 adapts rows only).
+func messageRow() int { return 2 }
+func bodyTopRow() int { return 3 }
+
+// centerCol returns the start column to center an n-rune title within the 0–79
+// content band, clamped to ≥0.
+func centerCol(n int) int {
+	c := (80 - n) / 2
+	if c < 0 {
+		return 0
+	}
+	return c
+}
 
 // listPageSize is how many data rows fit on a list screen (14 on MOD 2).
 func listPageSize(rows int) int { return normRows(rows) - 10 }

@@ -256,3 +256,50 @@ func TestBuildFormScreenDotLeaderOffUnchanged(t *testing.T) {
 		t.Error("label field at row 3 col 2 not found in screen")
 	}
 }
+
+func TestBuildListScreenPalette(t *testing.T) {
+	screen, cur := buildListScreen(24, ListView{
+		Title: "USER ADMINISTRATION", RowInfo: "ROW 1 TO 2 OF 2",
+		Header: "Userid    Name", Rows: []string{"ALICE  Alice"},
+		Legend: "S=Select", ErrMsg: "boom", PFHelp: "PF3=Back",
+	})
+	title, ok := fieldAt(screen, 0, centerCol(len("USER ADMINISTRATION")))
+	if !ok || title.Content != "USER ADMINISTRATION" || title.Color != go3270.White || !title.Intense {
+		t.Errorf("title = %+v ok=%v, want centered white intense", title, ok)
+	}
+	hdr, ok := fieldAt(screen, bodyTopRow(), 2)
+	if !ok || hdr.Color != go3270.Blue || hdr.Content != "Userid    Name" {
+		t.Errorf("header = %+v ok=%v, want row 3 blue", hdr, ok)
+	}
+	msg, ok := fieldByName(screen, fieldError)
+	if !ok || msg.Row != 2 {
+		t.Errorf("message row = %d ok=%v, want 2", msg.Row, ok)
+	}
+	if cur != (Cursor{Row: 4, Col: 3}) {
+		t.Errorf("cursor = %+v, want {4,3} (unchanged)", cur)
+	}
+}
+
+func TestBuildFormScreenPalette(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{
+		Title:  "EDIT USER",
+		Fields: []FormField{{Name: "x", Label: "Name", Length: 8}},
+		ErrMsg: "boom",
+	})
+	title, ok := fieldAt(screen, 0, centerCol(len("EDIT USER")))
+	if !ok || title.Content != "EDIT USER" || title.Color != go3270.White || !title.Intense {
+		t.Errorf("title = %+v ok=%v, want centered white intense", title, ok)
+	}
+	label, ok := fieldAt(screen, 3, labelAttrCol)
+	if !ok || label.Color != go3270.Turquoise {
+		t.Errorf("label = %+v ok=%v, want turquoise", label, ok)
+	}
+	in, _ := fieldByName(screen, "x")
+	if in.Color != go3270.Green {
+		t.Errorf("input color = %v, want green", in.Color)
+	}
+	msg, ok := fieldByName(screen, fieldError)
+	if !ok || msg.Row != 2 || msg.Color != go3270.Red || !msg.Intense {
+		t.Errorf("message = %+v ok=%v, want row 2 red intense", msg, ok)
+	}
+}

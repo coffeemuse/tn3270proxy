@@ -46,19 +46,33 @@ const (
 // drives it with HandleScreenAlt: AIDEnter submits, PF3 returns to the
 // service menu.
 func AdminMenuScreen(geom Geometry, errMsg string) (go3270.Screen, Cursor) {
-	option := go3270.Field{Row: geom.InputRow(), Col: 7, Name: FieldOption, Write: true, Highlighting: go3270.Underscore}
-	return go3270.Screen{
-		{Row: 0, Col: 27, Intense: true, Content: "TN3270 GATEWAY ADMIN"},
-		{Row: 3, Col: 4, Content: "1.  Users"},
-		{Row: 4, Col: 4, Content: "2.  Groups"},
-		{Row: 5, Col: 4, Content: "3.  Services"},
-		{Row: 6, Col: 4, Content: "4.  System Parameters"},
-		{Row: 7, Col: 4, Content: "5.  Trusted Networks"},
-		{Row: 8, Col: 4, Content: "6.  Audit Log"},
-		{Row: geom.InputRow(), Col: 2, Content: "===>"},
+	title := "TN3270 GATEWAY ADMIN"
+	opts := []struct{ key, name, desc string }{
+		{"1", "Users", "User accounts and group membership"},
+		{"2", "Groups", "Group definitions"},
+		{"3", "Services", "Backend TN3270 services"},
+		{"4", "Sysparms", "Runtime system parameters"},
+		{"5", "Networks", "Trusted networks (DoS allow-list)"},
+		{"6", "Audit", "Browse the audit trail"},
+	}
+	screen := go3270.Screen{
+		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},
+	}
+	for i, o := range opts {
+		row := geom.BodyTopRow() + i
+		screen = append(screen,
+			go3270.Field{Row: row, Col: 0, Color: go3270.White, Intense: true, Content: "  " + o.key},
+			go3270.Field{Row: row, Col: 6, Color: go3270.Turquoise, Content: o.name},
+			go3270.Field{Row: row, Col: 17, Color: go3270.Green, Content: o.desc},
+		)
+	}
+	promptF, option, stopF := commandLine(geom, "Option ===>", FieldOption)
+	screen = append(screen,
+		promptF,
 		option,
-		{Row: geom.InputRow(), Col: 11}, // stop field
-		{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		{Row: geom.HelpRow(), Col: 2, Content: "PF3=Main Menu"},
-	}, cursorAt(option)
+		stopF,
+		go3270.Field{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
+		go3270.Field{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Main Menu"},
+	)
+	return screen, cursorAt(option)
 }

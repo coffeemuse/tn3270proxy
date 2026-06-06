@@ -139,9 +139,10 @@ check "3f status block Release row"  "Release. :" "$WORK/t3.out"
 check "3g status block Terminal row" "Terminal :" "$WORK/t3.out"
 check "3h wide description renders"        "1234567890123456789012345678901234567890" "$WORK/t3.out"
 check "3i status block coexists with wide desc" "User ID. :" "$WORK/t3.out"
-# Cursor on the selection input (===> field at row 19 col 8 on a MOD 2);
-# login is the only other screen and it reports 3 17, so 19 8 is the menu.
-check "3j menu cursor on selection input" "I 2 24 80 19 8 " "$WORK/t3.out"
+# Cursor on the selection input (top "Option ===>" command line, row 1 col 15 on
+# a MOD 2 after the #65 band rework); login is the only other screen and it
+# reports 3 17, so 1 15 is the menu.
+check "3j menu cursor on selection input (1,15)" "I 2 24 80 1 15 " "$WORK/t3.out"
 
 # --- 4. select 1 + ENTER bridges to the backend proxy ---
 BACK_CONNS_BEFORE=$(grep -c "accepted connection" "$WORK/back.log")
@@ -284,9 +285,9 @@ Ascii()
 Quit()
 EOF
 check "9a admin menu renders" "TN3270 GATEWAY ADMIN" "$WORK/t9.out"
-# Admin menu option field at row 19 col 8 (same row as the service menu — both
-# are correct; the service menu also reports 19 8 in this run).
-check "9b admin/menu cursor on option field (19,8)" "I 2 24 80 19 8 " "$WORK/t9.out"
+# Admin menu option field at the top "Option ===>" command line, row 1 col 15
+# (same row as the service menu — both report 1 15 after the #65 band rework).
+check "9b admin/menu cursor on option field (1,15)" "I 2 24 80 1 15 " "$WORK/t9.out"
 # Users list: first CMD field at row 4 col 3 — produced only by the list.
 check "9c users list cursor on first CMD field (4,3)" "I 2 24 80 4 3 " "$WORK/t9.out"
 # Add-user form: first input at row 3 col 17. Login also reports 3 17, so assert
@@ -326,8 +327,8 @@ if awk '/TN3270 GATEWAY MENU/{seen=1} seen && /TN3270 GATEWAY LOGIN/{ok=1} END{e
 else
   FAIL=$((FAIL+1)); echo "FAIL: 10b post-auth idle did not return to login screen"
 fi
-# Cursor homed: menu cursor (19 8) then the re-rendered login cursor (3 17) after.
-if awk '/I 2 24 80 19 8 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' "$WORK/t10.out"; then
+# Cursor homed: menu cursor (1 15) then the re-rendered login cursor (3 17) after.
+if awk '/I 2 24 80 1 15 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' "$WORK/t10.out"; then
   PASS=$((PASS+1)); echo "PASS: 10c login cursor homes to userid after idle-logout"
 else
   FAIL=$((FAIL+1)); echo "FAIL: 10c cursor not homed to (3,17) after idle-logout"
@@ -368,8 +369,8 @@ check "11b MOTD File label present" "MOTD File ." "$WORK/t11.out"
 # input column is dynamic (GH #71): it sits past the longest label
 # ("Auth Fail Window (min):", 23 chars) at attribute col 27, so the cursor lands
 # at col 28 — and every field, including MOTD File, aligns there. Assert 3 28
-# AFTER the admin menu's 19 8 line so the earlier login screen (3 17) can't match.
-if awk '/I 2 24 80 19 8 /{seen=1} seen && /I 2 24 80 3 28 /{ok=1} END{exit !ok}' "$WORK/t11.out"; then
+# AFTER the admin menu's 1 15 line so the earlier login screen (3 17) can't match.
+if awk '/I 2 24 80 1 15 /{seen=1} seen && /I 2 24 80 3 28 /{ok=1} END{exit !ok}' "$WORK/t11.out"; then
   PASS=$((PASS+1)); echo "PASS: 11c form cursor on first input (3,28) after admin menu"
 else
   FAIL=$((FAIL+1)); echo "FAIL: 11c form cursor not at (3,28) after admin menu"
@@ -573,13 +574,13 @@ fi
 
 # --- 15. User Settings menu entry (GH #63): the service menu shows a "0 User
 # Settings" meta-row for every user; selecting "0" opens the User Settings
-# screen whose first row is "1. Change Password"; PF3 returns to the service
+# screen whose first row is "1 Password" / "Change your sign-on password"; PF3 returns to the service
 # menu. Scenario 13 activated the MOTD gate (front.db MOTD_FILE now points at
 # a real 2-page fixture), so this login must clear the gate with two ENTERs
 # (Wait(Unlock) after each — the MOTD page has no input field) before reaching
 # the service menu. Walk: login alice -> clear MOTD (2x Enter) -> service menu
 # (check "0 User Settings") -> type "0", Enter -> User Settings screen ->
-# assert title + "Change Password" + cursor at (19,8) -> PF3 -> service menu.
+# assert title + change-password row + cursor at (1,15) -> PF3 -> service menu.
 s3 t15 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
 Wait(5,InputField)
@@ -606,14 +607,15 @@ Quit()
 EOF
 check "15a service menu shows '0 User Settings' entry" "User Settings" "$WORK/t15.out"
 check "15b User Settings screen renders (title)" "USER SETTINGS" "$WORK/t15.out"
-check "15c User Settings shows Change Password option" "Change Password" "$WORK/t15.out"
-# Cursor on the option input field at (19,8): FieldUSOption col=7, cursorAt = col+1=8.
-# Assert a 19 8 cursor line AFTER the service menu's 19 8 line so the earlier
-# menu rendering can't satisfy it vacuously (awk tracks first-seen then second-seen).
-if awk '/I 2 24 80 19 8 /{count++} count==2{ok=1; exit} END{exit !ok}' "$WORK/t15.out"; then
-  PASS=$((PASS+1)); echo "PASS: 15d User Settings cursor on option field (19,8)"
+check "15c User Settings shows Change Password option" "Change your sign-on password" "$WORK/t15.out"
+# Cursor on the option input field at (1,15): FieldUSOption sits on the top
+# "Option ===>" command line after the #65 band rework. Assert a 1 15 cursor line
+# AFTER the service menu's 1 15 line so the earlier menu rendering can't satisfy
+# it vacuously (awk tracks first-seen then second-seen).
+if awk '/I 2 24 80 1 15 /{count++} count==2{ok=1; exit} END{exit !ok}' "$WORK/t15.out"; then
+  PASS=$((PASS+1)); echo "PASS: 15d User Settings cursor on option field (1,15)"
 else
-  FAIL=$((FAIL+1)); echo "FAIL: 15d User Settings cursor not at (19,8) after service menu"
+  FAIL=$((FAIL+1)); echo "FAIL: 15d User Settings cursor not at (1,15) after service menu"
 fi
 # PF3 returns to the service menu: USER SETTINGS appears first, then GATEWAY MENU reappears.
 if awk '/USER SETTINGS/{seen=1} seen && /TN3270 GATEWAY MENU/{ok=1} END{exit !ok}' "$WORK/t15.out"; then

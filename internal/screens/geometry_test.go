@@ -23,23 +23,23 @@ import "testing"
 
 func TestGeometryFormulas(t *testing.T) {
 	cases := []struct {
-		name                                    string
-		g                                       Geometry
-		help, errRow, legend, input, page, form int
+		name                     string
+		g                        Geometry
+		help, legend, page, form int
 	}{
-		{"zero value", Geometry{}, 23, 21, 20, 19, 14, 9},
-		{"MOD 2", Geometry{Rows: 24, Cols: 80}, 23, 21, 20, 19, 14, 9},
-		{"MOD 3", Geometry{Rows: 32, Cols: 80}, 31, 29, 28, 27, 22, 13},
-		{"MOD 4", Geometry{Rows: 43, Cols: 80}, 42, 40, 39, 38, 33, 18},
-		{"MOD 5", Geometry{Rows: 27, Cols: 132}, 26, 24, 23, 22, 17, 10},
-		{"sub-MOD 2 falls back", Geometry{Rows: 12, Cols: 40}, 23, 21, 20, 19, 14, 9},
-		{"tall but narrow falls back", Geometry{Rows: 43, Cols: 40}, 23, 21, 20, 19, 14, 9},
+		{"zero value", Geometry{}, 23, 20, 14, 9},
+		{"MOD 2", Geometry{Rows: 24, Cols: 80}, 23, 20, 14, 9},
+		{"MOD 3", Geometry{Rows: 32, Cols: 80}, 31, 28, 22, 13},
+		{"MOD 4", Geometry{Rows: 43, Cols: 80}, 42, 39, 33, 18},
+		{"MOD 5", Geometry{Rows: 27, Cols: 132}, 26, 23, 17, 10},
+		{"sub-MOD 2 falls back", Geometry{Rows: 12, Cols: 40}, 23, 20, 14, 9},
+		{"tall but narrow falls back", Geometry{Rows: 43, Cols: 40}, 23, 20, 14, 9},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := []int{c.g.HelpRow(), c.g.ErrorRow(), c.g.LegendRow(), c.g.InputRow(), c.g.ListPageSize(), c.g.FormMaxFields()}
-			want := []int{c.help, c.errRow, c.legend, c.input, c.page, c.form}
-			for i, name := range []string{"HelpRow", "ErrorRow", "LegendRow", "InputRow", "ListPageSize", "FormMaxFields"} {
+			got := []int{c.g.HelpRow(), c.g.LegendRow(), c.g.ListPageSize(), c.g.FormMaxFields()}
+			want := []int{c.help, c.legend, c.page, c.form}
+			for i, name := range []string{"HelpRow", "LegendRow", "ListPageSize", "FormMaxFields"} {
 				if got[i] != want[i] {
 					t.Errorf("%s() = %d, want %d", name, got[i], want[i])
 				}
@@ -54,13 +54,13 @@ func TestGeometryMenuCapacity(t *testing.T) {
 		admin bool
 		want  int
 	}{
-		{Geometry{Rows: 24, Cols: 80}, false, 13}, // rows 4..16 (one row reserved for "0 User Settings")
-		{Geometry{Rows: 24, Cols: 80}, true, 12},  // one more row reserved for the A entry
-		{Geometry{Rows: 32, Cols: 80}, false, 21},
-		{Geometry{Rows: 43, Cols: 80}, true, 31},
-		{Geometry{Rows: 27, Cols: 132}, false, 16},
-		{Geometry{Rows: 27, Cols: 132}, true, 15},
-		{Geometry{}, false, 13}, // zero value normalizes
+		{Geometry{Rows: 24, Cols: 80}, false, 18}, // body rows 4..22 minus "0 User Settings"
+		{Geometry{Rows: 24, Cols: 80}, true, 17},  // one more row reserved for the A entry
+		{Geometry{Rows: 32, Cols: 80}, false, 26},
+		{Geometry{Rows: 43, Cols: 80}, true, 36},
+		{Geometry{Rows: 27, Cols: 132}, false, 21},
+		{Geometry{Rows: 27, Cols: 132}, true, 20},
+		{Geometry{}, false, 18}, // zero value normalizes
 	}
 	for _, c := range cases {
 		if got := c.g.MenuCapacity(c.admin); got != c.want {
@@ -92,12 +92,47 @@ func TestNewsLinesPerPage(t *testing.T) {
 }
 
 func TestStatusBlockCol(t *testing.T) {
-	// Fixed at 57 on the 80-col layout: the service grid (desc col 13, cut 40)
-	// ends near col 53, leaving a gutter before the block. The value is the
+	// Fixed at 60 on the 80-col layout: the service grid (desc col 17, cut 40)
+	// ends at col 57, leaving a gutter before the block. The value is the
 	// same on taller models because content is always within cols 0-79.
 	for _, g := range []Geometry{DefaultGeometry, {Rows: 43, Cols: 80}, {}} {
-		if got := g.StatusBlockCol(); got != 57 {
-			t.Errorf("StatusBlockCol(%+v) = %d, want 57", g, got)
+		if got := g.StatusBlockCol(); got != 60 {
+			t.Errorf("StatusBlockCol(%+v) = %d, want 60", g, got)
 		}
+	}
+}
+
+func TestTopBandHelpers(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	if g.TitleRow() != 0 {
+		t.Errorf("TitleRow = %d, want 0", g.TitleRow())
+	}
+	if g.CommandRow() != 1 {
+		t.Errorf("CommandRow = %d, want 1", g.CommandRow())
+	}
+	if g.MessageRow() != 2 {
+		t.Errorf("MessageRow = %d, want 2", g.MessageRow())
+	}
+	if g.BodyTopRow() != 3 {
+		t.Errorf("BodyTopRow = %d, want 3", g.BodyTopRow())
+	}
+	if g.BodyBottomRow() != 22 {
+		t.Errorf("BodyBottomRow = %d, want 22", g.BodyBottomRow())
+	}
+}
+
+func TestCenterCol(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	// "TN3270 GATEWAY MENU" is 19 runes → (80-19)/2 = 30.
+	if got := g.CenterCol(19); got != 30 {
+		t.Errorf("CenterCol(19) = %d, want 30", got)
+	}
+	// Over-wide text clamps to 0, never negative.
+	if got := g.CenterCol(200); got != 0 {
+		t.Errorf("CenterCol(200) = %d, want 0", got)
+	}
+	// Zero geometry normalizes to 24x80 before centering.
+	if got := (Geometry{}).CenterCol(19); got != 30 {
+		t.Errorf("zero-geom CenterCol(19) = %d, want 30", got)
 	}
 }

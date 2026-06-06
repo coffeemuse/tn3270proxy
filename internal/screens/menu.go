@@ -84,8 +84,8 @@ const FieldSelection = "selection"
 // (no pagination) so the list can never collide with the input/error/help rows.
 func MenuScreen(geom Geometry, services []store.Service, admin bool, status MenuStatus, errMsg string) (go3270.Screen, map[string]store.Service, Cursor) {
 	screen := go3270.Screen{
-		{Row: 0, Col: 27, Intense: true, Content: "TN3270 GATEWAY MENU"},
-		{Row: 2, Col: 2, Content: "Select a service and press ENTER:"},
+		{Row: geom.TitleRow(), Col: geom.CenterCol(len("TN3270 GATEWAY MENU")), Color: go3270.White, Intense: true, Content: "TN3270 GATEWAY MENU"},
+		{Row: geom.BodyTopRow(), Col: 2, Color: go3270.Turquoise, Content: "Select a service and press ENTER:"},
 	}
 
 	shown := services
@@ -97,27 +97,27 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 	// Fixed grid: number col 0 (intense white), name col 4 (turquoise),
 	// description col 13 (green, hard-cut 40). Three separate fields keep the
 	// columns aligned and individually colored (ISPF style).
-	row := 4
+	row := geom.BodyTopRow() + 1
 	for i, svc := range shown {
 		key := fmt.Sprintf("%d", i+1)
 		mapping[key] = svc
 		screen = append(screen,
 			go3270.Field{Row: row, Col: 0, Intense: true, Content: fmt.Sprintf("%3d", i+1)},
-			go3270.Field{Row: row, Col: 4, Color: go3270.Turquoise, Content: truncateRunes(svc.Name, 8)},
-			go3270.Field{Row: row, Col: 13, Color: go3270.Green, Content: truncateRunes(svc.Description, 40)},
+			go3270.Field{Row: row, Col: 6, Color: go3270.Turquoise, Content: truncateRunes(svc.Name, 8)},
+			go3270.Field{Row: row, Col: 17, Color: go3270.Green, Content: truncateRunes(svc.Description, 40)},
 		)
 		row++
 	}
 	if len(shown) == 0 {
-		screen = append(screen, go3270.Field{Row: 4, Col: 4, Content: "(no services available for your account)"})
-		row = 5
+		screen = append(screen, go3270.Field{Row: geom.BodyTopRow() + 1, Col: 6, Content: "(no services available for your account)"})
+		row = geom.BodyTopRow() + 2
 	}
 	// Bottom "meta" entries below the service list: User Settings (0) is shown
 	// for every user; Administration (A) only for admins. Clamp so they never
 	// overrun the input row (MenuCapacity reserved these rows when the list is
 	// full).
 	metaRow := row + 1
-	lastMeta := geom.InputRow() - 2
+	lastMeta := geom.BodyBottomRow()
 	if admin {
 		lastMeta-- // leave a row below "0" for the "A" entry
 	}
@@ -126,26 +126,27 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 	}
 	screen = append(screen,
 		go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  0"},
-		go3270.Field{Row: metaRow, Col: 13, Color: go3270.Green, Content: "User Settings"},
+		go3270.Field{Row: metaRow, Col: 17, Color: go3270.Green, Content: "User Settings"},
 	)
 	if admin {
 		adminRow := metaRow + 1
 		screen = append(screen,
 			go3270.Field{Row: adminRow, Col: 0, Intense: true, Content: "  A"},
-			go3270.Field{Row: adminRow, Col: 13, Color: go3270.Green, Content: "Administration"},
+			go3270.Field{Row: adminRow, Col: 17, Color: go3270.Green, Content: "Administration"},
 		)
 	}
 
 	// Right-hand status block: 6 rows starting at the first service row.
 	screen = append(screen, statusBlockFields(geom, status)...)
 
-	selection := go3270.Field{Row: geom.InputRow(), Col: 7, Name: FieldSelection, Write: true, NumericOnly: !admin, Highlighting: go3270.Underscore}
+	promptF, selection, stopF := commandLine(geom, "Option ===>", FieldSelection)
+	selection.NumericOnly = !admin
 	screen = append(screen,
-		go3270.Field{Row: geom.InputRow(), Col: 2, Content: "===>"},
+		promptF,
 		selection,
-		go3270.Field{Row: geom.InputRow(), Col: 15}, // stop field
-		go3270.Field{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		go3270.Field{Row: geom.HelpRow(), Col: 2, Content: "PF3=Logoff    (PA3 returns here from a session)"},
+		stopF,
+		go3270.Field{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
+		go3270.Field{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Logoff    (PA3 returns here from a session)"},
 	)
 	return screen, mapping, cursorAt(selection)
 }

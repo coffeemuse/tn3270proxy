@@ -42,9 +42,9 @@ const (
 // given terminal row. The Mid field carries midColor (DefaultColor ⇒ plain).
 func snapSegments(row int, r SnapshotRow) go3270.Screen {
 	return go3270.Screen{
-		{Row: row, Col: snapLeftAttr, Content: r.Left},
+		{Row: row, Col: snapLeftAttr, Color: go3270.Green, Content: r.Left},
 		{Row: row, Col: snapMidAttr, Content: r.Mid, Color: r.MidColor},
-		{Row: row, Col: snapRightAttr, Content: r.Right},
+		{Row: row, Col: snapRightAttr, Color: go3270.Green, Content: r.Right},
 	}
 }
 
@@ -54,11 +54,13 @@ func snapSegments(row int, r SnapshotRow) go3270.Screen {
 // command field, or {0,0} when the page is empty.
 func buildSnapshotScreen(rows int, v SnapshotView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
-		{Row: 0, Col: 2, Intense: true, Content: v.Title},
+		{Row: 0, Col: centerCol(len(v.Title)), Color: go3270.White, Intense: true, Content: v.Title},
 		{Row: 0, Col: 60, Content: v.RowInfo},
-		{Row: 2, Col: snapLeftAttr, Content: v.AsOf},
+		{Row: 1, Col: snapLeftAttr, Color: go3270.Turquoise, Content: v.AsOf},
+		{Row: bodyTopRow(), Col: snapLeftAttr, Color: go3270.Blue, Content: v.Head.Left},
+		{Row: bodyTopRow(), Col: snapMidAttr, Color: go3270.Blue, Content: v.Head.Mid},
+		{Row: bodyTopRow(), Col: snapRightAttr, Color: go3270.Blue, Content: v.Head.Right},
 	}
-	screen = append(screen, snapSegments(3, v.Head)...)
 
 	data := v.Rows
 	if size := listPageSize(rows); len(data) > size {
@@ -67,7 +69,7 @@ func buildSnapshotScreen(rows int, v SnapshotView) (go3270.Screen, Cursor) {
 	cur := Cursor{Row: 0, Col: 0}
 	for i, r := range data {
 		row := 4 + i
-		cmd := go3270.Field{Row: row, Col: snapCmdAttr, Name: fmt.Sprintf("%s%d", fieldCmdPrefix, i), Write: true, Highlighting: go3270.Underscore}
+		cmd := go3270.Field{Row: row, Col: snapCmdAttr, Name: fmt.Sprintf("%s%d", fieldCmdPrefix, i), Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 		if i == 0 {
 			cur = Cursor{Row: cmd.Row, Col: cmd.Col + 1}
 		}
@@ -78,9 +80,9 @@ func buildSnapshotScreen(rows int, v SnapshotView) (go3270.Screen, Cursor) {
 		screen = append(screen, go3270.Field{Row: 4, Col: snapLeftAttr, Content: v.Empty})
 	}
 	screen = append(screen,
-		go3270.Field{Row: legendRow(rows), Col: 2, Content: v.Legend},
-		go3270.Field{Row: errorRow(rows), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: helpRow(rows), Col: 2, Content: v.PFHelp},
+		go3270.Field{Row: legendRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.Legend},
+		go3270.Field{Row: messageRow(), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
+		go3270.Field{Row: helpRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.PFHelp},
 	)
 	return screen, cur
 }
@@ -134,28 +136,28 @@ func wrapText(s string, width int) []string {
 // fields from row 2, then BodyLabel and the wrapped Body. Cursor homes ({0,0}).
 func buildDetailScreen(rows int, v DetailView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
-		{Row: 0, Col: 2, Intense: true, Content: v.Title},
+		{Row: 0, Col: centerCol(len(v.Title)), Color: go3270.White, Intense: true, Content: v.Title},
 	}
 	row := 2
 	for _, f := range v.Fields {
 		screen = append(screen,
-			go3270.Field{Row: row, Col: 2, Content: f.Label},
+			go3270.Field{Row: row, Col: 2, Color: go3270.Turquoise, Content: f.Label},
 			go3270.Field{Row: row, Col: detailValueCol, Content: f.Value, Color: f.Color},
 		)
 		row++
 	}
 	row++ // blank separator
 	if v.BodyLabel != "" {
-		screen = append(screen, go3270.Field{Row: row, Col: 2, Content: v.BodyLabel})
+		screen = append(screen, go3270.Field{Row: row, Col: 2, Color: go3270.Turquoise, Content: v.BodyLabel})
 		row++
 	}
 	for _, line := range wrapText(v.Body, detailBodyWidth) {
-		if row >= errorRow(rows) { // never overrun the bottom chrome
+		if row >= helpRow(rows) { // never overrun the PF-key row
 			break
 		}
 		screen = append(screen, go3270.Field{Row: row, Col: 2, Content: line})
 		row++
 	}
-	screen = append(screen, go3270.Field{Row: helpRow(rows), Col: 2, Content: v.PFHelp})
+	screen = append(screen, go3270.Field{Row: helpRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.PFHelp})
 	return screen, Cursor{Row: 0, Col: 0}
 }
