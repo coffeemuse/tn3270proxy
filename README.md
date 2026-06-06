@@ -1,5 +1,7 @@
 # TN3270Proxy
 
+[![CI](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml)
+
 A TN3270 gateway: presents itself as a TN3270 server, authenticates users,
 shows a group-filtered menu of internal TN3270 services, and bridges the user
 to the selected service. See `docs/superpowers/specs/` for the design.
