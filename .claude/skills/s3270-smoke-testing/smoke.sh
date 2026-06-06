@@ -362,12 +362,15 @@ Quit()
 EOF
 check "11a system parameters form renders" "SYSTEM PARAMETERS" "$WORK/t11.out"
 check "11b MOTD File label present" "MOTD File:" "$WORK/t11.out"
-# Form first input at row 3 col 17 (field.Col+1). Assert a 3 17 cursor AFTER the
-# admin menu's 19 8 line so the earlier login screen (also 3 17) can't satisfy it.
-if awk '/I 2 24 80 19 8 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' "$WORK/t11.out"; then
-  PASS=$((PASS+1)); echo "PASS: 11c form cursor on MOTD field (3,17) after admin menu"
+# Form first input at row 3 col 28 (field.Col+1). The System Parameters form's
+# input column is dynamic (GH #71): it sits past the longest label
+# ("Auth Fail Window (min):", 23 chars) at attribute col 27, so the cursor lands
+# at col 28 — and every field, including MOTD File, aligns there. Assert 3 28
+# AFTER the admin menu's 19 8 line so the earlier login screen (3 17) can't match.
+if awk '/I 2 24 80 19 8 /{seen=1} seen && /I 2 24 80 3 28 /{ok=1} END{exit !ok}' "$WORK/t11.out"; then
+  PASS=$((PASS+1)); echo "PASS: 11c form cursor on first input (3,28) after admin menu"
 else
-  FAIL=$((FAIL+1)); echo "FAIL: 11c form cursor not at (3,17) after admin menu"
+  FAIL=$((FAIL+1)); echo "FAIL: 11c form cursor not at (3,28) after admin menu"
 fi
 # PF3 on the form returns to the admin menu: the form title appears first, then
 # the admin menu's distinctive help line ("PF3=Main Menu", not the form's save).
