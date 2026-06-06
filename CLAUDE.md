@@ -123,7 +123,9 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   status never leaks before a correct password. nil Session.MFA disables it;
                   the secret is generated in-memory and persisted (encrypted) only on a correct
                   confirm. PF3/idle returns to login. Session.Now seam makes TOTP deterministic
-                  in tests.
+                  in tests. Login enforcement is secret-first: any stored secret is verified at
+                  login regardless of mfa_required (so opt-in MFA is enforced; demoting
+                  required=false on an enrolled user keeps verifying until the secret is cleared).
                   adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go)
                   behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
                   Auditor seam (best-effort store-backed auditing; nil disables) +

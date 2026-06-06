@@ -498,13 +498,17 @@ func (s *Session) mfaGate(ctx context.Context, conn net.Conn, term Term, identit
 		s.log().Error("mfa: load user failed", "error", gerr)
 		return false, "mfa user load error", gerr
 	}
-	if !u.MFARequired {
-		return true, "", nil
+	if u.MFASecret != "" {
+		// Enrolled by ANY path (admin-required OR voluntary opt-in) → always
+		// verify. Enforcement is secret-first, not mfa_required-gated: a stored
+		// secret means the user opted into MFA and must be challenged.
+		return s.mfaVerify(ctx, conn, term, u, aud)
 	}
-	if u.MFASecret == "" {
+	if u.MFARequired {
+		// Required but not yet enrolled → force one-time enrollment.
 		return s.mfaEnroll(ctx, conn, term, u, aud)
 	}
-	return s.mfaVerify(ctx, conn, term, u, aud)
+	return true, "", nil // no secret, not required → no MFA
 }
 
 func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
