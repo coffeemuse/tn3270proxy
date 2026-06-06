@@ -166,5 +166,6 @@ TDD — write the failing tests first, then the renderer change.
 
 ## GitHub issue
 
-File a dedicated issue for this concrete save-blocking functional bug (none
-exists; GH #65 is broader UI polish). Reference the smoke tests it fixes.
+Tracked by **GH #71** ("System Parameters form cannot save ANY value — long
+labels overlap input column (release blocker)"). The fix commit / PR references
+#71 and the smoke tests it restores.
