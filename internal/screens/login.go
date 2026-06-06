@@ -37,17 +37,18 @@ const (
 // sign-on). The caller drives it with go3270.HandleScreenAlt using AIDEnter
 // to submit and AIDPF3 to quit, with errorField = FieldError.
 func LoginScreen(geom Geometry, errMsg string) (go3270.Screen, go3270.Rules, Cursor) {
-	username := go3270.Field{Row: 3, Col: 16, Name: FieldUsername, Write: true, Highlighting: go3270.Underscore}
+	title := "TN3270 GATEWAY LOGIN"
+	username := go3270.Field{Row: 3, Col: 16, Name: FieldUsername, Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 	screen := go3270.Screen{
-		{Row: 0, Col: 27, Intense: true, Content: "TN3270 GATEWAY LOGIN"},
-		{Row: 3, Col: 2, Content: "Userid . . ."},
+		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},
+		{Row: 3, Col: 2, Color: go3270.Turquoise, Content: "Userid . . ."},
 		username,
 		{Row: 3, Col: 33}, // stop field: closes the username input
-		{Row: 5, Col: 2, Content: "Password . ."},
-		{Row: 5, Col: 16, Name: FieldPassword, Write: true, Hidden: true, Highlighting: go3270.Underscore},
+		{Row: 5, Col: 2, Color: go3270.Turquoise, Content: "Password . ."},
+		{Row: 5, Col: 16, Name: FieldPassword, Write: true, Hidden: true, Color: go3270.Green, Highlighting: go3270.Underscore},
 		{Row: 5, Col: 33}, // stop field
-		{Row: geom.ErrorRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		{Row: geom.HelpRow(), Col: 2, Content: "PF3=Disconnect"},
+		{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
+		{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Disconnect"},
 	}
 	rules := go3270.Rules{
 		FieldUsername: {Validator: go3270.NonBlank, ErrorText: "Userid is required"},

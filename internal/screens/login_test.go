@@ -74,18 +74,18 @@ func TestLoginScreenShowsError(t *testing.T) {
 	}
 }
 
-func TestLoginScreenBottomAnchored(t *testing.T) {
+func TestLoginScreenBands(t *testing.T) {
 	for _, g := range []Geometry{
 		{Rows: 24, Cols: 80},
 		{Rows: 32, Cols: 80},
 		{Rows: 43, Cols: 80},
 		{Rows: 27, Cols: 132},
-		{}, // zero value: must normalize to 24×80 (ErrorRow=21, HelpRow=23)
+		{}, // zero value normalizes to 24×80
 	} {
 		screen, _, _ := LoginScreen(g, "err")
 		f, ok := fieldByName(screen, FieldError)
-		if !ok || f.Row != g.ErrorRow() {
-			t.Errorf("%+v: error row = %d, want %d", g, f.Row, g.ErrorRow())
+		if !ok || f.Row != g.MessageRow() {
+			t.Errorf("%+v: error row = %d, want MessageRow %d", g, f.Row, g.MessageRow())
 		}
 		foundHelp := false
 		for _, fl := range screen {
@@ -99,6 +99,55 @@ func TestLoginScreenBottomAnchored(t *testing.T) {
 		if !foundHelp {
 			t.Errorf("%+v: no help line on last row %d", g, g.HelpRow())
 		}
+	}
+}
+
+func fieldByContent(s go3270.Screen, content string) (go3270.Field, bool) {
+	for _, f := range s {
+		if f.Content == content {
+			return f, true
+		}
+	}
+	return go3270.Field{}, false
+}
+
+func TestLoginScreenPalette(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	screen, _, cur := LoginScreen(g, "bad creds")
+
+	title, ok := fieldByContent(screen, "TN3270 GATEWAY LOGIN")
+	if !ok {
+		t.Fatal("missing title field")
+	}
+	if title.Row != 0 || !title.Intense || title.Color != go3270.White {
+		t.Errorf("title = %+v, want row 0 white intense", title)
+	}
+	if title.Col != g.CenterCol(len("TN3270 GATEWAY LOGIN")) {
+		t.Errorf("title not centered: col %d", title.Col)
+	}
+	label, ok := fieldByContent(screen, "Userid . . .")
+	if !ok {
+		t.Fatal("missing userid label")
+	}
+	if label.Color != go3270.Turquoise {
+		t.Errorf("userid label color = %v, want Turquoise", label.Color)
+	}
+	user, ok := fieldByName(screen, FieldUsername)
+	if !ok {
+		t.Fatal("missing username field")
+	}
+	if user.Color != go3270.Green || !user.Write {
+		t.Errorf("userid input = %+v, want green writable", user)
+	}
+	msg, ok := fieldByName(screen, FieldError)
+	if !ok {
+		t.Fatal("missing error field")
+	}
+	if msg.Row != 2 || msg.Color != go3270.Red || !msg.Intense {
+		t.Errorf("message field = %+v, want row 2 red intense", msg)
+	}
+	if cur.Row != 3 || cur.Col != 17 {
+		t.Errorf("cursor = %+v, want (3,17)", cur)
 	}
 }
 
