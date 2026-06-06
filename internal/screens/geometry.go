@@ -80,6 +80,35 @@ func (g Geometry) MenuCapacity(admin bool) int {
 // row); see NewsScreen.
 func (g Geometry) NewsLinesPerPage() int { return g.norm().Rows - 2 }
 
+// Top-band layout rows (ISPF style guide §2). The title/command/message band is
+// fixed at rows 0–2; the body fills row 3 down to BodyBottomRow; PF-key help
+// stays on the last row. See docs/ispf-style-guide.md.
+
+// TitleRow is the centered panel-title row.
+func (g Geometry) TitleRow() int { return 0 }
+
+// CommandRow is the "Option ===>" / "Command ===>" command line (menus & lists).
+func (g Geometry) CommandRow() int { return 1 }
+
+// MessageRow is the red message line, directly under the command line.
+func (g Geometry) MessageRow() int { return 2 }
+
+// BodyTopRow is the first body row (column headings on a list).
+func (g Geometry) BodyTopRow() int { return 3 }
+
+// BodyBottomRow is the last usable body row — one above the PF-key help row.
+func (g Geometry) BodyBottomRow() int { return g.norm().Rows - 2 }
+
+// CenterCol returns the starting column to center an n-rune string within
+// columns 0..Cols-1, clamped to 0 (never negative).
+func (g Geometry) CenterCol(n int) int {
+	c := (g.norm().Cols - n) / 2
+	if c < 0 {
+		return 0
+	}
+	return c
+}
+
 // StatusBlockCol is the left column of the menu's right-hand status block
 // (the per-session User ID / Date / Time / Terminal / System ID / Release
 // panel). It is fixed at 57: the service grid (number col 0, name col 4,

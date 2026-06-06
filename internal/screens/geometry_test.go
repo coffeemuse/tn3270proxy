@@ -101,3 +101,38 @@ func TestStatusBlockCol(t *testing.T) {
 		}
 	}
 }
+
+func TestTopBandHelpers(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	if g.TitleRow() != 0 {
+		t.Errorf("TitleRow = %d, want 0", g.TitleRow())
+	}
+	if g.CommandRow() != 1 {
+		t.Errorf("CommandRow = %d, want 1", g.CommandRow())
+	}
+	if g.MessageRow() != 2 {
+		t.Errorf("MessageRow = %d, want 2", g.MessageRow())
+	}
+	if g.BodyTopRow() != 3 {
+		t.Errorf("BodyTopRow = %d, want 3", g.BodyTopRow())
+	}
+	if g.BodyBottomRow() != 22 {
+		t.Errorf("BodyBottomRow = %d, want 22", g.BodyBottomRow())
+	}
+}
+
+func TestCenterCol(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	// "TN3270 GATEWAY MENU" is 19 runes → (80-19)/2 = 30.
+	if got := g.CenterCol(19); got != 30 {
+		t.Errorf("CenterCol(19) = %d, want 30", got)
+	}
+	// Over-wide text clamps to 0, never negative.
+	if got := g.CenterCol(200); got != 0 {
+		t.Errorf("CenterCol(200) = %d, want 0", got)
+	}
+	// Zero geometry normalizes to 24x80 before centering.
+	if got := (Geometry{}).CenterCol(19); got != 30 {
+		t.Errorf("zero-geom CenterCol(19) = %d, want 30", got)
+	}
+}
