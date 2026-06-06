@@ -97,6 +97,9 @@ func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
 	if got.Release != "v9.9.9" {
 		t.Errorf("Session.Release = %q, want v9.9.9", got.Release)
 	}
+	if got.RemoteHost != "10.0.0.9" {
+		t.Errorf("RemoteHost = %q, want 10.0.0.9", got.RemoteHost)
+	}
 	untrusted := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.9.9.9"), Port: 1}, connLog)
 	if untrusted.Trusted {
 		t.Error("client outside trusted CIDRs must not be Trusted")

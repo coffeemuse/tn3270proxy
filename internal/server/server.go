@@ -129,8 +129,8 @@ func wrapIdle(conn net.Conn, preAuthIdle time.Duration) net.Conn {
 
 // hostOnly returns the IP/host portion of addr without the port — the bare
 // <HOST> a fail2ban filter binds to on auth-failure log lines (see
-// logAuthFailure). Falls back to the full address string when addr is nil or
-// has no host:port shape.
+// logAuthFailure). Returns "" for a nil addr. Falls back to the full address
+// string when addr has no host:port shape.
 func hostOnly(addr net.Addr) string {
 	if addr == nil {
 		return ""
