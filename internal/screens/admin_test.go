@@ -57,14 +57,41 @@ func TestAdminMenuScreenFields(t *testing.T) {
 
 func TestAdminMenuScreen_HasAuditEntry(t *testing.T) {
 	screen, _ := AdminMenuScreen(DefaultGeometry, "")
-	var found bool
-	for _, f := range screen {
-		if f.Content == "6.  Audit Log" {
-			found = true
+	if !screenContains(screen, "Audit") {
+		t.Errorf("AdminMenuScreen missing Audit entry keyword")
+	}
+	if !screenContains(screen, "Browse the audit trail") {
+		t.Errorf("AdminMenuScreen missing Audit description")
+	}
+}
+
+func TestAdminMenuTriColor(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	screen, cur := AdminMenuScreen(g, "")
+
+	key, ok := fieldByContent(screen, "  1")
+	if !ok || key.Color != go3270.White || !key.Intense {
+		t.Errorf("option key = %+v ok=%v, want white intense", key, ok)
+	}
+	name, ok := fieldByContent(screen, "Users")
+	if !ok || name.Col != 4 || name.Color != go3270.Turquoise {
+		t.Errorf("option name = %+v ok=%v, want col 4 turquoise", name, ok)
+	}
+	desc, ok := fieldByContent(screen, "User accounts and group membership")
+	if !ok || desc.Col != 13 || desc.Color != go3270.Green {
+		t.Errorf("option desc = %+v ok=%v, want col 13 green", desc, ok)
+	}
+	for _, kw := range []string{"Sysparms", "Networks", "Audit"} {
+		if _, ok := fieldByContent(screen, kw); !ok {
+			t.Errorf("missing ISPF keyword %q", kw)
 		}
 	}
-	if !found {
-		t.Errorf("AdminMenuScreen missing '6.  Audit Log' entry")
+	opt, _ := fieldByName(screen, FieldOption)
+	if opt.Row != 1 {
+		t.Errorf("option input row = %d, want 1", opt.Row)
+	}
+	if cur.Row != 1 || cur.Col != 15 {
+		t.Errorf("cursor = %+v, want (1,15)", cur)
 	}
 }
 
