@@ -33,7 +33,6 @@ func normRows(rows int) int {
 // Bottom-anchored layout rows (CLAUDE.md convention; reproduce the historical
 // 24-row layout). 0-based; 24 rows = 0..23.
 func helpRow(rows int) int   { return normRows(rows) - 1 } // 23 on MOD 2
-func errorRow(rows int) int  { return normRows(rows) - 3 } // 21
 func legendRow(rows int) int { return normRows(rows) - 4 } // 20
 
 // Top-band layout rows (ISPF style guide §2): title at row 0, an optional command
