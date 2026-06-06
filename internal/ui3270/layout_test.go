@@ -90,6 +90,22 @@ func TestFormLabelMax(t *testing.T) {
 	}
 }
 
+func TestBandHelpers(t *testing.T) {
+	if messageRow() != 2 {
+		t.Errorf("messageRow() = %d, want 2", messageRow())
+	}
+	if bodyTopRow() != 3 {
+		t.Errorf("bodyTopRow() = %d, want 3", bodyTopRow())
+	}
+	// "RECENT ACTIVITY" is 15 runes → (80-15)/2 = 32.
+	if got := centerCol(15); got != 32 {
+		t.Errorf("centerCol(15) = %d, want 32", got)
+	}
+	if got := centerCol(200); got != 0 {
+		t.Errorf("centerCol(200) = %d, want 0", got)
+	}
+}
+
 func TestTruncRunes(t *testing.T) {
 	if got := truncRunes("abcdef", 3); got != "abc" {
 		t.Errorf("truncRunes(\"abcdef\",3) = %q, want \"abc\"", got)
