@@ -113,10 +113,7 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 	// margin (col 79); this guarantees the full "ITEMS x TO y OF z" never clips
 	// (a Field's Col is the attribute byte, so content starts at Col+1). Kept
 	// within the 80-column logical width per the rows-only adaptation model.
-	indicatorCol := 79 - len(indicator)
-	if indicatorCol < 0 {
-		indicatorCol = 0
-	}
+	indicatorCol := max(79-len(indicator), 0)
 
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len("TN3270 GATEWAY MENU")), Color: go3270.White, Intense: true, Content: "TN3270 GATEWAY MENU"},
