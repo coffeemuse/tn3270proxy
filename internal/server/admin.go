@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -62,6 +63,7 @@ type AdminStore interface {
 
 	GetConfig(ctx context.Context, key string) (string, error)
 	SetConfig(ctx context.Context, key, value string) error
+	ListAudit(ctx context.Context, f store.AuditFilter) ([]store.AuditEvent, error)
 
 	ListTrustedNetworks(ctx context.Context) ([]store.TrustedNetwork, error)
 	CreateTrustedNetwork(ctx context.Context, cidr, comment string) (int64, error)
@@ -87,6 +89,10 @@ type adminFlow struct {
 	// audit records admin CRUD events; nil (direct tests) disables auditing.
 	audit  func(ctx context.Context, ev store.AuditEvent)
 	logger *slog.Logger // nil → slog.Default()
+	// resolver does reverse-DNS for the audit detail screen; nil → net.DefaultResolver.
+	resolver Resolver
+	// now returns the current time (72h window + as-of stamp); nil → time.Now.
+	now func() time.Time
 }
 
 // Run loops on the admin menu until the user leaves via PF3 (back to the
