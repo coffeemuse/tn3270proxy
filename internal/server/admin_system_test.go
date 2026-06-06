@@ -111,7 +111,7 @@ func TestAdminSystemParamsSaveHappyPath(t *testing.T) {
 		forms: []ui3270.FormAction{
 			// The real form submits every pre-populated field; MFA_ISSUER keeps its
 			// default so only MOTD_FILE changes.
-			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt", "MFA_ISSUER": "TN3270PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: save, stay
+			{Values: map[string]string{"MOTD_FILE": "/etc/motd.txt", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: save, stay
 			{Cancel: true}, // PF3: leave to admin menu
 		},
 	}
@@ -155,7 +155,7 @@ func TestAdminSystemParamsNoAuditWhenUnchanged(t *testing.T) {
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
 			// MOTD_FILE default is "" — submit the same value; MFA_ISSUER keeps its default.
-			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: no change, stay
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: no change, stay
 			{Cancel: true}, // PF3: leave
 		},
 	}
@@ -178,7 +178,7 @@ func TestAdminSystemParamsEmptyValueIsValid(t *testing.T) {
 		menu: []adminMenuStep{{choice: 4}, {back: true}},
 		forms: []ui3270.FormAction{
 			// MFA_ISSUER keeps its default so only MOTD_FILE is cleared.
-			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: clear (disable), stay
+			{Values: map[string]string{"MOTD_FILE": "", "MFA_ISSUER": "TN3270PROXY", "SYSTEM_ID": "PROXY", "AUTH_DELAY_BASE_SECS": "2", "AUTH_MAX_TRIES": "5", "AUTH_FAIL_WINDOW_MINS": "15"}}, // Enter: clear (disable), stay
 			{Cancel: true}, // PF3: leave
 		},
 	}
