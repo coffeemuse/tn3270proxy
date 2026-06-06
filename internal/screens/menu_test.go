@@ -97,14 +97,15 @@ func TestMenuScreenAdminEntry(t *testing.T) {
 }
 
 func TestMenuScreenAdminEntryClampedWithManyServices(t *testing.T) {
+	g := DefaultGeometry
 	svcs := make([]store.Service, 16)
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
 	}
-	screen, _, _ := MenuScreen(DefaultGeometry, svcs, true, MenuStatus{}, "")
+	screen, _, _ := MenuScreen(g, svcs, true, MenuStatus{}, "")
 	for _, f := range screen {
-		if strings.Contains(f.Content, "Administration") && f.Row > 17 {
-			t.Errorf("admin entry at row %d would collide with the input line", f.Row)
+		if strings.Contains(f.Content, "Administration") && f.Row > g.BodyBottomRow() {
+			t.Errorf("admin entry at row %d beyond body bottom %d", f.Row, g.BodyBottomRow())
 		}
 	}
 }
@@ -116,16 +117,43 @@ func TestMenuScreenHelpSaysLogoff(t *testing.T) {
 	}
 }
 
-func TestMenuScreenBottomAnchored(t *testing.T) {
+func TestMenuScreenTopBand(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	screen, _, cur := MenuScreen(g, nil, false, MenuStatus{}, "oops")
+
+	sel, ok := fieldByName(screen, FieldSelection)
+	if !ok {
+		t.Fatal("missing selection field")
+	}
+	if sel.Row != g.CommandRow() || sel.Col != 14 {
+		t.Errorf("selection = row %d col %d, want row %d col 14", sel.Row, sel.Col, g.CommandRow())
+	}
+	if cur.Row != 1 || cur.Col != 15 {
+		t.Errorf("cursor = %+v, want (1,15)", cur)
+	}
+	msg, _ := fieldByName(screen, FieldError)
+	if msg.Row != g.MessageRow() {
+		t.Errorf("message row = %d, want %d", msg.Row, g.MessageRow())
+	}
+	instr, ok := fieldByContent(screen, "Select a service and press ENTER:")
+	if !ok {
+		t.Fatal("missing instruction line")
+	}
+	if instr.Row != g.BodyTopRow() || instr.Color != go3270.Turquoise {
+		t.Errorf("instruction = row %d color %v, want row %d turquoise", instr.Row, instr.Color, g.BodyTopRow())
+	}
+}
+
+func TestMenuScreenBandsAcrossGeometries(t *testing.T) {
 	for _, g := range []Geometry{{Rows: 24, Cols: 80}, {Rows: 32, Cols: 80}, {Rows: 43, Cols: 80}} {
 		screen, _, _ := MenuScreen(g, nil, false, MenuStatus{}, "err")
 		sel, ok := fieldByName(screen, FieldSelection)
-		if !ok || sel.Row != g.InputRow() {
-			t.Errorf("%+v: selection row = %d, want %d", g, sel.Row, g.InputRow())
+		if !ok || sel.Row != g.CommandRow() {
+			t.Errorf("%+v: selection row = %d, want CommandRow %d", g, sel.Row, g.CommandRow())
 		}
 		e, _ := fieldByName(screen, FieldError)
-		if e.Row != g.ErrorRow() {
-			t.Errorf("%+v: error row = %d, want %d", g, e.Row, g.ErrorRow())
+		if e.Row != g.MessageRow() {
+			t.Errorf("%+v: error row = %d, want MessageRow %d", g, e.Row, g.MessageRow())
 		}
 	}
 }
@@ -143,8 +171,8 @@ func TestMenuScreenCapacityGrowsAndTruncates(t *testing.T) {
 		t.Errorf("MOD 2 mapping = %d entries, want %d", len(mapping), g2.MenuCapacity(false))
 	}
 	for _, f := range screen {
-		if f.Row > g2.InputRow() && f.Row != g2.ErrorRow() && f.Row != g2.HelpRow() {
-			t.Errorf("MOD 2: unexpected field on row %d: %+v", f.Row, f)
+		if f.Row > g2.HelpRow() {
+			t.Errorf("MOD 2: field beyond help row %d: %+v", g2.HelpRow(), f)
 		}
 	}
 
@@ -194,7 +222,7 @@ func TestMenuScreenCursor(t *testing.T) {
 }
 
 func TestMenuScreenAdminEntryNeverCollidesWhenFull(t *testing.T) {
-	svcs := make([]store.Service, 32)
+	svcs := make([]store.Service, 50)
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
 	}
@@ -213,8 +241,8 @@ func TestMenuScreenAdminEntryNeverCollidesWhenFull(t *testing.T) {
 				occupied[f.Row]++
 			}
 		}
-		if adminRow < 0 || adminRow > g.InputRow()-2 {
-			t.Errorf("%+v: admin entry row = %d, want ≤ %d", g, adminRow, g.InputRow()-2)
+		if adminRow < 0 || adminRow > g.BodyBottomRow() {
+			t.Errorf("%+v: admin entry row = %d, want ≤ %d", g, adminRow, g.BodyBottomRow())
 		}
 		// New grid: admin row has 2 fields ("  A" number + "Administration" label).
 		// More than 2 means a service row is colliding with the admin row.
