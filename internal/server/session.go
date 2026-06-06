@@ -699,7 +699,109 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 	}
 }
 
+type usAction int
+
+const (
+	usChangePassword usAction = iota
+	usEnroll
+	usReenroll
+	usDisable
+)
+
+func usActionLabel(a usAction) string {
+	switch a {
+	case usChangePassword:
+		return "Change Password"
+	case usEnroll:
+		return "Enroll in MFA"
+	case usReenroll:
+		return "Re-enroll MFA"
+	case usDisable:
+		return "Disable MFA"
+	}
+	return ""
+}
+
+// userSettingsActions returns the ordered self-service actions for a user's
+// current MFA state. mfaConfigured is s.MFA != nil.
+func userSettingsActions(mfaConfigured, required, enrolled bool) []usAction {
+	actions := []usAction{usChangePassword}
+	if !mfaConfigured {
+		return actions
+	}
+	if !enrolled {
+		return append(actions, usEnroll)
+	}
+	actions = append(actions, usReenroll)
+	if !required {
+		actions = append(actions, usDisable) // can self-disable only voluntary MFA
+	}
+	return actions
+}
+
+// renderer builds the ui3270.Renderer for self-service forms, matching the
+// admin dispatch (AdminRenderer is the generic factory; nil → go3270).
+func (s *Session) renderer(conn net.Conn, term Term) ui3270.Renderer {
+	if s.AdminRenderer != nil {
+		return s.AdminRenderer(conn, term)
+	}
+	return ui3270.NewGo3270Renderer(conn, term.dev, term.codepage(), term.Rows)
+}
+
+// userSettings drives the self-service settings menu until the user leaves via
+// PF3. It reloads the user each loop so the adaptive rows reflect just-applied
+// changes (e.g. a fresh enrollment unlocks Re-enroll/Disable).
 func (s *Session) userSettings(ctx context.Context, conn net.Conn, term Term, identity auth.Identity, aud *auditTrail) error {
+	r := s.renderer(conn, term)
+	for {
+		u, err := s.Store.GetUserByUsername(ctx, identity.Username)
+		if err != nil {
+			return err
+		}
+		actions := userSettingsActions(s.MFA != nil, u.MFARequired, u.MFASecret != "")
+		rows := make([]screens.UserSettingsRow, len(actions))
+		for i, a := range actions {
+			rows[i] = screens.UserSettingsRow{Key: strconv.Itoa(i + 1), Label: usActionLabel(a)}
+		}
+		choice, back, err := s.Presenter.UserSettings(conn, term, identity.Username, rows, "")
+		if err != nil {
+			return err
+		}
+		if back {
+			return nil
+		}
+		idx, cerr := strconv.Atoi(choice)
+		if cerr != nil || idx < 1 || idx > len(actions) {
+			continue // presenter already re-prompts invalid keys; defensive
+		}
+		switch actions[idx-1] {
+		case usChangePassword:
+			if err := s.changePassword(ctx, r, identity, aud); err != nil {
+				return err
+			}
+		case usEnroll, usReenroll:
+			if err := s.selfMFAEnroll(ctx, conn, term, r, u, aud); err != nil {
+				return err
+			}
+		case usDisable:
+			if err := s.selfMFADisable(ctx, r, u, aud); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// --- temporary stubs, replaced by later tasks (Tasks 9-10) ---
+
+func (s *Session) changePassword(ctx context.Context, r ui3270.Renderer, identity auth.Identity, aud *auditTrail) error {
+	return nil
+}
+
+func (s *Session) selfMFAEnroll(ctx context.Context, conn net.Conn, term Term, r ui3270.Renderer, u store.User, aud *auditTrail) error {
+	return nil
+}
+
+func (s *Session) selfMFADisable(ctx context.Context, r ui3270.Renderer, u store.User, aud *auditTrail) error {
 	return nil
 }
 
