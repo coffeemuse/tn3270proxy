@@ -263,3 +263,41 @@ func TestMFAFailLineReasonBadMFA(t *testing.T) {
 		t.Errorf("MFA secret leaked into log output:\n%s", buf.String())
 	}
 }
+
+// TestMFAEnrollFailLineReasonBadMFA asserts a wrong confirm code during MFA
+// enrollment emits the stable auth-failure line with reason=bad_mfa (the
+// enroll-confirm site, parallel to the verify site).
+func TestMFAEnrollFailLineReasonBadMFA(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	var buf bytes.Buffer
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		enrolls:   []mfaResult{{code: "000000"}, {quit: true}}, // wrong confirm, then PF3
+		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{},
+	}
+	s, st := newMFATestSession(t, p, &fakeBridger{})
+	s.Logger = bufLogger(&buf)
+	s.RemoteHost = "198.51.100.20"
+	s.MFAGenerate = func(_, _ string) (string, error) { return secret, nil }
+
+	ctx := context.Background()
+	uid, _ := st.CreateUser(ctx, "alice", "x")
+	st.SetMFARequired(ctx, uid, true)
+	// No StoreMFAEnrollment: user is mfa_required but unenrolled → enroll path.
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	rec := findLogRecord(t, &buf, "auth failed")
+	if rec["reason"] != "bad_mfa" {
+		t.Errorf("reason = %v, want bad_mfa", rec["reason"])
+	}
+	if rec["src"] != "198.51.100.20" {
+		t.Errorf("src = %v, want 198.51.100.20", rec["src"])
+	}
+	if rec["user"] != "alice" {
+		t.Errorf("user = %v, want alice", rec["user"])
+	}
+}
