@@ -91,6 +91,9 @@ func buildFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 	for i, f := range fields {
 		row := 3 + 2*i
 		label := truncRunes(f.Label, labelMax)
+		if v.DotLeader {
+			label = dotLeaderLabel(f.Label, labelMax)
+		}
 		if f.ReadOnly {
 			// Display-only: label + static value, no writable input, never the
 			// cursor target.

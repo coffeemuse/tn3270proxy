@@ -203,3 +203,56 @@ func TestBuildFormScreenTruncatesPathologicalLabel(t *testing.T) {
 		t.Errorf("truncated label reaches col %d, overlaps input attr at %d", last, in.Col)
 	}
 }
+
+func TestBuildFormScreenDotLeader(t *testing.T) {
+	// With DotLeader on, labels are dot-leader padded to the label-field width so
+	// colons align; the dynamic input column is unchanged (still driven by the
+	// longest RAW label, 23 → col 27).
+	fields := []FormField{
+		{Name: "A", Label: "MOTD File:", Length: 8},
+		{Name: "B", Label: "Auth Fail Window (min):", Length: 8},
+	}
+	screen, _ := buildFormScreen(24, FormView{DotLeader: true, Fields: fields})
+	want := map[int]string{
+		3: "MOTD File . . . . . . :",
+		5: "Auth Fail Window (min):",
+	}
+	seen := 0
+	for _, f := range screen {
+		if w, ok := want[f.Row]; ok && f.Col == 2 {
+			seen++
+			if f.Content != w {
+				t.Errorf("row %d label = %q, want %q", f.Row, f.Content, w)
+			}
+		}
+	}
+	if seen != len(want) {
+		t.Errorf("found %d of %d expected label rows", seen, len(want))
+	}
+	in, ok := fieldByName(screen, "A")
+	if !ok {
+		t.Fatal("input field A not found")
+	}
+	if in.Col != 27 {
+		t.Errorf("input col = %d, want 27 (unchanged by dot-leader)", in.Col)
+	}
+}
+
+func TestBuildFormScreenDotLeaderOffUnchanged(t *testing.T) {
+	// Default (DotLeader off): label rendered raw (no dot fill).
+	screen, _ := buildFormScreen(24, FormView{Fields: []FormField{
+		{Name: "A", Label: "MOTD File:", Length: 8},
+	}})
+	found := false
+	for _, f := range screen {
+		if f.Row == 3 && f.Col == 2 {
+			found = true
+			if f.Content != "MOTD File:" {
+				t.Errorf("row 3 label = %q, want raw %q", f.Content, "MOTD File:")
+			}
+		}
+	}
+	if !found {
+		t.Error("label field at row 3 col 2 not found in screen")
+	}
+}
