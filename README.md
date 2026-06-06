@@ -103,11 +103,12 @@ Text (stderr sink):
 
     level=WARN msg="auth failed" remote=203.0.113.7:51324 user=alice src=203.0.113.7 trusted=false reason=invalid_credentials
 
-`src` is the bare client IP (the fail2ban `<HOST>`), `trusted` reflects your
-trusted-network config (`limits.trusted_cidrs` plus the admin trusted-network
-list), and `reason` is coarse (`invalid_credentials` or `bad_mfa`) — the
-on-screen message stays uniform, so the reason never reveals whether a username
-exists. The field set is a **stable contract**: filters depend on it.
+`src` is the bare client IP (the fail2ban `<HOST>`), `trusted` reflects the
+admin trusted-network list (managed in the admin UI under Trusted Networks,
+stored in the database), and `reason` is coarse (`invalid_credentials` or
+`bad_mfa`) — the on-screen message stays uniform, so the reason never reveals
+whether a username exists. The field set is a **stable contract**: filters
+depend on it.
 
 > Auth throttling is per-username backoff, not a hard lockout, so repeated
 > failures keep emitting these lines; let your scanner's own retry counter
