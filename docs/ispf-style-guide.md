@@ -244,6 +244,11 @@ Conscious departures from textbook ISPF, with rationale:
 6. **No action bar.** Later ISPF versions show a pull-down action bar on row 0
    (`Menu  Utilities  …`). We omit it: it post-dates the classic look we target and
    is overkill for a single-purpose gateway. The title owns row 0.
+7. **List panels have no command line yet.** The guide calls for `Command ===>` on
+   list panels, but the `RunList` driver has no primary-command processing — adding
+   a functional command line is deferred to a follow-up. Lists use line commands
+   (S/D) + PF keys; row 1 stays blank. (The `Option`/`Command` split still governs
+   the label once it lands.)
 
 ---
 

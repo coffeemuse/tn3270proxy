@@ -222,12 +222,17 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   consume it instead of hardcoding coordinates — so moving a field moves its cursor
   automatically (an empty admin list homes to `{0,0}`). The smoke script asserts cursor
   row/col per screen as the regression guard.
-- **Screen layout convention** (all screens are 0-based, 24 rows = 0..23): title on **row 0**,
-  the **error line just above** the action/help line, and the **PF-key help on the last row
-  (`geom.HelpRow()`; 23 on a MOD 2)**. Cursor lands on the primary input field per the rule
-  above. New screens must take a `screens.Geometry` instead of hard-coding row numbers —
-  MOD 3/4/5 clients get taller layouts, content stays within columns 0–79. Unit tests assert
-  field *names/content*, not row numbers — verify positioning in a real emulator.
+- **Screen layout convention** (all screens are 0-based, 24 rows = 0..23): the **three-band
+  ISPF layout** (GH #65) — a top band with the **centered title on row 0**, an optional
+  **command line (`Option`/`Command ===>`) on row 1**, and the **red message line on row 2**;
+  the **body from row 3**; and the **PF-key help on the last row** (`geom.HelpRow()`; 23 on a
+  MOD 2). Cursor lands on the primary input field. New screens take a `screens.Geometry` (or
+  the `internal/ui3270` row helpers) instead of hard-coding row numbers — MOD 3/4/5 clients get
+  taller layouts, content stays within columns 0–79. Unit tests assert field *names/content/
+  color*, not row numbers — verify positioning in a real emulator. **The full CUA palette,
+  three-band layout, PF-key map, and conscious deviations are specified in
+  `docs/ispf-style-guide.md` — all ISPF-layer screens follow it.** (MOTD/NEWS is the one
+  documented exception — chrome-less pre-ISPF TSO/READY layer.)
 - **`go3270.NegotiateTelnet`** ends with a ~10ms read-drain loop that can discard early or
   fragmented client bytes (it runs before app data is expected). `HandleScreen` itself is
   safe (byte-by-byte, stops at IAC EOR). Watch for lost first keystrokes in emulator testing.
