@@ -48,6 +48,12 @@ func (f *fakeRenderer) Form(v FormView) (FormAction, error) {
 	return a, nil
 }
 
+func (f *fakeRenderer) Snapshot(SnapshotView) (ListAction, error) {
+	return ListAction{PF: 3}, nil
+}
+
+func (f *fakeRenderer) Detail(DetailView) error { return nil }
+
 func TestRunFormCancel(t *testing.T) {
 	r := &fakeRenderer{forms: []FormAction{{Cancel: true}}}
 	submitted := false

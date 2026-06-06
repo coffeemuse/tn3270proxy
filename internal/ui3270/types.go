@@ -68,6 +68,8 @@ type FormAction struct {
 type Renderer interface {
 	List(ListView) (ListAction, error)
 	Form(FormView) (FormAction, error)
+	Snapshot(SnapshotView) (ListAction, error) // paged read-only list
+	Detail(DetailView) error                   // read-only screen; returns on PF3
 }
 
 // Row pairs a pre-formatted display string with its domain payload. The driver
