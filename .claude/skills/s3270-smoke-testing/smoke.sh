@@ -361,7 +361,9 @@ Ascii()
 Quit()
 EOF
 check "11a system parameters form renders" "SYSTEM PARAMETERS" "$WORK/t11.out"
-check "11b MOTD File label present" "MOTD File:" "$WORK/t11.out"
+# Labels render with right-aligned-colon dot leaders (GH #71), so the MOTD label
+# reads "MOTD File . . . . . . :" rather than a bare "MOTD File:".
+check "11b MOTD File label present" "MOTD File ." "$WORK/t11.out"
 # Form first input at row 3 col 28 (field.Col+1). The System Parameters form's
 # input column is dynamic (GH #71): it sits past the longest label
 # ("Auth Fail Window (min):", 23 chars) at attribute col 27, so the cursor lands
