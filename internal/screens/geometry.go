@@ -57,12 +57,17 @@ func (g Geometry) ListPageSize() int { return g.norm().Rows - 10 }
 // 9 on MOD 2).
 func (g Geometry) FormMaxFields() int { return (g.norm().Rows-8)/2 + 1 }
 
-// MenuCapacity is how many service lines fit on the menu: body rows
-// BodyTopRow+1 .. BodyBottomRow (row BodyTopRow is the instruction line), minus
+// menuBottomRow is the menu's effective bottom content row: one above
+// BodyBottomRow, leaving a blank separator line above the PF-key legend
+// (menu-only; other screens use BodyBottomRow directly).
+func (g Geometry) menuBottomRow() int { return g.BodyBottomRow() - 1 }
+
+// MenuCapacity is how many service lines fit on one menu page: body rows
+// BodyTopRow+1 .. menuBottomRow (row BodyTopRow is the instruction line), minus
 // one for the always-present "0 User Settings" row and one more for the admin
-// "A" row.
+// "A" row. The blank separator above the PF legend is excluded via menuBottomRow.
 func (g Geometry) MenuCapacity(admin bool) int {
-	n := g.BodyBottomRow() - (g.BodyTopRow() + 1) + 1 - 1 // body rows minus the "0" meta row
+	n := g.menuBottomRow() - (g.BodyTopRow() + 1) + 1 - 1 // body rows minus the "0" meta row
 	if admin {
 		n--
 	}
