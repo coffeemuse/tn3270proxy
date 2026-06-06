@@ -25,11 +25,19 @@ networks) deliberately pads its labels to a 12-char dot-leader
 gutter. The System Parameters form is the only one that feeds *raw* catalog
 labels straight through, and three of them exceed 13 chars:
 
-| Catalog label | Length |
-|---|---|
-| `Auth Delay Base (sec):` | 22 |
-| `Auth Fail Window (min):` | 23 |
-| `Max Auth Tries:` | 15 |
+| Catalog label | Length | Overlaps? |
+|---|---|---|
+| `MOTD File:` | 10 | no |
+| `MFA Issuer:` | 11 | no |
+| `System ID:` | 10 | no |
+| `Max Auth Tries:` | 15 | **yes** |
+| `Auth Delay Base (sec):` | 22 | **yes** |
+| `Auth Fail Window (min):` | 23 | **yes** |
+
+(Reflects `main` as of the merge: GH #64 added the `SYSTEM_ID` entry and a
+per-entry `Entry.Length`. `Length` sets the input field's *data width* only —
+it does not move the label or input column — so the renderer overlap is
+unchanged, and `internal/ui3270/screen.go` was untouched by that work.)
 
 A label longer than 13 chars is written into the buffer starting at col 3 and
 runs *past* the input field's attribute byte at col 16. Worked example
