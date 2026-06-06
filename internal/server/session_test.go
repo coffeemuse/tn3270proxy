@@ -53,11 +53,13 @@ type fakePresenter struct {
 	gotStatus    []screens.MenuStatus // every status passed to Menu, in call order
 	newsCalls    [][][]string         // pages passed to each News call, in order
 	newsResults  []error              // queued News return values; default nil
-	enrolls      []mfaResult
-	verifies     []mfaResult
-	enrollErrors []string // errMsg passed to each EnrollMFA call
-	verifyErrors []string // errMsg passed to each VerifyMFA call
-	gotChunked   []string // chunkedSecret passed to each EnrollMFA call
+	enrolls           []mfaResult
+	verifies          []mfaResult
+	enrollErrors      []string // errMsg passed to each EnrollMFA call
+	verifyErrors      []string // errMsg passed to each VerifyMFA call
+	gotChunked        []string // chunkedSecret passed to each EnrollMFA call
+	userSettingsCalls int
+	userSettingsPicks []userSettingsResult
 }
 
 type loginResult struct {
@@ -71,10 +73,15 @@ type mfaResult struct {
 	err  error
 }
 type menuResult struct {
-	sel   *store.Service
-	admin bool
-	quit  bool
-	err   error
+	sel    *store.Service
+	choice menuChoice
+	quit   bool // convenience: when true, choice is forced to menuQuit
+	err    error
+}
+type userSettingsResult struct {
+	choice string
+	back   bool
+	err    error
 }
 
 func (f *fakePresenter) Negotiate(conn net.Conn) (Term, error) {
@@ -96,14 +103,28 @@ func (f *fakePresenter) Login(conn net.Conn, term Term, errMsg string) (string, 
 	return r.user, r.pass, r.quit, r.err
 }
 
-func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, status screens.MenuStatus, errMsg string) (*store.Service, bool, bool, error) {
+func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, status screens.MenuStatus, errMsg string) (*store.Service, menuChoice, error) {
 	f.gotTerms = append(f.gotTerms, term)
 	f.menuErrors = append(f.menuErrors, errMsg)
 	f.gotAdminFlag = append(f.gotAdminFlag, admin)
 	f.gotStatus = append(f.gotStatus, status)
 	r := f.menuPicks[0]
 	f.menuPicks = f.menuPicks[1:]
-	return r.sel, r.admin, r.quit, r.err
+	ch := r.choice
+	if r.quit {
+		ch = menuQuit
+	}
+	return r.sel, ch, r.err
+}
+
+func (f *fakePresenter) UserSettings(conn net.Conn, term Term, username string, rows []screens.UserSettingsRow, errMsg string) (string, bool, error) {
+	f.userSettingsCalls++
+	if len(f.userSettingsPicks) > 0 {
+		r := f.userSettingsPicks[0]
+		f.userSettingsPicks = f.userSettingsPicks[1:]
+		return r.choice, r.back, r.err
+	}
+	return "", true, nil // default: PF3 back to the service menu
 }
 
 func (f *fakePresenter) News(conn net.Conn, term Term, pages [][]string) error {
@@ -225,7 +246,7 @@ func TestSessionEscapeReturnsToMenu(t *testing.T) {
 			{quit: true}, // second login render after menu logoff
 		},
 		menuPicks: []menuResult{
-			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}, choice: menuService},
 			{quit: true},
 		},
 	}
@@ -252,7 +273,7 @@ func TestSessionBackendErrorShownOnMenu(t *testing.T) {
 			{quit: true}, // second login render after menu logoff
 		},
 		menuPicks: []menuResult{
-			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}, choice: menuService},
 			{quit: true},
 		},
 	}
@@ -279,7 +300,7 @@ func TestSessionPassesTLSIntentToBridger(t *testing.T) {
 			{quit: true}, // second login render after menu logoff
 		},
 		menuPicks: []menuResult{
-			{sel: &store.Service{Name: "SEC", Host: "10.0.0.9", Port: 992, TLS: true, TLSVerify: true}},
+			{sel: &store.Service{Name: "SEC", Host: "10.0.0.9", Port: 992, TLS: true, TLSVerify: true}, choice: menuService},
 			{quit: true},
 		},
 	}
@@ -303,7 +324,7 @@ func TestSessionClientClosedEndsSession(t *testing.T) {
 		termType: "IBM-3278-2-E",
 		logins:   []loginResult{{user: "alice", pass: "good"}},
 		menuPicks: []menuResult{
-			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}, choice: menuService},
 		},
 	}
 	b := &fakeBridger{causes: []bridge.Cause{bridge.CauseClientClosed}}
@@ -344,7 +365,7 @@ func TestSessionAdminSelectionRunsFlowAndReturnsToMenu(t *testing.T) {
 			{user: "root", pass: "good"}, // groups: ZZADMIN
 			{quit: true},                 // second login render after menu logoff
 		},
-		menuPicks: []menuResult{{admin: true}, {quit: true}},
+		menuPicks: []menuResult{{choice: menuAdmin}, {quit: true}},
 	}
 	ap := &fakeAdminPresenter{menu: []adminMenuStep{{back: true}}}
 	s := newTestSession(t, p, &fakeBridger{})
@@ -363,6 +384,57 @@ func TestSessionAdminSelectionRunsFlowAndReturnsToMenu(t *testing.T) {
 	}
 }
 
+func TestSessionUserSettingsReturnsToMenu(t *testing.T) {
+	// Non-admin user selects "0" (user settings), the flow runs and returns
+	// (back=true), then the user logs off. Verifies end-to-end dispatch wiring.
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"}, // groups: ops (non-admin)
+			{quit: true},                  // second login render after menu logoff
+		},
+		menuPicks: []menuResult{
+			{choice: menuUserSettings}, // select "0"
+			{quit: true},               // log off after returning to menu
+		},
+		// userSettingsPicks is empty: default back=true fires immediately
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	// userSettings calls GetUserByUsername, so the user must exist in the store.
+	if _, err := s.Store.CreateUser(context.Background(), "alice", "good"); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	// UserSettings must have been called exactly once.
+	if p.userSettingsCalls != 1 {
+		t.Errorf("userSettingsCalls = %d, want 1", p.userSettingsCalls)
+	}
+	// Both menu picks must have been consumed (returned to menu, then logged off).
+	if len(p.menuPicks) != 0 {
+		t.Errorf("expected return to menu after user settings; %d picks left", len(p.menuPicks))
+	}
+	// A logout event with "user logoff" must have been recorded.
+	var logoutEv *store.AuditEvent
+	for i := range rec.events {
+		if rec.events[i].Kind == store.AuditLogout {
+			logoutEv = &rec.events[i]
+			break
+		}
+	}
+	if logoutEv == nil {
+		t.Fatalf("no logout event recorded; kinds = %v", rec.kinds())
+	}
+	if logoutEv.Detail != "user logoff" {
+		t.Errorf("logout detail = %q, want %q", logoutEv.Detail, "user logoff")
+	}
+}
+
 func TestSessionNonAdminAdminSelIgnored(t *testing.T) {
 	// Even if a (buggy) presenter reports adminSel=true for a non-admin,
 	// the session's isAdmin double-guard must not run the admin flow.
@@ -372,7 +444,7 @@ func TestSessionNonAdminAdminSelIgnored(t *testing.T) {
 			{user: "alice", pass: "good"}, // ops, not ZZADMIN
 			{quit: true},                  // second login render after menu logoff
 		},
-		menuPicks: []menuResult{{admin: true}, {quit: true}},
+		menuPicks: []menuResult{{choice: menuAdmin}, {quit: true}},
 	}
 	ap := &fakeAdminPresenter{} // no scripted steps: any call would panic
 	s := newTestSession(t, p, &fakeBridger{})
@@ -515,7 +587,7 @@ func TestSessionAuditsDisconnectAfterClientClosed(t *testing.T) {
 	p := &fakePresenter{
 		termType:  "IBM-3278-2-E",
 		logins:    []loginResult{{user: "alice", pass: "good"}},
-		menuPicks: []menuResult{{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}}},
+		menuPicks: []menuResult{{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}, choice: menuService}},
 	}
 	b := &fakeBridger{causes: []bridge.Cause{bridge.CauseClientClosed}}
 	s := newTestSession(t, p, b)
@@ -583,7 +655,7 @@ func TestSessionAuditsBridgeLifecycle(t *testing.T) {
 		termType: "IBM-3278-2-E",
 		logins:   []loginResult{{user: "alice", pass: "good"}, {quit: true}},
 		menuPicks: []menuResult{
-			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}, choice: menuService},
 			{quit: true},
 		},
 	}
@@ -621,7 +693,7 @@ func TestSessionBridgeEndDetailOnDialError(t *testing.T) {
 			{quit: true}, // second login render after menu logoff
 		},
 		menuPicks: []menuResult{
-			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}, choice: menuService},
 			{quit: true},
 		},
 	}
@@ -789,7 +861,7 @@ func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
 	p := &fakePresenter{
 		termType:  "IBM-3278-2-E",
 		logins:    []loginResult{{user: "root", pass: "good"}, {quit: true}},
-		menuPicks: []menuResult{{admin: true}, {quit: true}},
+		menuPicks: []menuResult{{choice: menuAdmin}, {quit: true}},
 	}
 	ap := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 2}, {back: true}},

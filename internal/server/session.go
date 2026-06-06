@@ -50,7 +50,11 @@ import (
 type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
 	Login(conn net.Conn, term Term, errMsg string) (username, password string, quit bool, err error)
-	Menu(conn net.Conn, term Term, services []store.Service, admin bool, status screens.MenuStatus, errMsg string) (selected *store.Service, adminSel bool, quit bool, err error)
+	Menu(conn net.Conn, term Term, services []store.Service, admin bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
+	// UserSettings renders the self-service settings menu with the given
+	// adaptive rows and returns the typed option key (e.g. "1"); back=true on
+	// PF3 (return to the service menu). It loops internally on invalid input.
+	UserSettings(conn net.Conn, term Term, username string, rows []screens.UserSettingsRow, errMsg string) (choice string, back bool, err error)
 	// News shows the MOTD pages (already paginated) one at a time: ENTER
 	// advances, the last ENTER returns nil. PA3/PF3 are silent no-ops. A
 	// non-nil error is a disconnect or an idle timeout (classified by the
@@ -359,7 +363,7 @@ func (s *Session) Run(conn net.Conn) {
 				SystemID: s.systemID(ctx),
 				Release:  s.Release,
 			}
-			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, status, errMsg)
+			selected, choice, err := s.Presenter.Menu(conn, term, services, isAdmin, status, errMsg)
 			if err != nil {
 				if isTimeoutErr(err) {
 					aud.record(ctx, store.AuditEvent{
@@ -372,16 +376,19 @@ func (s *Session) Run(conn net.Conn) {
 				endDetail = "menu render error"
 				return
 			}
-			if quit {
+			errMsg = ""
+			switch choice {
+			case menuQuit:
 				aud.record(ctx, store.AuditEvent{
 					Kind: store.AuditLogout, Username: identity.Username, Detail: "user logoff"})
 				currentUser = ""
-				s.Logger = baseLog // revert to pre-user logger
-				s.armPreAuth(conn) // logoff: back to the pre-auth regime
-				break menu         // logoff: back to the login screen
-			}
-			errMsg = ""
-			if adminSel && isAdmin {
+				s.Logger = baseLog
+				s.armPreAuth(conn)
+				break menu
+			case menuAdmin:
+				if !isAdmin {
+					continue // guard: a buggy presenter can't open admin for a non-admin
+				}
 				renderer := func(conn net.Conn) ui3270.Renderer {
 					if s.AdminRenderer != nil {
 						return s.AdminRenderer(conn, term)
@@ -397,7 +404,7 @@ func (s *Session) Run(conn net.Conn) {
 						aud.record(ctx, store.AuditEvent{
 							Kind: store.AuditLogout, Username: identity.Username, Detail: "idle logout"})
 						currentUser = ""
-						s.Logger = baseLog // revert to pre-user logger
+						s.Logger = baseLog
 						s.armPreAuth(conn)
 						break menu
 					}
@@ -405,7 +412,26 @@ func (s *Session) Run(conn net.Conn) {
 					endDetail = "admin flow error"
 					return
 				}
-				continue // re-render the menu: fresh service list shows admin edits
+				continue
+			case menuUserSettings:
+				if uerr := s.userSettings(ctx, conn, term, identity, aud); uerr != nil {
+					if isTimeoutErr(uerr) {
+						aud.record(ctx, store.AuditEvent{
+							Kind: store.AuditLogout, Username: identity.Username, Detail: "idle logout"})
+						currentUser = ""
+						s.Logger = baseLog
+						s.armPreAuth(conn)
+						break menu
+					}
+					s.log().Error("user settings flow error", "error", uerr)
+					endDetail = "user settings flow error"
+					return
+				}
+				continue
+			case menuService:
+				// falls through to the bridge block below
+			default: // menuRequery / menuReprompt
+				continue
 			}
 			if selected == nil {
 				continue
@@ -498,37 +524,35 @@ func (s *Session) mfaGate(ctx context.Context, conn net.Conn, term Term, identit
 		s.log().Error("mfa: load user failed", "error", gerr)
 		return false, "mfa user load error", gerr
 	}
-	if !u.MFARequired {
-		return true, "", nil
+	if u.MFASecret != "" {
+		// Enrolled by ANY path (admin-required OR voluntary opt-in) → always
+		// verify. Enforcement is secret-first, not mfa_required-gated: a stored
+		// secret means the user opted into MFA and must be challenged.
+		return s.mfaVerify(ctx, conn, term, u, aud)
 	}
-	if u.MFASecret == "" {
+	if u.MFARequired {
+		// Required but not yet enrolled → force one-time enrollment.
 		return s.mfaEnroll(ctx, conn, term, u, aud)
 	}
-	return s.mfaVerify(ctx, conn, term, u, aud)
+	return true, "", nil // no secret, not required → no MFA
 }
 
-func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
-	issuer := s.mfaIssuer(ctx)
-	secret, gerr := s.generateSecret(issuer, u.Username)
-	if gerr != nil {
-		s.log().Error("mfa: generate secret failed", "error", gerr)
-		return false, "mfa generate error", gerr
-	}
+// confirmEnroll runs the enroll confirm-loop for an already-generated secret:
+// show the key, prompt for a code, and on a correct code seal+persist the
+// secret (lastStep=0), reset the throttle, and audit mfa_enrolled. It does NOT
+// arm any idle regime — the caller maps the outcome to its context. detail is
+// set only on a fatal error (for the caller's disconnect audit).
+func (s *Session) confirmEnroll(ctx context.Context, conn net.Conn, term Term, u store.User, secret string, aud *auditTrail) (confirmed bool, quit bool, detail string, err error) {
 	chunked := mfa.Chunk(secret)
+	issuer := s.mfaIssuer(ctx)
 	errMsg := ""
 	for {
 		code, quit, err := s.Presenter.EnrollMFA(conn, term, issuer, u.Username, chunked, errMsg)
 		if err != nil {
-			if isTimeoutErr(err) {
-				aud.record(ctx, store.AuditEvent{Kind: store.AuditLogout, Username: u.Username, Detail: "idle logout"})
-				s.armPreAuth(conn)
-				return false, "", nil
-			}
-			return false, "mfa render error", err
+			return false, false, "mfa render error", err
 		}
 		if quit {
-			s.armPreAuth(conn)
-			return false, "", nil
+			return false, true, "", nil
 		}
 		ok, step, verr := mfa.Validate(secret, code, 0, s.now())
 		if verr != nil {
@@ -547,16 +571,39 @@ func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u sto
 		}
 		enc, serr := s.MFA.Seal([]byte(secret))
 		if serr != nil {
-			return false, "mfa seal error", serr
+			return false, false, "mfa seal error", serr
 		}
 		enrolledAt := s.now().UTC().Format(time.RFC3339)
 		if err := s.Store.StoreMFAEnrollment(ctx, u.ID, enc, enrolledAt, int64(step)); err != nil {
-			return false, "mfa store error", err
+			return false, false, "mfa store error", err
 		}
 		s.Throttle.Reset(u.Username)
 		aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAEnrolled, Username: u.Username})
-		return true, "", nil
+		return true, false, "", nil
 	}
+}
+
+func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
+	issuer := s.mfaIssuer(ctx)
+	secret, gerr := s.generateSecret(issuer, u.Username)
+	if gerr != nil {
+		s.log().Error("mfa: generate secret failed", "error", gerr)
+		return false, "mfa generate error", gerr
+	}
+	_, quit, detail, err := s.confirmEnroll(ctx, conn, term, u, secret, aud)
+	if err != nil {
+		if isTimeoutErr(err) {
+			aud.record(ctx, store.AuditEvent{Kind: store.AuditLogout, Username: u.Username, Detail: "idle logout"})
+			s.armPreAuth(conn)
+			return false, "", nil
+		}
+		return false, detail, err
+	}
+	if quit {
+		s.armPreAuth(conn)
+		return false, "", nil
+	}
+	return true, "", nil
 }
 
 func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
@@ -650,6 +697,225 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		// Generic message — never reveals whether the username exists (spec §7).
 		errMsg = "Invalid userid or password"
 	}
+}
+
+type usAction int
+
+const (
+	usChangePassword usAction = iota
+	usEnroll
+	usReenroll
+	usDisable
+)
+
+func usActionLabel(a usAction) string {
+	switch a {
+	case usChangePassword:
+		return "Change Password"
+	case usEnroll:
+		return "Enroll in MFA"
+	case usReenroll:
+		return "Re-enroll MFA"
+	case usDisable:
+		return "Disable MFA"
+	}
+	return ""
+}
+
+// userSettingsActions returns the ordered self-service actions for a user's
+// current MFA state. mfaConfigured is s.MFA != nil.
+func userSettingsActions(mfaConfigured, required, enrolled bool) []usAction {
+	actions := []usAction{usChangePassword}
+	if !mfaConfigured {
+		return actions
+	}
+	if !enrolled {
+		return append(actions, usEnroll)
+	}
+	actions = append(actions, usReenroll)
+	if !required {
+		actions = append(actions, usDisable) // can self-disable only voluntary MFA
+	}
+	return actions
+}
+
+// renderer builds the ui3270.Renderer for self-service forms, matching the
+// admin dispatch (AdminRenderer is the generic factory; nil → go3270).
+func (s *Session) renderer(conn net.Conn, term Term) ui3270.Renderer {
+	if s.AdminRenderer != nil {
+		return s.AdminRenderer(conn, term)
+	}
+	return ui3270.NewGo3270Renderer(conn, term.dev, term.codepage(), term.Rows)
+}
+
+// userSettings drives the self-service settings menu until the user leaves via
+// PF3. It reloads the user each loop so the adaptive rows reflect just-applied
+// changes (e.g. a fresh enrollment unlocks Re-enroll/Disable).
+func (s *Session) userSettings(ctx context.Context, conn net.Conn, term Term, identity auth.Identity, aud *auditTrail) error {
+	r := s.renderer(conn, term)
+	for {
+		u, err := s.Store.GetUserByUsername(ctx, identity.Username)
+		if err != nil {
+			return err
+		}
+		actions := userSettingsActions(s.MFA != nil, u.MFARequired, u.MFASecret != "")
+		rows := make([]screens.UserSettingsRow, len(actions))
+		for i, a := range actions {
+			rows[i] = screens.UserSettingsRow{Key: strconv.Itoa(i + 1), Label: usActionLabel(a)}
+		}
+		choice, back, err := s.Presenter.UserSettings(conn, term, identity.Username, rows, "")
+		if err != nil {
+			return err
+		}
+		if back {
+			return nil
+		}
+		idx, cerr := strconv.Atoi(choice)
+		if cerr != nil || idx < 1 || idx > len(actions) {
+			continue // presenter already re-prompts invalid keys; defensive
+		}
+		switch actions[idx-1] {
+		case usChangePassword:
+			if err := s.changePassword(ctx, r, identity, aud); err != nil {
+				return err
+			}
+		case usEnroll, usReenroll:
+			if err := s.selfMFAEnroll(ctx, conn, term, r, u, aud); err != nil {
+				return err
+			}
+		case usDisable:
+			if err := s.selfMFADisable(ctx, r, u, aud); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// changePassword runs the self-service change-password form: re-verify the
+// current password (proof of possession), enforce new != current, then persist.
+func (s *Session) changePassword(ctx context.Context, r ui3270.Renderer, identity auth.Identity, aud *auditTrail) error {
+	fields := []ui3270.FormField{
+		{Name: screens.FieldCurrentPassword, Label: "Current pwd", Hidden: true, Length: 32},
+		{Name: screens.FieldPassword, Label: "New pwd . .", Hidden: true, Length: 32},
+		{Name: screens.FieldRetype, Label: "Retype  . .", Hidden: true, Length: 32},
+	}
+	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
+		Title:  "TN3270 GATEWAY: CHANGE PASSWORD",
+		Fields: fields,
+		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
+			current := vals[screens.FieldCurrentPassword]
+			if _, err := s.Authenticate(ctx, s.Store, identity.Username, current); err != nil {
+				if errors.Is(err, auth.ErrInvalidCredentials) {
+					delay, count := s.failDelay(ctx, identity.Username)
+					s.logAuthFailure(s.log(), "invalid_credentials")
+					aud.record(ctx, store.AuditEvent{
+						Kind: store.AuditAuthFail, Username: identity.Username, Detail: throttleDetail("", delay, count)})
+					s.sleepFor(delay)
+					return "Current password is incorrect", nil
+				}
+				s.log().Error("self change-password auth error", "error", err)
+				return "Temporary error; try again", nil
+			}
+			pass, _, msg := passwordFromForm(vals, true)
+			if msg != "" {
+				return msg, nil
+			}
+			if pass == current {
+				return "New password must differ from current", nil
+			}
+			hash, err := auth.HashPassword(pass)
+			if err != nil {
+				s.log().Error("hash password", "error", err)
+				return "Could not set password; try again", nil
+			}
+			if err := s.Store.SetPassword(ctx, identity.UserID, hash); err != nil {
+				s.log().Error("set password", "error", err)
+				return "Could not set password; try again", nil
+			}
+			s.Throttle.Reset(identity.Username)
+			aud.record(ctx, store.AuditEvent{Kind: store.AuditPasswordSelf, Username: identity.Username})
+			return "", nil // success → RunForm returns to the user-settings menu
+		},
+	})
+}
+
+// stepUpPassword re-prompts for the current password and verifies it. ok=true
+// means verified (proceed); ok=false with err=nil means the user cancelled
+// (PF3). Failures fold into the shared throttle. Used as the step-up before
+// MFA enroll/re-enroll/disable.
+func (s *Session) stepUpPassword(ctx context.Context, r ui3270.Renderer, username string, aud *auditTrail) (bool, error) {
+	ok := false
+	err := ui3270.RunForm(ctx, r, ui3270.FormConfig{
+		Title: "TN3270 GATEWAY: CONFIRM PASSWORD",
+		Fields: []ui3270.FormField{
+			{Name: screens.FieldCurrentPassword, Label: "Password . .", Hidden: true, Length: 32},
+		},
+		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
+			if _, e := s.Authenticate(ctx, s.Store, username, vals[screens.FieldCurrentPassword]); e != nil {
+				if errors.Is(e, auth.ErrInvalidCredentials) {
+					delay, count := s.failDelay(ctx, username)
+					s.logAuthFailure(s.log(), "invalid_credentials")
+					aud.record(ctx, store.AuditEvent{
+						Kind: store.AuditAuthFail, Username: username, Detail: throttleDetail("", delay, count)})
+					s.sleepFor(delay)
+					return "Password is incorrect", nil
+				}
+				s.log().Error("step-up auth error", "error", e)
+				return "Temporary error; try again", nil
+			}
+			s.Throttle.Reset(username)
+			ok = true
+			return "", nil // verified → form returns
+		},
+	})
+	return ok, err
+}
+
+// selfMFAEnroll handles both opt-in enroll and rotate/re-enroll: a current-
+// password step-up, then the shared enrollment confirm-loop (fresh secret,
+// lastStep=0, stored on a correct code). Cancelled step-up or enrollment
+// returns to the user-settings menu.
+func (s *Session) selfMFAEnroll(ctx context.Context, conn net.Conn, term Term, r ui3270.Renderer, u store.User, aud *auditTrail) error {
+	ok, err := s.stepUpPassword(ctx, r, u.Username, aud)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil // cancelled
+	}
+	secret, gerr := s.generateSecret(s.mfaIssuer(ctx), u.Username)
+	if gerr != nil {
+		s.log().Error("mfa: generate secret failed", "error", gerr)
+		return gerr
+	}
+	_, _, _, cerr := s.confirmEnroll(ctx, conn, term, u, secret, aud)
+	// confirmEnroll audits mfa_enrolled + resets throttle on success; on PF3
+	// quit it returns (false,true,"",nil) → back to the menu. A render/idle
+	// error propagates so the session classifies the timeout like admin flow.
+	return cerr
+}
+
+// selfMFADisable removes a voluntarily-enrolled secret after a current-password
+// step-up. Callers only surface this action when !MFARequired, but re-check
+// defensively so an admin-required user can never self-disable.
+func (s *Session) selfMFADisable(ctx context.Context, r ui3270.Renderer, u store.User, aud *auditTrail) error {
+	if u.MFARequired {
+		return nil // enforcement is admin-only; never self-disable a required user
+	}
+	ok, err := s.stepUpPassword(ctx, r, u.Username, aud)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil // cancelled
+	}
+	if err := s.Store.ClearMFA(ctx, u.ID); err != nil {
+		s.log().Error("clear mfa", "error", err)
+		return err
+	}
+	aud.record(ctx, store.AuditEvent{
+		Kind: store.AuditMFACleared, Username: u.Username, Detail: "self-service"})
+	return nil
 }
 
 // causeDetail renders a bridge outcome for the audit trail.

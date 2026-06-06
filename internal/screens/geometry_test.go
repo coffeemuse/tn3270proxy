@@ -23,8 +23,8 @@ import "testing"
 
 func TestGeometryFormulas(t *testing.T) {
 	cases := []struct {
-		name                                  string
-		g                                     Geometry
+		name                                    string
+		g                                       Geometry
 		help, errRow, legend, input, page, form int
 	}{
 		{"zero value", Geometry{}, 23, 21, 20, 19, 14, 9},
@@ -54,13 +54,13 @@ func TestGeometryMenuCapacity(t *testing.T) {
 		admin bool
 		want  int
 	}{
-		{Geometry{Rows: 24, Cols: 80}, false, 14}, // rows 4..17
-		{Geometry{Rows: 24, Cols: 80}, true, 13},  // one row reserved for the A entry
-		{Geometry{Rows: 32, Cols: 80}, false, 22},
-		{Geometry{Rows: 43, Cols: 80}, true, 32},
-		{Geometry{Rows: 27, Cols: 132}, false, 17},
-		{Geometry{Rows: 27, Cols: 132}, true, 16},
-		{Geometry{}, false, 14}, // zero value normalizes
+		{Geometry{Rows: 24, Cols: 80}, false, 13}, // rows 4..16 (one row reserved for "0 User Settings")
+		{Geometry{Rows: 24, Cols: 80}, true, 12},  // one more row reserved for the A entry
+		{Geometry{Rows: 32, Cols: 80}, false, 21},
+		{Geometry{Rows: 43, Cols: 80}, true, 31},
+		{Geometry{Rows: 27, Cols: 132}, false, 16},
+		{Geometry{Rows: 27, Cols: 132}, true, 15},
+		{Geometry{}, false, 13}, // zero value normalizes
 	}
 	for _, c := range cases {
 		if got := c.g.MenuCapacity(c.admin); got != c.want {

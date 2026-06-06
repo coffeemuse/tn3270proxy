@@ -27,20 +27,21 @@ import (
 
 // Audit event kinds. One session_id ties a connection's events together.
 const (
-	AuditConnect     = "connect"      // TCP session began
-	AuditAuthOK      = "auth_ok"      // login success
-	AuditAuthFail    = "auth_fail"    // login failure (attempted username, never the password)
-	AuditAuthError   = "auth_error"   // infrastructure error during authentication (detail = error text)
-	AuditBridgeStart = "bridge_start" // service selected, backend dial begins
-	AuditBridgeEnd   = "bridge_end"   // bridge returned (detail = cause)
-	AuditAdmin       = "admin"        // admin CRUD mutation (detail = change description)
-	AuditLogout      = "logout"       // session ended login (detail: "user logoff" | "idle logout")
-	AuditDisconnect  = "disconnect"   // connection ended (detail = how)
-	AuditMFAEnrolled = "mfa_enrolled" // user completed self-enrollment
-	AuditMFASuccess  = "mfa_success"  // correct code at login
-	AuditMFAFailed   = "mfa_failed"   // incorrect code (enroll confirm or login)
-	AuditMFACleared  = "mfa_cleared"  // admin wiped the secret
-	AuditMFAEnforced = "mfa_enforced" // admin turned mfa_required on
+	AuditConnect      = "connect"       // TCP session began
+	AuditAuthOK       = "auth_ok"       // login success
+	AuditAuthFail     = "auth_fail"     // login failure (attempted username, never the password)
+	AuditAuthError    = "auth_error"    // infrastructure error during authentication (detail = error text)
+	AuditBridgeStart  = "bridge_start"  // service selected, backend dial begins
+	AuditBridgeEnd    = "bridge_end"    // bridge returned (detail = cause)
+	AuditAdmin        = "admin"         // admin CRUD mutation (detail = change description)
+	AuditLogout       = "logout"        // session ended login (detail: "user logoff" | "idle logout")
+	AuditDisconnect   = "disconnect"    // connection ended (detail = how)
+	AuditMFAEnrolled  = "mfa_enrolled"  // user completed self-enrollment
+	AuditMFASuccess   = "mfa_success"   // correct code at login
+	AuditMFAFailed    = "mfa_failed"    // incorrect code (enroll confirm or login)
+	AuditMFACleared   = "mfa_cleared"   // admin wiped the secret
+	AuditMFAEnforced  = "mfa_enforced"  // admin turned mfa_required on
+	AuditPasswordSelf = "password_self" // user changed their own password (self-service)
 )
 
 // AuditEvent is one audit-trail row. Username is a plain string, not a user

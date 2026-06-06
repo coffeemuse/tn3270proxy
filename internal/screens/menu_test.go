@@ -279,6 +279,13 @@ func TestMenuScreenGridDescription(t *testing.T) {
 	}
 }
 
+func TestMenuShowsUserSettingsEntry(t *testing.T) {
+	screen, _, _ := MenuScreen(Geometry{}, nil, false, MenuStatus{}, "")
+	if !screenContains(screen, "User Settings") {
+		t.Errorf("menu missing '0 User Settings' meta entry")
+	}
+}
+
 // hasContent reports whether any field's Content equals want.
 func hasContent(screen go3270.Screen, want string) bool {
 	for _, f := range screen {
