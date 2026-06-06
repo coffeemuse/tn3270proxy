@@ -23,6 +23,7 @@
 package sysconfig
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -121,6 +122,27 @@ var Catalog = []Entry{
 		Default:  strconv.Itoa(DefaultAuthFailWindowMins),
 		Validate: positiveInt,
 	},
+}
+
+// intInRange returns a validator accepting an integer in [min, max] inclusive.
+func intInRange(min, max int) func(string) string {
+	return func(v string) string {
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil || n < min || n > max {
+			return fmt.Sprintf("MUST BE AN INTEGER FROM %d TO %d", min, max)
+		}
+		return ""
+	}
+}
+
+// onOff accepts the literals ON or OFF (case-insensitive, surrounding space
+// trimmed). Used by boolean-toggle parameters.
+func onOff(v string) string {
+	switch strings.ToUpper(strings.TrimSpace(v)) {
+	case "ON", "OFF":
+		return ""
+	}
+	return "MUST BE ON OR OFF"
 }
 
 // nonNegativeInt accepts "0" and positive integers (used by the delay base and

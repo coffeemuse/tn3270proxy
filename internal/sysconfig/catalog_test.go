@@ -241,3 +241,30 @@ func entryByKey(t *testing.T, key string) *Entry {
 	t.Fatalf("%s not in catalog", key)
 	return nil
 }
+
+func TestIntInRange(t *testing.T) {
+	v := intInRange(1, 10000)
+	for _, ok := range []string{"1", "10000", " 500 "} {
+		if msg := v(ok); msg != "" {
+			t.Errorf("intInRange(%q) = %q, want accept", ok, msg)
+		}
+	}
+	for _, bad := range []string{"0", "10001", "-1", "", "x", "1.5"} {
+		if v(bad) == "" {
+			t.Errorf("intInRange(%q) accepted, want reject", bad)
+		}
+	}
+}
+
+func TestOnOff(t *testing.T) {
+	for _, ok := range []string{"ON", "OFF", " on ", "off"} {
+		if msg := onOff(ok); msg != "" {
+			t.Errorf("onOff(%q) = %q, want accept", ok, msg)
+		}
+	}
+	for _, bad := range []string{"", "YES", "1", "TRUE"} {
+		if onOff(bad) == "" {
+			t.Errorf("onOff(%q) accepted, want reject", bad)
+		}
+	}
+}
