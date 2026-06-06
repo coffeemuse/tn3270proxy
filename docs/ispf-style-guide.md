@@ -123,6 +123,40 @@ occupied; list page size and form capacity are recomputed from the new bands
 (roughly neutral to slightly larger versus today). Title centering is computed from
 `Cols` (centered within 0–79).
 
+### The menu option grid (tri-color)
+
+All three **option menus** — service, admin, and User Settings — render their
+selectable rows on one shared three-field grid, matching the ISPF Primary Option
+Menu look:
+
+| Field | Column | Color | Attr | Example |
+|---|---|---|---|---|
+| Option key | 0 (right-aligned in cols 0–2) | **White** | Intense | `1`, `0`, `A` |
+| Name (short keyword) | 4 | **Turquoise** | — | `Users`, `Sysparms` |
+| Description | 13 | **Green** | — | `User accounts and group membership` |
+
+The service menu already renders this exactly (number/`Service.Name`/
+`Service.Description`). The admin and User Settings menus adopt the same grid using
+short ISPF-style keywords as the turquoise name and the full meaning in the green
+description.
+
+**Admin menu keyword mapping** (turquoise name → green description):
+
+| Key | Name | Description |
+|---|---|---|
+| 1 | `Users` | User accounts and group membership |
+| 2 | `Groups` | Group definitions |
+| 3 | `Services` | Backend TN3270 services |
+| 4 | `Sysparms` | Runtime system parameters |
+| 5 | `Networks` | Trusted networks (DoS allow-list) |
+| 6 | `Audit` | Browse the audit trail |
+
+The User Settings menu is adaptive (its rows depend on MFA state), so its
+`UserSettingsRow` carries a short `Name` plus a `Description` rendered on the same
+grid — e.g. `Password / Change your sign-on password`, `MFA / Enroll in multi-factor
+authentication`. The `0`/`A` meta-rows on the service menu (User Settings /
+Administration) follow the grid too.
+
 ---
 
 ## 3. PF-key help row
@@ -154,9 +188,9 @@ Keep / change / deviate for every existing screen. ✔ = conforms after this wor
 | Screen | File | Command line | Key changes from pre-#65 | Deviation |
 |---|---|---|---|---|
 | **Login** | `screens/login.go` | none | center title; message→r2; turquoise labels; green inputs; keep `Userid . . .` dot-leader | entry panel: no command line |
-| **Service menu** | `screens/menu.go` | `Option ===>` r1 | command line→top; message→r2; instruction line turquoise; option keys white-intense | — |
-| **Admin menu** | `screens/admin.go` | `Option ===>` r1 | center title; command line→top; message→r2; option key=white / text=green | — |
-| **User Settings** | `screens/usersettings.go` | `Option ===>` r1 | center title; command line→top; message→r2; matches admin-menu styling | — |
+| **Service menu** | `screens/menu.go` | `Option ===>` r1 | command line→top; message→r2; instruction line turquoise; already on the tri-color grid | — |
+| **Admin menu** | `screens/admin.go` | `Option ===>` r1 | center title; command line→top; message→r2; **adopt tri-color grid** + ISPF keywords (see §2 mapping) | — |
+| **User Settings** | `screens/usersettings.go` | `Option ===>` r1 | center title; command line→top; message→r2; **adopt tri-color grid** (name + description per row) | — |
 | **MFA enroll** | `screens/mfa.go` | none | center title; "MFA now required" → **yellow caution**; `Key:` intense; message→r2 | entry panel: no command line |
 | **MFA verify** | `screens/mfa.go` | none | center title; message→r2; code field green | entry panel: no command line |
 | **List view** | `ui3270/screen.go` `buildListScreen` | `Command ===>` r1 | center title; **blue column headings**; RowInfo→r0 right; message→r2; legend near bottom | per-row line commands retained |
