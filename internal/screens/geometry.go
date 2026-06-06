@@ -64,11 +64,12 @@ func (g Geometry) ListPageSize() int { return g.norm().Rows - 10 }
 func (g Geometry) FormMaxFields() int { return (g.norm().Rows-8)/2 + 1 }
 
 // MenuCapacity is how many service lines fit on the menu (rows 4 .. Rows-7,
-// minus one when the admin A entry needs a reserved row).
+// minus one for the always-present "0 User Settings" row, and minus one more
+// when the admin A entry needs a reserved row).
 func (g Geometry) MenuCapacity(admin bool) int {
-	n := g.norm().Rows - 10
+	n := g.norm().Rows - 11 // chrome + the always-present "0 User Settings" row
 	if admin {
-		n--
+		n-- // plus the "A" row
 	}
 	return n
 }

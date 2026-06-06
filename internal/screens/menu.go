@@ -112,11 +112,24 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 		screen = append(screen, go3270.Field{Row: 4, Col: 4, Content: "(no services available for your account)"})
 		row = 5
 	}
+	// Bottom "meta" entries below the service list: User Settings (0) is shown
+	// for every user; Administration (A) only for admins. Clamp so they never
+	// overrun the input row (MenuCapacity reserved these rows when the list is
+	// full).
+	metaRow := row + 1
+	lastMeta := geom.InputRow() - 2
 	if admin {
-		adminRow := row + 1
-		if last := geom.InputRow() - 2; adminRow > last {
-			adminRow = last // MenuCapacity reserved this row when the list is full
-		}
+		lastMeta-- // leave a row below "0" for the "A" entry
+	}
+	if metaRow > lastMeta {
+		metaRow = lastMeta
+	}
+	screen = append(screen,
+		go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  0"},
+		go3270.Field{Row: metaRow, Col: 13, Color: go3270.Green, Content: "User Settings"},
+	)
+	if admin {
+		adminRow := metaRow + 1
 		screen = append(screen,
 			go3270.Field{Row: adminRow, Col: 0, Intense: true, Content: "  A"},
 			go3270.Field{Row: adminRow, Col: 13, Color: go3270.Green, Content: "Administration"},
