@@ -103,6 +103,25 @@ func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
 	}
 }
 
+func TestHostOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		addr net.Addr
+		want string
+	}{
+		{"ipv4 host:port", &net.TCPAddr{IP: net.ParseIP("203.0.113.7"), Port: 51324}, "203.0.113.7"},
+		{"ipv6 host:port", &net.TCPAddr{IP: net.ParseIP("2001:db8::1"), Port: 23}, "2001:db8::1"},
+		{"nil addr", nil, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hostOnly(tc.addr); got != tc.want {
+				t.Errorf("hostOnly(%v) = %q, want %q", tc.addr, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHandlerSharesThrottleAcrossSessions(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/s.db")
 	if err != nil {

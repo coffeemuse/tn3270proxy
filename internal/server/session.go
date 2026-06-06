@@ -112,6 +112,11 @@ type Session struct {
 	PreAuthMax       time.Duration
 	Trusted          bool
 	BridgeIdleExempt bool
+	// RemoteHost is the client IP (port stripped) for the fail2ban <HOST> on
+	// auth-failure log lines (see logAuthFailure). Set by the handler from the
+	// connection's RemoteAddr; empty in unit tests that construct Session
+	// directly unless set explicitly.
+	RemoteHost string
 	// MOTDRead reads the MOTD file for maybeShowNews; nil selects the capped
 	// os.ReadFile default (readMOTDCapped). Tests inject a fake.
 	MOTDRead func(path string) ([]byte, error)
