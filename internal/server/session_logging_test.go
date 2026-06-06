@@ -256,6 +256,9 @@ func TestMFAFailLineReasonBadMFA(t *testing.T) {
 	if rec["user"] != "alice" {
 		t.Errorf("user = %v, want alice", rec["user"])
 	}
+	if v, ok := rec["trusted"].(bool); !ok || v != false {
+		t.Errorf("trusted = %v, want false", rec["trusted"])
+	}
 	if strings.Contains(buf.String(), secret) {
 		t.Errorf("MFA secret leaked into log output:\n%s", buf.String())
 	}
