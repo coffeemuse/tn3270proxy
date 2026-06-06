@@ -50,6 +50,10 @@ type fakeAdminPresenter struct {
 	gotMenuErrs []string
 	gotLists    []ui3270.ListView
 	gotForms    []ui3270.FormView
+
+	snaps    []ui3270.ListAction
+	gotSnaps []ui3270.SnapshotView
+	gotDets  []ui3270.DetailView
 }
 
 func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, _ Term, errMsg string) (int, bool, error) {
@@ -83,6 +87,21 @@ func (f *fakeAdminPresenter) Form(v ui3270.FormView) (ui3270.FormAction, error) 
 	a := f.forms[0]
 	f.forms = f.forms[1:]
 	return a, nil
+}
+
+func (f *fakeAdminPresenter) Snapshot(v ui3270.SnapshotView) (ui3270.ListAction, error) {
+	f.gotSnaps = append(f.gotSnaps, v)
+	if len(f.snaps) == 0 {
+		panic("unexpected Snapshot call")
+	}
+	a := f.snaps[0]
+	f.snaps = f.snaps[1:]
+	return a, nil
+}
+
+func (f *fakeAdminPresenter) Detail(v ui3270.DetailView) error {
+	f.gotDets = append(f.gotDets, v)
+	return nil
 }
 
 // newAdminFixture opens a real temp store seeded with: admin user "root"
