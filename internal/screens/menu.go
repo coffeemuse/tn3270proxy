@@ -72,6 +72,28 @@ func truncateRunes(s string, n int) string {
 // FieldSelection is the name of the menu's numeric input field.
 const FieldSelection = "selection"
 
+// MenuPageBounds clamps page against the service total and the per-page menu
+// capacity, returning the clamped page, the [start,end) slice bounds for that
+// page, and the "ITEMS x TO y OF z" indicator string. It is the single source
+// of menu paging math: MenuScreen uses it to render the page window, and the
+// presenter uses it to clamp its stored page so PF7/PF8 are no-ops at the ends.
+func MenuPageBounds(geom Geometry, total int, admin bool, page int) (clamped, start, end int, indicator string) {
+	if total == 0 {
+		return 0, 0, 0, "ITEMS 0 OF 0"
+	}
+	size := geom.MenuCapacity(admin)
+	maxPage := (total - 1) / size
+	if page > maxPage {
+		page = maxPage
+	}
+	if page < 0 {
+		page = 0
+	}
+	start = page * size
+	end = min(start+size, total)
+	return page, start, end, fmt.Sprintf("ITEMS %d TO %d OF %d", start+1, end, total)
+}
+
 // MenuScreen renders the service menu sized for geom and returns a mapping
 // from the user's typed selection (e.g. "1") to the chosen service, plus the
 // initial cursor. Services render on a fixed grid (number col 0, name col 4,
