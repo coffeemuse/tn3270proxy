@@ -155,6 +155,20 @@ func TestAdminFlowMenuBack(t *testing.T) {
 	}
 }
 
+func TestAdminRun_Choice6DispatchesAudit(t *testing.T) {
+	p := &fakeAdminPresenter{
+		menu:  []adminMenuStep{{choice: 6}, {back: true}},
+		snaps: []ui3270.ListAction{{PF: 3}}, // audit list opens then PF3 back
+	}
+	f, _ := newAdminFixture(t, p)
+	if err := f.Run(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.gotSnaps) != 1 {
+		t.Errorf("expected one Snapshot render from the audit flow, got %d", len(p.gotSnaps))
+	}
+}
+
 func TestAdminUserAddHappyPath(t *testing.T) {
 	p := &fakeAdminPresenter{
 		menu:  []adminMenuStep{{choice: 1}, {back: true}},

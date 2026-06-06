@@ -120,6 +120,8 @@ func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 			err = f.systemParams(ctx, conn)
 		case 5:
 			err = f.networks(ctx, conn)
+		case 6:
+			err = f.auditLog(ctx, conn)
 		}
 		if err != nil {
 			return err

@@ -55,6 +55,19 @@ func TestAdminMenuScreenFields(t *testing.T) {
 	}
 }
 
+func TestAdminMenuScreen_HasAuditEntry(t *testing.T) {
+	screen, _ := AdminMenuScreen(DefaultGeometry, "")
+	var found bool
+	for _, f := range screen {
+		if f.Content == "6.  Audit Log" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("AdminMenuScreen missing '6.  Audit Log' entry")
+	}
+}
+
 func TestAdminMenuScreenCursor(t *testing.T) {
 	screen, cur := AdminMenuScreen(DefaultGeometry, "")
 	of, ok := fieldByName(screen, FieldOption)
