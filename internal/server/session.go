@@ -50,7 +50,11 @@ import (
 type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
 	Login(conn net.Conn, term Term, errMsg string) (username, password string, quit bool, err error)
-	Menu(conn net.Conn, term Term, services []store.Service, admin bool, status screens.MenuStatus, errMsg string) (selected *store.Service, adminSel bool, quit bool, err error)
+	Menu(conn net.Conn, term Term, services []store.Service, admin bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
+	// UserSettings renders the self-service settings menu with the given
+	// adaptive rows and returns the typed option key (e.g. "1"); back=true on
+	// PF3 (return to the service menu). It loops internally on invalid input.
+	UserSettings(conn net.Conn, term Term, username string, rows []screens.UserSettingsRow, errMsg string) (choice string, back bool, err error)
 	// News shows the MOTD pages (already paginated) one at a time: ENTER
 	// advances, the last ENTER returns nil. PA3/PF3 are silent no-ops. A
 	// non-nil error is a disconnect or an idle timeout (classified by the
@@ -359,7 +363,7 @@ func (s *Session) Run(conn net.Conn) {
 				SystemID: s.systemID(ctx),
 				Release:  s.Release,
 			}
-			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, status, errMsg)
+			selected, choice, err := s.Presenter.Menu(conn, term, services, isAdmin, status, errMsg)
 			if err != nil {
 				if isTimeoutErr(err) {
 					aud.record(ctx, store.AuditEvent{
@@ -372,16 +376,19 @@ func (s *Session) Run(conn net.Conn) {
 				endDetail = "menu render error"
 				return
 			}
-			if quit {
+			errMsg = ""
+			switch choice {
+			case menuQuit:
 				aud.record(ctx, store.AuditEvent{
 					Kind: store.AuditLogout, Username: identity.Username, Detail: "user logoff"})
 				currentUser = ""
-				s.Logger = baseLog // revert to pre-user logger
-				s.armPreAuth(conn) // logoff: back to the pre-auth regime
-				break menu         // logoff: back to the login screen
-			}
-			errMsg = ""
-			if adminSel && isAdmin {
+				s.Logger = baseLog
+				s.armPreAuth(conn)
+				break menu
+			case menuAdmin:
+				if !isAdmin {
+					continue // guard: a buggy presenter can't open admin for a non-admin
+				}
 				renderer := func(conn net.Conn) ui3270.Renderer {
 					if s.AdminRenderer != nil {
 						return s.AdminRenderer(conn, term)
@@ -397,7 +404,7 @@ func (s *Session) Run(conn net.Conn) {
 						aud.record(ctx, store.AuditEvent{
 							Kind: store.AuditLogout, Username: identity.Username, Detail: "idle logout"})
 						currentUser = ""
-						s.Logger = baseLog // revert to pre-user logger
+						s.Logger = baseLog
 						s.armPreAuth(conn)
 						break menu
 					}
@@ -405,7 +412,26 @@ func (s *Session) Run(conn net.Conn) {
 					endDetail = "admin flow error"
 					return
 				}
-				continue // re-render the menu: fresh service list shows admin edits
+				continue
+			case menuUserSettings:
+				if uerr := s.userSettings(ctx, conn, term, identity, aud); uerr != nil {
+					if isTimeoutErr(uerr) {
+						aud.record(ctx, store.AuditEvent{
+							Kind: store.AuditLogout, Username: identity.Username, Detail: "idle logout"})
+						currentUser = ""
+						s.Logger = baseLog
+						s.armPreAuth(conn)
+						break menu
+					}
+					s.log().Error("user settings flow error", "error", uerr)
+					endDetail = "user settings flow error"
+					return
+				}
+				continue
+			case menuService:
+				// falls through to the bridge block below
+			default: // menuRequery / menuReprompt
+				continue
 			}
 			if selected == nil {
 				continue
@@ -654,6 +680,10 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		// Generic message — never reveals whether the username exists (spec §7).
 		errMsg = "Invalid userid or password"
 	}
+}
+
+func (s *Session) userSettings(ctx context.Context, conn net.Conn, term Term, identity auth.Identity, aud *auditTrail) error {
+	return nil
 }
 
 // causeDetail renders a bridge outcome for the audit trail.

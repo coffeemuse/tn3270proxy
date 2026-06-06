@@ -193,7 +193,7 @@ func TestSessionBridgeIdleExemptDisablesTimeout(t *testing.T) {
 		termType: "IBM-3278-2-E",
 		logins:   []loginResult{{user: "alice", pass: "good"}, {quit: true}},
 		menuPicks: []menuResult{
-			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}},
+			{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}, choice: menuService},
 			{quit: true},
 		},
 	}
@@ -260,7 +260,7 @@ func TestSessionBridgeTimeoutEndsAsClientClosed(t *testing.T) {
 	p := &fakePresenter{
 		termType:  "IBM-3278-2-E",
 		logins:    []loginResult{{user: "alice", pass: "good"}},
-		menuPicks: []menuResult{{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}}},
+		menuPicks: []menuResult{{sel: &store.Service{Name: "PROD", Host: "10.0.0.1", Port: 23}, choice: menuService}},
 	}
 	b := &fakeBridger{causes: []bridge.Cause{bridge.CauseClientClosed}}
 	s := newTestSession(t, p, b)

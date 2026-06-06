@@ -97,7 +97,7 @@ func (go3270Presenter) Login(conn net.Conn, term Term, errMsg string) (string, s
 		resp.Values[screens.FieldPassword], false, nil
 }
 
-func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, status screens.MenuStatus, errMsg string) (*store.Service, bool, bool, error) {
+func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, status screens.MenuStatus, errMsg string) (*store.Service, menuChoice, error) {
 	geom := term.Geometry()
 	status.TermType = term.Type // presenter owns the terminal-derived field
 	for {
@@ -112,23 +112,29 @@ func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admi
 			)
 		})
 		if err != nil {
-			return nil, false, false, err
+			return nil, menuReprompt, err // choice ignored on error
 		}
 		if resp.AID == go3270.AIDPF3 {
-			return nil, false, true, nil
+			return nil, menuQuit, nil
 		}
 		key := strings.ToUpper(strings.TrimSpace(resp.Values[screens.FieldSelection]))
 		switch choice, svc := classifyMenuSubmit(key, mapping, admin); choice {
 		case menuAdmin:
-			return nil, true, false, nil
+			return nil, menuAdmin, nil
+		case menuUserSettings:
+			return nil, menuUserSettings, nil
 		case menuService:
-			return &svc, false, false, nil
+			return &svc, menuService, nil
 		case menuRequery:
-			return nil, false, false, nil
+			return nil, menuRequery, nil
 		default: // menuReprompt
 			errMsg = "Invalid selection: " + key
 		}
 	}
+}
+
+func (go3270Presenter) UserSettings(conn net.Conn, term Term, username string, rows []screens.UserSettingsRow, errMsg string) (string, bool, error) {
+	return "", true, nil
 }
 
 func (go3270Presenter) News(conn net.Conn, term Term, pages [][]string) error {
