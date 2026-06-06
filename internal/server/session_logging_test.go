@@ -151,7 +151,7 @@ func TestAuthFailLineCarriesFail2banFields(t *testing.T) {
 	if rec["src"] != "203.0.113.7" {
 		t.Errorf("src = %v, want 203.0.113.7", rec["src"])
 	}
-	if rec["trusted"] != false {
+	if v, ok := rec["trusted"].(bool); !ok || v != false {
 		t.Errorf("trusted = %v, want false", rec["trusted"])
 	}
 	if rec["reason"] != "invalid_credentials" {
@@ -181,7 +181,7 @@ func TestAuthFailLineTrustedMarker(t *testing.T) {
 	s.Run(client)
 
 	rec := findLogRecord(t, &buf, "auth failed")
-	if rec["trusted"] != true {
+	if v, ok := rec["trusted"].(bool); !ok || v != true {
 		t.Errorf("trusted = %v, want true", rec["trusted"])
 	}
 }
