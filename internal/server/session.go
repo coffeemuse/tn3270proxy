@@ -43,11 +43,6 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
-// systemIDPlaceholder is shown in the menu status block's "System ID" row.
-// TODO(#53): replace with a DB-backed system-config value entered via the
-// future System Configuration admin screen; hardcoded for now.
-const systemIDPlaceholder = "PROXY"
-
 // Presenter renders the proxy's own 3270 screens to the client. The real
 // implementation wraps go3270; tests use a fake. The Term returned by
 // Negotiate must be passed back into every subsequent call so screens render
@@ -162,6 +157,17 @@ func (s *Session) mfaIssuer(ctx context.Context) string {
 	v, err := s.Store.GetConfig(ctx, sysconfig.KeyMFAIssuer)
 	if err != nil || strings.TrimSpace(v) == "" {
 		return "TN3270PROXY"
+	}
+	return v
+}
+
+// systemID reads the configured System ID for the menu status block, falling
+// back to "PROXY" on any read error or empty value so the menu never renders a
+// blank System ID row.
+func (s *Session) systemID(ctx context.Context) string {
+	v, err := s.Store.GetConfig(ctx, sysconfig.KeySystemID)
+	if err != nil || strings.TrimSpace(v) == "" {
+		return "PROXY"
 	}
 	return v
 }
@@ -350,7 +356,7 @@ func (s *Session) Run(conn net.Conn) {
 			}
 			status := screens.MenuStatus{
 				Username: identity.Username,
-				SystemID: systemIDPlaceholder,
+				SystemID: s.systemID(ctx),
 				Release:  s.Release,
 			}
 			selected, adminSel, quit, err := s.Presenter.Menu(conn, term, services, isAdmin, status, errMsg)

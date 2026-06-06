@@ -174,6 +174,63 @@ func TestThrottleValidators(t *testing.T) {
 	}
 }
 
+func TestSystemIDEntry(t *testing.T) {
+	e := entryByKey(t, KeySystemID)
+	if KeySystemID != "SYSTEM_ID" {
+		t.Errorf("KeySystemID = %q, want SYSTEM_ID", KeySystemID)
+	}
+	if e.Default != "PROXY" {
+		t.Errorf("SYSTEM_ID default = %q, want PROXY", e.Default)
+	}
+	if e.Label != "System ID:" {
+		t.Errorf("SYSTEM_ID label = %q, want %q", e.Label, "System ID:")
+	}
+	if e.Length != 7 {
+		t.Errorf("SYSTEM_ID length = %d, want 7", e.Length)
+	}
+	if e.Normalize == nil {
+		t.Fatal("SYSTEM_ID Normalize is nil")
+	}
+	if e.Validate == nil {
+		t.Fatal("SYSTEM_ID Validate is nil")
+	}
+}
+
+func TestSystemIDNormalize(t *testing.T) {
+	n := entryByKey(t, KeySystemID).Normalize
+	for in, want := range map[string]string{
+		" proxy ": "PROXY",
+		"sysa":    "SYSA",
+		"SYS-01":  "SYS-01",
+		"  a1":    "A1",
+	} {
+		if got := n(in); got != want {
+			t.Errorf("Normalize(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestSystemIDValidate(t *testing.T) {
+	v := entryByKey(t, KeySystemID).Validate
+	for _, ok := range []string{"PROXY", "SYSA", "A1", "SYS-01", "A-B-C-D", "ABCDEFG"} {
+		if msg := v(ok); msg != "" {
+			t.Errorf("Validate(%q) = %q, want valid", ok, msg)
+		}
+	}
+	for in, want := range map[string]string{
+		"":         "SYSTEM ID REQUIRED",
+		"ABCDEFGH": "SYSTEM ID TOO LONG (MAX 7)",
+		"-SYS":     "SYSTEM ID MUST NOT START WITH A DASH",
+		"SYS_01":   "SYSTEM ID: USE A-Z 0-9 AND DASH",
+		"SYS.1":    "SYSTEM ID: USE A-Z 0-9 AND DASH",
+		"SYS@":     "SYSTEM ID: USE A-Z 0-9 AND DASH",
+	} {
+		if msg := v(in); msg != want {
+			t.Errorf("Validate(%q) = %q, want %q", in, msg, want)
+		}
+	}
+}
+
 func entryByKey(t *testing.T, key string) *Entry {
 	t.Helper()
 	for i := range Catalog {

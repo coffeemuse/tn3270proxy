@@ -39,11 +39,15 @@ func (f *adminFlow) systemParams(ctx context.Context, conn net.Conn) error {
 		if err != nil {
 			val = e.Default // fall back to catalog default on unexpected error
 		}
+		length := e.Length
+		if length == 0 {
+			length = 64 // default width for entries that don't set one
+		}
 		fields[i] = ui3270.FormField{
 			Name:   e.Key,
 			Label:  e.Label,
 			Value:  val,
-			Length: 64,
+			Length: length,
 		}
 	}
 
@@ -54,15 +58,21 @@ func (f *adminFlow) systemParams(ctx context.Context, conn net.Conn) error {
 		StayOnSave: true,
 		Fields:     fields,
 		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
-			// Validate all fields before touching the store (all-or-nothing).
+			// Normalize + validate all fields before touching the store (all-or-nothing).
+			norm := make(map[string]string, len(sysconfig.Catalog))
 			for _, e := range sysconfig.Catalog {
-				if msg := e.Validate(vals[e.Key]); msg != "" {
+				v := vals[e.Key]
+				if e.Normalize != nil {
+					v = e.Normalize(v)
+				}
+				norm[e.Key] = v
+				if msg := e.Validate(v); msg != "" {
 					return msg, nil
 				}
 			}
 			// Persist only changed values; audit each effective change.
 			for i, e := range sysconfig.Catalog {
-				newVal := vals[e.Key]
+				newVal := norm[e.Key]
 				oldVal := fields[i].Value
 				if newVal == oldVal {
 					continue

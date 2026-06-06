@@ -820,8 +820,8 @@ func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
 
 func TestSessionPopulatesMenuStatus(t *testing.T) {
 	// Verify that the session builds screens.MenuStatus with the correct
-	// Username (from the identity), SystemID ("PROXY"), and Release (from
-	// Session.Release) before calling Presenter.Menu.
+	// Username (from the identity), SystemID ("PROXY", the seeded sysconfig
+	// default), and Release (from Session.Release) before calling Presenter.Menu.
 	p := &fakePresenter{
 		termType: "IBM-3278-2-E",
 		logins: []loginResult{
@@ -853,6 +853,59 @@ func TestSessionPopulatesMenuStatus(t *testing.T) {
 	// the store, so the identity flows through unchanged.
 	if got.Username != "alice" {
 		t.Errorf("status.Username = %q, want alice", got.Username)
+	}
+}
+
+func TestSessionMenuStatusUsesConfiguredSystemID(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true},
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	if err := s.Store.SetConfig(context.Background(), "SYSTEM_ID", "SYSA"); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(p.gotStatus) == 0 {
+		t.Fatal("Menu was never called")
+	}
+	if got := p.gotStatus[0].SystemID; got != "SYSA" {
+		t.Errorf("status.SystemID = %q, want SYSA", got)
+	}
+}
+
+func TestSessionMenuStatusSystemIDFallback(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"},
+			{quit: true},
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	// An empty stored value must fall back to PROXY (menu never renders blank).
+	if err := s.Store.SetConfig(context.Background(), "SYSTEM_ID", ""); err != nil {
+		t.Fatalf("SetConfig: %v", err)
+	}
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if len(p.gotStatus) == 0 {
+		t.Fatal("Menu was never called")
+	}
+	if got := p.gotStatus[0].SystemID; got != "PROXY" {
+		t.Errorf("status.SystemID = %q, want PROXY (fallback)", got)
 	}
 }
 
