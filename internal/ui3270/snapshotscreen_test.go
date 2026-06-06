@@ -48,11 +48,14 @@ func TestBuildSnapshotScreen_RowLayoutAndColor(t *testing.T) {
 	}
 	screen, cur := buildSnapshotScreen(24, v)
 
-	if f, ok := fieldAt(screen, 0, 2); !ok || f.Content != "RECENT ACTIVITY" {
-		t.Errorf("title missing/wrong: %+v ok=%v", f, ok)
+	if f, ok := fieldAt(screen, 0, centerCol(len("RECENT ACTIVITY"))); !ok || f.Content != "RECENT ACTIVITY" || f.Color != go3270.White || !f.Intense {
+		t.Errorf("title missing/not centered-white: %+v ok=%v", f, ok)
 	}
-	if f, ok := fieldAt(screen, 2, snapLeftAttr); !ok || f.Content != v.AsOf {
-		t.Errorf("as-of stamp missing on row 2: %+v ok=%v", f, ok)
+	if f, ok := fieldAt(screen, 1, snapLeftAttr); !ok || f.Content != v.AsOf {
+		t.Errorf("as-of stamp missing on row 1: %+v ok=%v", f, ok)
+	}
+	if f, ok := fieldAt(screen, 3, snapLeftAttr); !ok || f.Color != go3270.Blue {
+		t.Errorf("heading-left not blue on row 3: %+v ok=%v", f, ok)
 	}
 	if f, ok := fieldAt(screen, 4, snapCmdAttr); !ok || !f.Write {
 		t.Errorf("cmd field missing/not writable on data row: %+v ok=%v", f, ok)
@@ -110,8 +113,8 @@ func TestBuildDetailScreen(t *testing.T) {
 	}
 	screen, cur := buildDetailScreen(24, v)
 
-	if f, ok := fieldAt(screen, 0, 2); !ok || f.Content != "AUDIT DETAIL" {
-		t.Errorf("title wrong: %+v ok=%v", f, ok)
+	if f, ok := fieldAt(screen, 0, centerCol(len("AUDIT DETAIL"))); !ok || f.Content != "AUDIT DETAIL" || f.Color != go3270.White || !f.Intense {
+		t.Errorf("title not centered-white: %+v ok=%v", f, ok)
 	}
 	if f, ok := fieldAt(screen, 2, 2); !ok || f.Content != "Date/Time" {
 		t.Errorf("first label wrong: %+v ok=%v", f, ok)
