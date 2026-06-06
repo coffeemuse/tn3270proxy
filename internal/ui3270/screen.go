@@ -70,7 +70,7 @@ func buildListScreen(rows int, v ListView) (go3270.Screen, Cursor) {
 // home if there are no fields).
 func buildFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
-		{Row: 0, Col: 2, Intense: true, Content: v.Title},
+		{Row: 0, Col: centerCol(len(v.Title)), Color: go3270.White, Intense: true, Content: v.Title},
 	}
 	fields := v.Fields
 	if max := formMaxFields(rows); len(fields) > max {
@@ -98,25 +98,25 @@ func buildFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 			// Display-only: label + static value, no writable input, never the
 			// cursor target.
 			screen = append(screen,
-				go3270.Field{Row: row, Col: labelAttrCol, Content: label},
-				go3270.Field{Row: row, Col: inputCol, Content: f.Value},
+				go3270.Field{Row: row, Col: labelAttrCol, Color: go3270.Turquoise, Content: label},
+				go3270.Field{Row: row, Col: inputCol, Color: go3270.Green, Content: f.Value},
 			)
 			continue
 		}
 		stopCol := min(inputCol+1+f.Length, 79)
-		input := go3270.Field{Row: row, Col: inputCol, Name: f.Name, Write: true, Hidden: f.Hidden, Content: f.Value, Highlighting: go3270.Underscore}
+		input := go3270.Field{Row: row, Col: inputCol, Name: f.Name, Write: true, Hidden: f.Hidden, Content: f.Value, Color: go3270.Green, Highlighting: go3270.Underscore}
 		if cur == (Cursor{Row: 0, Col: 0}) {
 			cur = Cursor{Row: input.Row, Col: input.Col + 1}
 		}
 		screen = append(screen,
-			go3270.Field{Row: row, Col: labelAttrCol, Content: label},
+			go3270.Field{Row: row, Col: labelAttrCol, Color: go3270.Turquoise, Content: label},
 			input,
 			go3270.Field{Row: row, Col: stopCol}, // stop field
 		)
 	}
 	screen = append(screen,
-		go3270.Field{Row: errorRow(rows), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: helpRow(rows), Col: 2, Content: "Enter = save    PF3 = cancel"},
+		go3270.Field{Row: messageRow(), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
+		go3270.Field{Row: helpRow(rows), Col: 2, Color: go3270.Turquoise, Content: "Enter=Save    PF3=Cancel"},
 	)
 	return screen, cur
 }

@@ -256,3 +256,27 @@ func TestBuildFormScreenDotLeaderOffUnchanged(t *testing.T) {
 		t.Error("label field at row 3 col 2 not found in screen")
 	}
 }
+
+func TestBuildFormScreenPalette(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{
+		Title:  "EDIT USER",
+		Fields: []FormField{{Name: "x", Label: "Name", Length: 8}},
+		ErrMsg: "boom",
+	})
+	title, ok := fieldAt(screen, 0, centerCol(len("EDIT USER")))
+	if !ok || title.Content != "EDIT USER" || title.Color != go3270.White || !title.Intense {
+		t.Errorf("title = %+v ok=%v, want centered white intense", title, ok)
+	}
+	label, ok := fieldAt(screen, 3, labelAttrCol)
+	if !ok || label.Color != go3270.Turquoise {
+		t.Errorf("label = %+v ok=%v, want turquoise", label, ok)
+	}
+	in, _ := fieldByName(screen, "x")
+	if in.Color != go3270.Green {
+		t.Errorf("input color = %v, want green", in.Color)
+	}
+	msg, ok := fieldByName(screen, fieldError)
+	if !ok || msg.Row != 2 || msg.Color != go3270.Red || !msg.Intense {
+		t.Errorf("message = %+v ok=%v, want row 2 red intense", msg, ok)
+	}
+}
