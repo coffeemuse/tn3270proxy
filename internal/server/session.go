@@ -531,6 +531,7 @@ func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u sto
 			continue
 		}
 		if !ok {
+			s.logAuthFailure(s.log(), "bad_mfa")
 			delay, count := s.failDelay(ctx, u.Username)
 			aud.record(ctx, store.AuditEvent{
 				Kind: store.AuditMFAFailed, Username: u.Username, Detail: throttleDetail("enroll", delay, count)})
@@ -581,6 +582,7 @@ func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u sto
 			continue
 		}
 		if !ok {
+			s.logAuthFailure(s.log(), "bad_mfa")
 			delay, count := s.failDelay(ctx, u.Username)
 			aud.record(ctx, store.AuditEvent{
 				Kind: store.AuditMFAFailed, Username: u.Username, Detail: throttleDetail("login", delay, count)})

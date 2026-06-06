@@ -21,6 +21,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net"
@@ -217,5 +218,45 @@ func TestAuthFailLineShapeIsStable(t *testing.T) {
 		if _, ok := rec[k]; !ok {
 			t.Errorf("missing required field %q on auth-failure line (stable contract)", k)
 		}
+	}
+}
+
+// TestMFAFailLineReasonBadMFA asserts a wrong TOTP code emits the stable
+// auth-failure line with reason=bad_mfa, and that the MFA secret never leaks.
+func TestMFAFailLineReasonBadMFA(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	var buf bytes.Buffer
+	p := &fakePresenter{
+		termType:  "IBM-3278-2-E",
+		verifies:  []mfaResult{{code: "000000"}, {quit: true}}, // wrong code, then PF3
+		logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+		menuPicks: []menuResult{},
+	}
+	s, st := newMFATestSession(t, p, &fakeBridger{})
+	s.Logger = bufLogger(&buf)
+	s.RemoteHost = "198.51.100.9"
+
+	ctx := context.Background()
+	uid, _ := st.CreateUser(ctx, "alice", "x")
+	st.SetMFARequired(ctx, uid, true)
+	enc, _ := s.MFA.Seal([]byte(secret))
+	st.StoreMFAEnrollment(ctx, uid, enc, "2026-01-01T00:00:00Z", 0)
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	rec := findLogRecord(t, &buf, "auth failed")
+	if rec["reason"] != "bad_mfa" {
+		t.Errorf("reason = %v, want bad_mfa", rec["reason"])
+	}
+	if rec["src"] != "198.51.100.9" {
+		t.Errorf("src = %v, want 198.51.100.9", rec["src"])
+	}
+	if rec["user"] != "alice" {
+		t.Errorf("user = %v, want alice", rec["user"])
+	}
+	if strings.Contains(buf.String(), secret) {
+		t.Errorf("MFA secret leaked into log output:\n%s", buf.String())
 	}
 }
