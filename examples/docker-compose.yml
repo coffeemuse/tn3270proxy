@@ -17,6 +17,7 @@ services:
   tn3270proxy:
     image: ghcr.io/coffeemuse/tn3270proxy:latest   # pin a version (e.g. :1.0.0) in production
     restart: unless-stopped
+    # Drop "-listen" below if you mount a config that disables the plain listener.
     command: ["serve", "-db", "/data/proxy.db", "-listen", ":2323"]
     ports:
       - "2323:2323"      # plaintext TN3270 listener
