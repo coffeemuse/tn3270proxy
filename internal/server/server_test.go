@@ -97,9 +97,31 @@ func TestSessionHandlerSetsTrustAndRegimeFields(t *testing.T) {
 	if got.Release != "v9.9.9" {
 		t.Errorf("Session.Release = %q, want v9.9.9", got.Release)
 	}
+	if got.RemoteHost != "10.0.0.9" {
+		t.Errorf("RemoteHost = %q, want 10.0.0.9", got.RemoteHost)
+	}
 	untrusted := h.sessionFor(&net.TCPAddr{IP: net.ParseIP("10.9.9.9"), Port: 1}, connLog)
 	if untrusted.Trusted {
 		t.Error("client outside trusted CIDRs must not be Trusted")
+	}
+}
+
+func TestHostOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		addr net.Addr
+		want string
+	}{
+		{"ipv4 host:port", &net.TCPAddr{IP: net.ParseIP("203.0.113.7"), Port: 51324}, "203.0.113.7"},
+		{"ipv6 host:port", &net.TCPAddr{IP: net.ParseIP("2001:db8::1"), Port: 23}, "2001:db8::1"},
+		{"nil addr", nil, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hostOnly(tc.addr); got != tc.want {
+				t.Errorf("hostOnly(%v) = %q, want %q", tc.addr, got, tc.want)
+			}
+		})
 	}
 }
 
