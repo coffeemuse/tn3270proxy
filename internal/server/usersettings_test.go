@@ -93,6 +93,222 @@ func TestSelfChangePassword(t *testing.T) {
 	}
 }
 
+func TestSelfMFAEnroll(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	ctx := context.Background()
+
+	p := &fakePresenter{termType: "IBM-3278-2-E"}
+	s, _ := newMFATestSession(t, p, &fakeBridger{})
+	s.Authenticate = auth.Authenticate
+	s.Throttle = newAuthThrottle()
+	// newMFATestSession already sets s.Now to time.Unix(1_700_000_000, 0)
+
+	// Override MFAGenerate to return the known secret so we can compute the code.
+	s.MFAGenerate = func(_, _ string) (string, error) { return secret, nil }
+
+	// Seed ALICE with a bcrypt password and NO MFA secret.
+	hash, err := auth.HashPassword("pw")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	uid, err := s.Store.CreateUser(ctx, "ALICE", hash)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	_ = uid
+
+	// Compute the valid TOTP code for the known secret at s.Now.
+	now := time.Unix(1_700_000_000, 0)
+	step := uint64(now.Unix() / 30)
+	validCode := codeForServer(t, secret, step)
+
+	// Wire the fake step-up renderer: returns current password.
+	fp := &fakeAdminPresenter{
+		forms: []ui3270.FormAction{{Values: map[string]string{
+			screens.FieldCurrentPassword: "pw",
+		}}},
+	}
+	s.AdminRenderer = func(_ net.Conn, _ Term) ui3270.Renderer { return fp }
+
+	// Queue the enroll confirm code on the fakePresenter.
+	p.enrolls = []mfaResult{{code: validCode}}
+
+	rec := &recordingAuditor{}
+	aud := &auditTrail{auditor: rec}
+	term := Term{Type: "IBM-3278-2", Rows: 24, Cols: 80}
+
+	u, err := s.Store.GetUserByUsername(ctx, "ALICE")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+
+	if err := s.selfMFAEnroll(ctx, nil, term, s.renderer(nil, term), u, aud); err != nil {
+		t.Fatalf("selfMFAEnroll: %v", err)
+	}
+
+	// Assert: secret stored.
+	u2, err := s.Store.GetUserByUsername(ctx, "ALICE")
+	if err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if u2.MFASecret == "" {
+		t.Error("selfMFAEnroll: expected non-empty MFASecret after enrollment")
+	}
+	// Verify it decrypts to our known secret.
+	pt, oerr := s.MFA.Open(u2.MFASecret)
+	if oerr != nil || string(pt) != secret {
+		t.Errorf("stored secret mismatch: plain=%q err=%v", pt, oerr)
+	}
+
+	// Assert: mfa_enrolled audited.
+	if !slices.ContainsFunc(rec.events, func(ev store.AuditEvent) bool {
+		return ev.Kind == store.AuditMFAEnrolled && ev.Username == "ALICE"
+	}) {
+		t.Errorf("no %s audit event for ALICE; got %v", store.AuditMFAEnrolled, rec.kinds())
+	}
+}
+
+func TestSelfMFADisableClearsAndAudits(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	ctx := context.Background()
+
+	p := &fakePresenter{termType: "IBM-3278-2-E"}
+	s, _ := newMFATestSession(t, p, &fakeBridger{})
+	s.Authenticate = auth.Authenticate
+	s.Throttle = newAuthThrottle()
+
+	// Seed ALICE with a bcrypt password AND a sealed MFA secret, mfa_required=false.
+	hash, err := auth.HashPassword("pw")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	uid, err := s.Store.CreateUser(ctx, "ALICE", hash)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	enc, err := s.MFA.Seal([]byte(secret))
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+	if err := s.Store.StoreMFAEnrollment(ctx, uid, enc, "2026-01-01T00:00:00Z", 0); err != nil {
+		t.Fatalf("StoreMFAEnrollment: %v", err)
+	}
+	// mfa_required stays false (default).
+
+	// Wire the fake step-up renderer: returns current password.
+	fp := &fakeAdminPresenter{
+		forms: []ui3270.FormAction{{Values: map[string]string{
+			screens.FieldCurrentPassword: "pw",
+		}}},
+	}
+	s.AdminRenderer = func(_ net.Conn, _ Term) ui3270.Renderer { return fp }
+
+	rec := &recordingAuditor{}
+	aud := &auditTrail{auditor: rec}
+	term := Term{Type: "IBM-3278-2", Rows: 24, Cols: 80}
+
+	u, err := s.Store.GetUserByUsername(ctx, "ALICE")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+	if u.MFASecret == "" {
+		t.Fatal("test setup: expected non-empty MFASecret before disable")
+	}
+
+	if err := s.selfMFADisable(ctx, s.renderer(nil, term), u, aud); err != nil {
+		t.Fatalf("selfMFADisable: %v", err)
+	}
+
+	// Assert: secret cleared.
+	u2, err := s.Store.GetUserByUsername(ctx, "ALICE")
+	if err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if u2.MFASecret != "" {
+		t.Errorf("selfMFADisable: expected empty MFASecret, got %q", u2.MFASecret)
+	}
+
+	// Assert: mfa_cleared audited with Detail == "self-service".
+	var found *store.AuditEvent
+	for i := range rec.events {
+		if rec.events[i].Kind == store.AuditMFACleared && rec.events[i].Username == "ALICE" {
+			found = &rec.events[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("no %s audit event for ALICE; got %v", store.AuditMFACleared, rec.kinds())
+	}
+	if found.Detail != "self-service" {
+		t.Errorf("AuditMFACleared Detail = %q, want %q", found.Detail, "self-service")
+	}
+}
+
+// TestSelfMFADisableBlockedWhenRequired locks the code-level defensive guard:
+// an admin-required user can never self-disable, even if selfMFADisable is
+// reached directly. No forms are queued, so if the guard failed to
+// short-circuit and the step-up ran, fakeAdminPresenter.Form would panic —
+// proving the guard returns BEFORE any step-up or mutation.
+func TestSelfMFADisableBlockedWhenRequired(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	ctx := context.Background()
+
+	p := &fakePresenter{termType: "IBM-3278-2-E"}
+	s, _ := newMFATestSession(t, p, &fakeBridger{})
+	s.Authenticate = auth.Authenticate
+	s.Throttle = newAuthThrottle()
+
+	hash, err := auth.HashPassword("pw")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	uid, err := s.Store.CreateUser(ctx, "ALICE", hash)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	enc, err := s.MFA.Seal([]byte(secret))
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+	if err := s.Store.StoreMFAEnrollment(ctx, uid, enc, "2026-01-01T00:00:00Z", 0); err != nil {
+		t.Fatalf("StoreMFAEnrollment: %v", err)
+	}
+	if err := s.Store.SetMFARequired(ctx, uid, true); err != nil {
+		t.Fatalf("SetMFARequired: %v", err)
+	}
+
+	// No forms queued: a step-up would pop an empty queue and panic.
+	fp := &fakeAdminPresenter{}
+	s.AdminRenderer = func(_ net.Conn, _ Term) ui3270.Renderer { return fp }
+
+	rec := &recordingAuditor{}
+	aud := &auditTrail{auditor: rec}
+	term := Term{Type: "IBM-3278-2", Rows: 24, Cols: 80}
+
+	u, err := s.Store.GetUserByUsername(ctx, "ALICE")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+
+	if err := s.selfMFADisable(ctx, s.renderer(nil, term), u, aud); err != nil {
+		t.Fatalf("selfMFADisable: %v", err)
+	}
+
+	// The secret must remain and no mfa_cleared event may be recorded.
+	u2, err := s.Store.GetUserByUsername(ctx, "ALICE")
+	if err != nil {
+		t.Fatalf("reload user: %v", err)
+	}
+	if u2.MFASecret == "" {
+		t.Errorf("required user: secret was cleared; admin-required MFA must not be self-disabled")
+	}
+	for _, ev := range rec.events {
+		if ev.Kind == store.AuditMFACleared {
+			t.Errorf("required user: unexpected %s audit", store.AuditMFACleared)
+		}
+	}
+}
+
 func TestUserSettingsRowsAdaptive(t *testing.T) {
 	cases := []struct {
 		name       string

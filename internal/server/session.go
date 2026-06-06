@@ -871,13 +871,50 @@ func (s *Session) stepUpPassword(ctx context.Context, r ui3270.Renderer, usernam
 	return ok, err
 }
 
-// selfMFAEnroll is a temporary stub replaced by Task 10.
+// selfMFAEnroll handles both opt-in enroll and rotate/re-enroll: a current-
+// password step-up, then the shared enrollment confirm-loop (fresh secret,
+// lastStep=0, stored on a correct code). Cancelled step-up or enrollment
+// returns to the user-settings menu.
 func (s *Session) selfMFAEnroll(ctx context.Context, conn net.Conn, term Term, r ui3270.Renderer, u store.User, aud *auditTrail) error {
-	return nil
+	ok, err := s.stepUpPassword(ctx, r, u.Username, aud)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil // cancelled
+	}
+	secret, gerr := s.generateSecret(s.mfaIssuer(ctx), u.Username)
+	if gerr != nil {
+		s.log().Error("mfa: generate secret failed", "error", gerr)
+		return gerr
+	}
+	_, _, _, cerr := s.confirmEnroll(ctx, conn, term, u, secret, aud)
+	// confirmEnroll audits mfa_enrolled + resets throttle on success; on PF3
+	// quit it returns (false,true,"",nil) → back to the menu. A render/idle
+	// error propagates so the session classifies the timeout like admin flow.
+	return cerr
 }
 
-// selfMFADisable is a temporary stub replaced by Task 10.
+// selfMFADisable removes a voluntarily-enrolled secret after a current-password
+// step-up. Callers only surface this action when !MFARequired, but re-check
+// defensively so an admin-required user can never self-disable.
 func (s *Session) selfMFADisable(ctx context.Context, r ui3270.Renderer, u store.User, aud *auditTrail) error {
+	if u.MFARequired {
+		return nil // enforcement is admin-only; never self-disable a required user
+	}
+	ok, err := s.stepUpPassword(ctx, r, u.Username, aud)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil // cancelled
+	}
+	if err := s.Store.ClearMFA(ctx, u.ID); err != nil {
+		s.log().Error("clear mfa", "error", err)
+		return err
+	}
+	aud.record(ctx, store.AuditEvent{
+		Kind: store.AuditMFACleared, Username: u.Username, Detail: "self-service"})
 	return nil
 }
 
