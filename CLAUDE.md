@@ -81,8 +81,14 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
 internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,Username,Groups}.
                   bcrypt; uniform ErrInvalidCredentials (no username-enumeration leak).
 internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, svcs,
-                  admin, status, errMsg). The user menu renders an ISPF-style fixed grid
-                  (number col 0 / name col 4 / description col 13, hard-cut 40) plus a
+                  admin, status, errMsg, page). The menu paginates (PF7/PF8) via
+                  MenuPageBounds: global/stable numbering (the returned mapping covers ALL
+                  services; only the current page's window renders, each row keeping its
+                  global number), an `ITEMS x TO y OF z` indicator right-aligned on the
+                  title row, and the `0`/`A` meta band bottom-anchored on every page above a
+                  blank separator row (menuBottomRow = BodyBottomRow-1). It renders an
+                  ISPF-style fixed grid (number col 0 / name col 4 / description col 13,
+                  hard-cut 40) plus a
                   right-hand status block (MenuStatus: User ID / Date / Time / Terminal /
                   System ID / Release; paint-time clock passed in, not read) at
                   Geometry.StatusBlockCol(). Backend host/port stay hidden (admin-only).
