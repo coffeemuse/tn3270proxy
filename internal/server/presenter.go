@@ -101,22 +101,33 @@ func (go3270Presenter) Login(conn net.Conn, term Term, status screens.MenuStatus
 func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, status screens.MenuStatus, errMsg string) (*store.Service, menuChoice, error) {
 	geom := term.Geometry()
 	status.TermType = term.Type // presenter owns the terminal-derived field
+	page := 0
 	for {
+		// Clamp the stored page each render so PF7 at the top / PF8 at the bottom
+		// re-present the same page (no drift, no error) — see MenuPageBounds.
+		page, _, _, _ = screens.MenuPageBounds(geom, len(svcs), admin, page)
 		status.Now = time.Now() // paint-time clock, refreshed every render
-		screen, mapping, cur := screens.MenuScreen(geom, svcs, admin, status, errMsg, 0)
+		screen, mapping, cur := screens.MenuScreen(geom, svcs, admin, status, errMsg, page)
 		resp, err := handleScreen(func() (go3270.Response, error) {
 			return go3270.HandleScreenAlt(
 				screen, nil, map[string]string{},
 				[]go3270.AID{go3270.AIDEnter},
-				withSilentExits([]go3270.AID{go3270.AIDPF3}),
+				withSilentExits([]go3270.AID{go3270.AIDPF3, go3270.AIDPF7, go3270.AIDPF8}),
 				screens.FieldError, cur.Row, cur.Col, conn, term.dev, term.codepage(),
 			)
 		})
 		if err != nil {
 			return nil, menuReprompt, err // choice ignored on error
 		}
-		if resp.AID == go3270.AIDPF3 {
+		switch resp.AID {
+		case go3270.AIDPF3:
 			return nil, menuQuit, nil
+		case go3270.AIDPF7:
+			page-- // clamped to 0 on the next render
+			continue
+		case go3270.AIDPF8:
+			page++ // clamped to the last page on the next render
+			continue
 		}
 		key := strings.ToUpper(strings.TrimSpace(resp.Values[screens.FieldSelection]))
 		switch choice, svc := classifyMenuSubmit(key, mapping, admin); choice {
