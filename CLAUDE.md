@@ -12,6 +12,7 @@ on the proxy's own screens). **PF3** uniformly steps back one level: admin
 sub-screen → admin menu → service menu → login screen → disconnect; PF3 at the
 service menu is a logoff, and re-login re-evaluates groups.
 Members of the reserved `ZZADMIN` group get an extra `A` menu entry opening a full-CRUD admin screen set (users / groups / services).
+Every user gets a `0` menu entry opening **User Settings** (self change-password + self MFA enroll/re-enroll/disable); MFA is opt-in, and login enforcement is secret-first (any stored secret is verified regardless of the admin `mfa_required` flag).
 
 The connect → login → menu → bridge core loop (the MVP) is **complete and on `main`**.
 Remaining work is in `docs/superpowers/ROADMAP.md`.
@@ -94,6 +95,10 @@ internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, s
                   MFA screens: EnrollMFAScreen (issuer/account/chunked key + confirm code; the
                   otpauth URI is deliberately NOT shown — manual entry is the 3270 path) and
                   VerifyMFAScreen; FieldMFACode plus admin FieldMFARequired/Status/Clear.
+                  Self-service: MenuScreen renders an always-present `0 User Settings`
+                  meta-row (beside the admin-only `A`); UserSettingsScreen renders the
+                  self-scoped settings sub-menu (FieldUSOption); FieldCurrentPassword is
+                  the step-up / change-password input.
 internal/mfa      Pure TOTP (RFC 6238, pquerna/otp, 80-bit/16-char base32) + AES-256-GCM
                   secret-at-rest. NewCipher/Seal/Open (ErrDecrypt on wrong key), GenerateSecret,
                   Chunk (ABCD EFGH…), Validate(secret, code, lastStep, now) → (ok, step) with
@@ -128,6 +133,14 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   required=false on an enrolled user keeps verifying until the secret is cleared).
                   adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go)
                   behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
+                  userSettings flow (session.go, behind the UserSettings Presenter method)
+                  handles the `0`-entry self-service: an adaptive menu (userSettingsActions)
+                  offering self change-password (re-verify current via s.Authenticate,
+                  new≠current) and MFA enroll/re-enroll/disable. confirmEnroll is the enroll
+                  confirm-loop shared with the login mfaGate; a current-password step-up
+                  (stepUpPassword) gates every MFA action; disable is allowed only when
+                  !mfa_required. Failures fold into authThrottle; audits password_self /
+                  mfa_enrolled / mfa_cleared(Detail=self-service). PF3 returns to the menu.
                   Auditor seam (best-effort store-backed auditing; nil disables) +
                   storeAuditor + per-connection auditTrail record session lifecycle events.
                   Hardening (GH #1, #18): idleConn enforces an idle *regime* the session
