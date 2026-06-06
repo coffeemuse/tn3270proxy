@@ -537,28 +537,22 @@ func (s *Session) mfaGate(ctx context.Context, conn net.Conn, term Term, identit
 	return true, "", nil // no secret, not required → no MFA
 }
 
-func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
-	issuer := s.mfaIssuer(ctx)
-	secret, gerr := s.generateSecret(issuer, u.Username)
-	if gerr != nil {
-		s.log().Error("mfa: generate secret failed", "error", gerr)
-		return false, "mfa generate error", gerr
-	}
+// confirmEnroll runs the enroll confirm-loop for an already-generated secret:
+// show the key, prompt for a code, and on a correct code seal+persist the
+// secret (lastStep=0), reset the throttle, and audit mfa_enrolled. It does NOT
+// arm any idle regime — the caller maps the outcome to its context. detail is
+// set only on a fatal error (for the caller's disconnect audit).
+func (s *Session) confirmEnroll(ctx context.Context, conn net.Conn, term Term, u store.User, secret string, aud *auditTrail) (confirmed bool, quit bool, detail string, err error) {
 	chunked := mfa.Chunk(secret)
+	issuer := s.mfaIssuer(ctx)
 	errMsg := ""
 	for {
 		code, quit, err := s.Presenter.EnrollMFA(conn, term, issuer, u.Username, chunked, errMsg)
 		if err != nil {
-			if isTimeoutErr(err) {
-				aud.record(ctx, store.AuditEvent{Kind: store.AuditLogout, Username: u.Username, Detail: "idle logout"})
-				s.armPreAuth(conn)
-				return false, "", nil
-			}
-			return false, "mfa render error", err
+			return false, false, "mfa render error", err
 		}
 		if quit {
-			s.armPreAuth(conn)
-			return false, "", nil
+			return false, true, "", nil
 		}
 		ok, step, verr := mfa.Validate(secret, code, 0, s.now())
 		if verr != nil {
@@ -577,16 +571,39 @@ func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u sto
 		}
 		enc, serr := s.MFA.Seal([]byte(secret))
 		if serr != nil {
-			return false, "mfa seal error", serr
+			return false, false, "mfa seal error", serr
 		}
 		enrolledAt := s.now().UTC().Format(time.RFC3339)
 		if err := s.Store.StoreMFAEnrollment(ctx, u.ID, enc, enrolledAt, int64(step)); err != nil {
-			return false, "mfa store error", err
+			return false, false, "mfa store error", err
 		}
 		s.Throttle.Reset(u.Username)
 		aud.record(ctx, store.AuditEvent{Kind: store.AuditMFAEnrolled, Username: u.Username})
-		return true, "", nil
+		return true, false, "", nil
 	}
+}
+
+func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
+	issuer := s.mfaIssuer(ctx)
+	secret, gerr := s.generateSecret(issuer, u.Username)
+	if gerr != nil {
+		s.log().Error("mfa: generate secret failed", "error", gerr)
+		return false, "mfa generate error", gerr
+	}
+	_, quit, detail, err := s.confirmEnroll(ctx, conn, term, u, secret, aud)
+	if err != nil {
+		if isTimeoutErr(err) {
+			aud.record(ctx, store.AuditEvent{Kind: store.AuditLogout, Username: u.Username, Detail: "idle logout"})
+			s.armPreAuth(conn)
+			return false, "", nil
+		}
+		return false, detail, err
+	}
+	if quit {
+		s.armPreAuth(conn)
+		return false, "", nil
+	}
+	return true, "", nil
 }
 
 func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
