@@ -88,3 +88,35 @@ func TestVerifyMFAScreen(t *testing.T) {
 		t.Fatal("cursor should land on the code field")
 	}
 }
+
+func TestMFAScreensPalette(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+
+	enroll, _, _ := EnrollMFAScreen(g, "TN3270", "ROBERT", "ABCD EFGH", "")
+	et, ok := fieldByContent(enroll, "MFA ENROLLMENT - SECURITY KEY SETUP")
+	if !ok || et.Row != 0 || et.Color != go3270.White || !et.Intense {
+		t.Errorf("enroll title = %+v ok=%v, want row 0 white intense", et, ok)
+	}
+	caution, ok := fieldByContent(enroll, "Multi-factor authentication is now required for your account.")
+	if !ok || caution.Color != go3270.Yellow || !caution.Intense {
+		t.Errorf("caution = %+v ok=%v, want yellow intense", caution, ok)
+	}
+	ec, ok := fieldByName(enroll, FieldMFACode)
+	if !ok || ec.Color != go3270.Green {
+		t.Errorf("enroll code = %+v ok=%v, want green", ec, ok)
+	}
+	em, _ := fieldByName(enroll, FieldError)
+	if em.Row != 2 {
+		t.Errorf("enroll message row = %d, want 2", em.Row)
+	}
+
+	verify, _, _ := VerifyMFAScreen(g, "")
+	vt, ok := fieldByContent(verify, "MFA VERIFICATION")
+	if !ok || vt.Row != 0 || vt.Color != go3270.White || !vt.Intense {
+		t.Errorf("verify title = %+v ok=%v, want row 0 white intense", vt, ok)
+	}
+	vm, _ := fieldByName(verify, FieldError)
+	if vm.Row != 2 {
+		t.Errorf("verify message row = %d, want 2", vm.Row)
+	}
+}
