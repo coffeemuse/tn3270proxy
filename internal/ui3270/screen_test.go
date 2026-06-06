@@ -19,7 +19,12 @@
 
 package ui3270
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/racingmars/go3270"
+)
 
 func TestBuildListScreenCursorPopulated(t *testing.T) {
 	_, cur := buildListScreen(24, ListView{Rows: []string{"alice", "bob"}})
@@ -69,5 +74,185 @@ func TestBuildFormScreenReadOnlyField(t *testing.T) {
 	}
 	if sawWritableUsername {
 		t.Errorf("read-only field must not be a writable input")
+	}
+}
+
+// fieldByName returns the first field with the given Name (writable inputs).
+func fieldByName(s go3270.Screen, name string) (go3270.Field, bool) {
+	for _, f := range s {
+		if f.Name == name {
+			return f, true
+		}
+	}
+	return go3270.Field{}, false
+}
+
+func TestBuildFormScreenLongLabelInputColumn(t *testing.T) {
+	// "Auth Fail Window (min):" is 23 chars; the input attribute must sit at
+	// col 27 and the cursor one right, so the label can't bleed into the input
+	// buffer (GH #71).
+	label := "Auth Fail Window (min):"
+	screen, cur := buildFormScreen(24, FormView{Fields: []FormField{
+		{Name: "X", Label: label, Length: 8},
+	}})
+	in, ok := fieldByName(screen, "X")
+	if !ok {
+		t.Fatal("input field X not found")
+	}
+	if in.Col != 27 {
+		t.Errorf("input attribute col = %d, want 27", in.Col)
+	}
+	if cur != (Cursor{Row: 3, Col: 28}) {
+		t.Errorf("cursor = %+v, want {3,28}", cur)
+	}
+	// Geometry guard: the label's last content column is strictly left of the
+	// input attribute byte. Safe to use the full label length here because this
+	// label (23) is well under labelMax, so truncRunes is a no-op.
+	if last := 2 + len(label); last >= in.Col {
+		t.Errorf("label ends at col %d, overlaps input attr at %d", last, in.Col)
+	}
+}
+
+func TestBuildFormScreenShortLabelUnchanged(t *testing.T) {
+	// A ≤12-char dot-leader label keeps the historical col 16 / cursor {3,17}
+	// (byte-identical to pre-#71 — regression guard for every existing form).
+	screen, cur := buildFormScreen(24, FormView{Fields: []FormField{
+		{Name: "A", Label: "Group name .", Length: 32}, // 12 chars
+	}})
+	in, _ := fieldByName(screen, "A")
+	if in.Col != 16 {
+		t.Errorf("input attribute col = %d, want 16", in.Col)
+	}
+	if cur != (Cursor{Row: 3, Col: 17}) {
+		t.Errorf("cursor = %+v, want {3,17}", cur)
+	}
+}
+
+func TestBuildFormScreenInputColumnUsesLongestLabel(t *testing.T) {
+	// Mixed lengths: both rows' inputs align to the longest label
+	// ("Auth Delay Base (sec):", 22 → col 26).
+	screen, _ := buildFormScreen(24, FormView{Fields: []FormField{
+		{Name: "SHORT", Label: "MOTD File:", Length: 8},            // 10
+		{Name: "LONG", Label: "Auth Delay Base (sec):", Length: 8}, // 22
+	}})
+	for _, name := range []string{"SHORT", "LONG"} {
+		in, ok := fieldByName(screen, name)
+		if !ok {
+			t.Fatalf("input field %s not found", name)
+		}
+		if in.Col != 26 {
+			t.Errorf("%s input col = %d, want 26", name, in.Col)
+		}
+	}
+}
+
+func TestBuildFormScreenStopFieldRebases(t *testing.T) {
+	// Stop field follows the dynamic column: inputCol+1+Length = 26+1+8 = 35.
+	screen, _ := buildFormScreen(24, FormView{Fields: []FormField{
+		{Name: "LONG", Label: "Auth Delay Base (sec):", Length: 8}, // inputCol 26
+	}})
+	var sawStop bool
+	for _, f := range screen {
+		if f.Row == 3 && f.Col == 35 && f.Name == "" && f.Content == "" && !f.Write {
+			sawStop = true
+		}
+	}
+	if !sawStop {
+		t.Errorf("stop field at (3,35) not found")
+	}
+}
+
+func TestBuildFormScreenReadOnlyUsesDynamicColumn(t *testing.T) {
+	// A read-only value's attribute byte aligns with the dynamic input column
+	// (27 here), not a hardcoded 16, so it lines up with editable rows.
+	screen, _ := buildFormScreen(24, FormView{Fields: []FormField{
+		{Name: "RO", Label: "Auth Fail Window (min):", Value: "V", ReadOnly: true}, // 23 → col 27
+		{Name: "ED", Label: "Auth Fail Window (min):", Length: 8},
+	}})
+	valCol := -1
+	for _, f := range screen {
+		if f.Content == "V" && !f.Write {
+			valCol = f.Col
+		}
+	}
+	if valCol != 27 {
+		t.Errorf("read-only value attribute col = %d, want 27", valCol)
+	}
+}
+
+func TestBuildFormScreenTruncatesPathologicalLabel(t *testing.T) {
+	// A label longer than the ceiling allows is truncated so it can never reach
+	// the input attribute byte (defense in depth, GH #71).
+	screen, _ := buildFormScreen(24, FormView{Fields: []FormField{
+		{Name: "P", Label: strings.Repeat("X", 80), Length: 8},
+	}})
+	in, _ := fieldByName(screen, "P")
+	if in.Col != 63 { // clamped to the ceiling
+		t.Errorf("input col = %d, want ceiling 63", in.Col)
+	}
+	labelLen := -1
+	for _, f := range screen {
+		if f.Row == 3 && f.Col == 2 { // the label attribute byte
+			labelLen = len([]rune(f.Content))
+		}
+	}
+	if labelLen != 59 { // formLabelMax(63)
+		t.Errorf("label truncated to %d runes, want 59", labelLen)
+	}
+	if last := 2 + labelLen; last >= in.Col {
+		t.Errorf("truncated label reaches col %d, overlaps input attr at %d", last, in.Col)
+	}
+}
+
+func TestBuildFormScreenDotLeader(t *testing.T) {
+	// With DotLeader on, labels are dot-leader padded to the label-field width so
+	// colons align; the dynamic input column is unchanged (still driven by the
+	// longest RAW label, 23 → col 27).
+	fields := []FormField{
+		{Name: "A", Label: "MOTD File:", Length: 8},
+		{Name: "B", Label: "Auth Fail Window (min):", Length: 8},
+	}
+	screen, _ := buildFormScreen(24, FormView{DotLeader: true, Fields: fields})
+	want := map[int]string{
+		3: "MOTD File . . . . . . :",
+		5: "Auth Fail Window (min):",
+	}
+	seen := 0
+	for _, f := range screen {
+		if w, ok := want[f.Row]; ok && f.Col == 2 {
+			seen++
+			if f.Content != w {
+				t.Errorf("row %d label = %q, want %q", f.Row, f.Content, w)
+			}
+		}
+	}
+	if seen != len(want) {
+		t.Errorf("found %d of %d expected label rows", seen, len(want))
+	}
+	in, ok := fieldByName(screen, "A")
+	if !ok {
+		t.Fatal("input field A not found")
+	}
+	if in.Col != 27 {
+		t.Errorf("input col = %d, want 27 (unchanged by dot-leader)", in.Col)
+	}
+}
+
+func TestBuildFormScreenDotLeaderOffUnchanged(t *testing.T) {
+	// Default (DotLeader off): label rendered raw (no dot fill).
+	screen, _ := buildFormScreen(24, FormView{Fields: []FormField{
+		{Name: "A", Label: "MOTD File:", Length: 8},
+	}})
+	found := false
+	for _, f := range screen {
+		if f.Row == 3 && f.Col == 2 {
+			found = true
+			if f.Content != "MOTD File:" {
+				t.Errorf("row 3 label = %q, want raw %q", f.Content, "MOTD File:")
+			}
+		}
+	}
+	if !found {
+		t.Error("label field at row 3 col 2 not found in screen")
 	}
 }

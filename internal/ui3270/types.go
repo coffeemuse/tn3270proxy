@@ -43,6 +43,7 @@ type FormField struct {
 type FormView struct {
 	Title, ErrMsg string
 	Fields        []FormField
+	DotLeader     bool // render labels with right-aligned-colon dot leaders
 }
 
 // ListAction is what the user did on a list screen. Cmd==0 && PF==0 ⇒ plain Enter.
@@ -102,4 +103,7 @@ type FormConfig struct {
 	// place) instead of returning to the caller; the user leaves via PF3
 	// (Cancel). Default false: a successful Submit returns, as add/edit forms do.
 	StayOnSave bool
+	// DotLeader renders the form's labels with right-aligned colons and dot
+	// leaders (ISPF-style) so colons line up across rows. Default off.
+	DotLeader bool
 }

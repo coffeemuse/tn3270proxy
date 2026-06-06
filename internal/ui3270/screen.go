@@ -76,28 +76,40 @@ func buildFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 	if max := formMaxFields(rows); len(fields) > max {
 		fields = fields[:max]
 	}
+	// Place the input column past the longest label so label text can never
+	// overrun the input field's buffer (GH #71). Forms whose labels are ≤12
+	// chars compute the historical col 16 and render byte-identically.
+	maxLabel := 0
+	for _, f := range fields {
+		if n := len([]rune(f.Label)); n > maxLabel {
+			maxLabel = n
+		}
+	}
+	inputCol := formInputCol(maxLabel)
+	labelMax := formLabelMax(inputCol)
 	cur := Cursor{Row: 0, Col: 0}
 	for i, f := range fields {
 		row := 3 + 2*i
+		label := truncRunes(f.Label, labelMax)
+		if v.DotLeader {
+			label = dotLeaderLabel(f.Label, labelMax)
+		}
 		if f.ReadOnly {
 			// Display-only: label + static value, no writable input, never the
 			// cursor target.
 			screen = append(screen,
-				go3270.Field{Row: row, Col: 2, Content: f.Label},
-				go3270.Field{Row: row, Col: 16, Content: f.Value},
+				go3270.Field{Row: row, Col: labelAttrCol, Content: label},
+				go3270.Field{Row: row, Col: inputCol, Content: f.Value},
 			)
 			continue
 		}
-		stopCol := 17 + f.Length
-		if stopCol > 79 {
-			stopCol = 79
-		}
-		input := go3270.Field{Row: row, Col: 16, Name: f.Name, Write: true, Hidden: f.Hidden, Content: f.Value, Highlighting: go3270.Underscore}
+		stopCol := min(inputCol+1+f.Length, 79)
+		input := go3270.Field{Row: row, Col: inputCol, Name: f.Name, Write: true, Hidden: f.Hidden, Content: f.Value, Highlighting: go3270.Underscore}
 		if cur == (Cursor{Row: 0, Col: 0}) {
 			cur = Cursor{Row: input.Row, Col: input.Col + 1}
 		}
 		screen = append(screen,
-			go3270.Field{Row: row, Col: 2, Content: f.Label},
+			go3270.Field{Row: row, Col: labelAttrCol, Content: label},
 			input,
 			go3270.Field{Row: row, Col: stopCol}, // stop field
 		)

@@ -42,6 +42,47 @@ func listPageSize(rows int) int { return normRows(rows) - 10 }
 // formMaxFields is how many labeled inputs fit on a form (9 on MOD 2).
 func formMaxFields(rows int) int { return (normRows(rows)-8)/2 + 1 }
 
+// Form label/input column geometry (GH #71). The label attribute byte sits at
+// labelAttrCol (content one column right); the input attribute byte is computed
+// from the longest label so label text can never overrun it.
+const (
+	labelAttrCol  = 2  // label field attribute byte; content begins at col 3
+	labelGutter   = 1  // ≥1 blank column between label end and input attribute
+	minInputCol   = 16 // floor: preserves the historical layout for ≤12-char labels
+	minInputWidth = 16 // columns reserved right of the ceiling input attr (~15 usable data cols)
+)
+
+// formInputCol returns the input field's attribute-byte column for a form whose
+// longest label is maxLabel runes. Floored at minInputCol so short-label forms
+// (every form whose labels are ≤12 chars) compute the historical col 16 and
+// render byte-identically; clamped to a ceiling that preserves minInputWidth
+// input columns even for a pathological label.
+func formInputCol(maxLabel int) int {
+	col := labelAttrCol + 1 + maxLabel + labelGutter
+	col = max(col, minInputCol)
+	col = min(col, 79-minInputWidth)
+	return col
+}
+
+// formLabelMax returns the longest label content (in runes) that fits before the
+// input attribute byte at inputCol. In the normal case this equals the form's
+// longest label (a no-op); it only bites when inputCol hit the ceiling.
+func formLabelMax(inputCol int) int {
+	return inputCol - labelGutter - labelAttrCol - 1
+}
+
+// truncRunes returns s limited to at most n runes (n<0 ⇒ empty).
+func truncRunes(s string, n int) string {
+	if n < 0 {
+		n = 0
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}
+
 // pageBounds clamps page to the data and returns slice bounds + row indicator.
 func pageBounds(page, total, rows int) (clamped, start, end int, info string) {
 	if total == 0 {

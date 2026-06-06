@@ -56,6 +56,7 @@ func (f *adminFlow) systemParams(ctx context.Context, conn net.Conn) error {
 		// Enter saves in place and stays on the form; PF3 returns to the admin
 		// menu. (Unlike the add/edit forms, there is no "done" terminal state.)
 		StayOnSave: true,
+		DotLeader:  true,
 		Fields:     fields,
 		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
 			// Normalize + validate all fields before touching the store (all-or-nothing).
