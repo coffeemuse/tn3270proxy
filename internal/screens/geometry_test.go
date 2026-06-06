@@ -23,8 +23,8 @@ import "testing"
 
 func TestGeometryFormulas(t *testing.T) {
 	cases := []struct {
-		name                                  string
-		g                                     Geometry
+		name                                    string
+		g                                       Geometry
 		help, errRow, legend, input, page, form int
 	}{
 		{"zero value", Geometry{}, 23, 21, 20, 19, 14, 9},
