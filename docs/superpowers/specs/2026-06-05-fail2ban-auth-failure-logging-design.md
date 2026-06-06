@@ -30,10 +30,11 @@ Every prerequisite the original issue named has landed since it was filed:
   whichever sink suits their pipeline. The current password-fail site already
   emits `s.log().Warn("auth failed", "user", user)` on a connection logger
   pre-tagged with `remote=IP:PORT`.
-- **Trust signal (#43).** `Session.Trusted` is the authoritative combined trust
-  decision (config `limits.trusted_cidrs` **and** the DB-backed trusted-network
-  list), set in `sessionFor` via `limits.Trust.IsTrusted(addr)`. Available
-  directly at the failure sites.
+- **Trust signal (#43).** `Session.Trusted` is the authoritative trust decision —
+  the DB-backed trusted-network list (admin UI → Trusted Networks; the old
+  `limits.trusted_cidrs` config key was removed in favour of it), set in
+  `sessionFor` via `limits.Trust.IsTrusted(addr)`. Available directly at the
+  failure sites.
 - **Auth throttling (#48).** Shipped as per-username **linear backoff**
   (delay-then-re-prompt), **not** attempt-cap-then-disconnect.
 
@@ -173,8 +174,8 @@ already there):
 
 - **#48** (throttling) — done; its backoff-not-lockout shape is why the second
   line is dropped and why this surface is the real ban mechanism.
-- **#43** (DB trust list) / `limits.trusted_cidrs` — source of the `trusted`
-  marker via `Session.Trusted`.
+- **#43** (DB-managed trusted-network list) — source of the `trusted` marker via
+  `Session.Trusted`.
 - **#40** (admin Audit viewer) — forensic counterpart; this is the real-time ban
   surface.
 - **#66** (release docs) — the sample filter/jail folds into the admin guide.
