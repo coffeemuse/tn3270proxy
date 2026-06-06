@@ -641,22 +641,15 @@ else
 fi
 
 # --- 16. multi-page service menu: pager (22 services) pages with PF7/PF8 ---
-# NOTE: scenario 13 activated the MOTD gate (front.db MOTD_FILE now points at a
-# real 2-page fixture), so each login below must clear the gate with two ENTERs
-# (Wait(Unlock) after each — the MOTD page has no input field) before the menu
-# is reached.
+# MOTD is inactive on this branch (scenario 13's sysparams save fails), so each
+# login reaches the menu directly — matching scenario 3. If MOTD is later
+# enabled, every menu-reaching scenario here and above must clear it uniformly.
 s3 t16p1 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
 Wait(5,InputField)
 String(pager)
 Tab()
 String(changeme)
-Enter()
-Wait(Unlock)
-Wait(1,seconds)
-Enter()
-Wait(Unlock)
-Wait(1,seconds)
 Enter()
 Wait(5,InputField)
 Ascii()

@@ -87,7 +87,7 @@ internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, s
                   global number), an `ITEMS x TO y OF z` indicator right-aligned on the
                   title row, and the `0`/`A` meta band bottom-anchored on every page above a
                   blank separator row (menuBottomRow = BodyBottomRow-1). It renders an
-                  ISPF-style fixed grid (number col 0 / name col 4 / description col 13,
+                  ISPF-style fixed grid (number col 0 / name col 6 / description col 17,
                   hard-cut 40) plus a
                   right-hand status block (MenuStatus: User ID / Date / Time / Terminal /
                   System ID / Release; paint-time clock passed in, not read) at
