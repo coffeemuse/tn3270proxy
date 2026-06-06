@@ -791,16 +791,92 @@ func (s *Session) userSettings(ctx context.Context, conn net.Conn, term Term, id
 	}
 }
 
-// --- temporary stubs, replaced by later tasks (Tasks 9-10) ---
-
+// changePassword runs the self-service change-password form: re-verify the
+// current password (proof of possession), enforce new != current, then persist.
 func (s *Session) changePassword(ctx context.Context, r ui3270.Renderer, identity auth.Identity, aud *auditTrail) error {
-	return nil
+	fields := []ui3270.FormField{
+		{Name: screens.FieldCurrentPassword, Label: "Current pwd", Hidden: true, Length: 32},
+		{Name: screens.FieldPassword, Label: "New pwd . .", Hidden: true, Length: 32},
+		{Name: screens.FieldRetype, Label: "Retype  . .", Hidden: true, Length: 32},
+	}
+	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
+		Title:  "TN3270 GATEWAY: CHANGE PASSWORD",
+		Fields: fields,
+		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
+			current := vals[screens.FieldCurrentPassword]
+			if _, err := s.Authenticate(ctx, s.Store, identity.Username, current); err != nil {
+				if errors.Is(err, auth.ErrInvalidCredentials) {
+					delay, count := s.failDelay(ctx, identity.Username)
+					s.logAuthFailure(s.log(), "invalid_credentials")
+					aud.record(ctx, store.AuditEvent{
+						Kind: store.AuditAuthFail, Username: identity.Username, Detail: throttleDetail("", delay, count)})
+					s.sleepFor(delay)
+					return "Current password is incorrect", nil
+				}
+				s.log().Error("self change-password auth error", "error", err)
+				return "Temporary error; try again", nil
+			}
+			pass, _, msg := passwordFromForm(vals, true)
+			if msg != "" {
+				return msg, nil
+			}
+			if pass == current {
+				return "New password must differ from current", nil
+			}
+			hash, err := auth.HashPassword(pass)
+			if err != nil {
+				s.log().Error("hash password", "error", err)
+				return "Could not set password; try again", nil
+			}
+			if err := s.Store.SetPassword(ctx, identity.UserID, hash); err != nil {
+				s.log().Error("set password", "error", err)
+				return "Could not set password; try again", nil
+			}
+			s.Throttle.Reset(identity.Username)
+			aud.record(ctx, store.AuditEvent{Kind: store.AuditPasswordSelf, Username: identity.Username})
+			return "", nil // success → RunForm returns to the user-settings menu
+		},
+	})
 }
 
+// stepUpPassword re-prompts for the current password and verifies it. ok=true
+// means verified (proceed); ok=false with err=nil means the user cancelled
+// (PF3). Failures fold into the shared throttle. Used as the step-up before
+// MFA enroll/re-enroll/disable.
+func (s *Session) stepUpPassword(ctx context.Context, r ui3270.Renderer, username string, aud *auditTrail) (bool, error) {
+	ok := false
+	err := ui3270.RunForm(ctx, r, ui3270.FormConfig{
+		Title: "TN3270 GATEWAY: CONFIRM PASSWORD",
+		Fields: []ui3270.FormField{
+			{Name: screens.FieldCurrentPassword, Label: "Password . .", Hidden: true, Length: 32},
+		},
+		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
+			if _, e := s.Authenticate(ctx, s.Store, username, vals[screens.FieldCurrentPassword]); e != nil {
+				if errors.Is(e, auth.ErrInvalidCredentials) {
+					delay, count := s.failDelay(ctx, username)
+					s.logAuthFailure(s.log(), "invalid_credentials")
+					aud.record(ctx, store.AuditEvent{
+						Kind: store.AuditAuthFail, Username: username, Detail: throttleDetail("", delay, count)})
+					s.sleepFor(delay)
+					return "Password is incorrect", nil
+				}
+				s.log().Error("step-up auth error", "error", e)
+				return "Temporary error; try again", nil
+			}
+			s.Throttle.Reset(username)
+			ok = true
+			return "", nil // verified → form returns
+		},
+	})
+	return ok, err
+}
+
+// selfMFAEnroll is a temporary stub replaced by Task 10.
 func (s *Session) selfMFAEnroll(ctx context.Context, conn net.Conn, term Term, r ui3270.Renderer, u store.User, aud *auditTrail) error {
 	return nil
 }
 
+// selfMFADisable is a temporary stub replaced by Task 10.
 func (s *Session) selfMFADisable(ctx context.Context, r ui3270.Renderer, u store.User, aud *auditTrail) error {
 	return nil
 }

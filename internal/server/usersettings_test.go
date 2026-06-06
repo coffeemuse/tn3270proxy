@@ -19,7 +19,79 @@
 
 package server
 
-import "testing"
+import (
+	"context"
+	"net"
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
+	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
+	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
+)
+
+func TestSelfChangePassword(t *testing.T) {
+	ctx := context.Background()
+
+	// Build a real store and seed ALICE with a known bcrypt hash.
+	p := &fakePresenter{termType: "IBM-3278-2-E"}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.Authenticate = auth.Authenticate
+	s.Throttle = newAuthThrottle()
+	s.Now = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	var slept []time.Duration
+	s.Sleep = func(d time.Duration) { slept = append(slept, d) }
+
+	// Seed ALICE with "oldpass" (bcrypt hashed).
+	hash, err := auth.HashPassword("oldpass")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	uid, err := s.Store.CreateUser(ctx, "ALICE", hash)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	// Wire a fake renderer that returns the change-password form values.
+	fp := &fakeAdminPresenter{
+		forms: []ui3270.FormAction{{Values: map[string]string{
+			screens.FieldCurrentPassword: "oldpass",
+			screens.FieldPassword:        "newpass",
+			screens.FieldRetype:          "newpass",
+		}}},
+	}
+	s.AdminRenderer = func(_ net.Conn, _ Term) ui3270.Renderer { return fp }
+
+	// Build an audit trail backed by a recording auditor.
+	rec := &recordingAuditor{}
+	aud := &auditTrail{auditor: rec}
+
+	term := Term{Type: "IBM-3278-2", Rows: 24, Cols: 80}
+	identity := auth.Identity{UserID: uid, Username: "ALICE"}
+
+	if err := s.changePassword(ctx, s.renderer(nil, term), identity, aud); err != nil {
+		t.Fatalf("changePassword: %v", err)
+	}
+
+	// Assert: new password authenticates correctly.
+	if _, err := auth.Authenticate(ctx, s.Store, "ALICE", "newpass"); err != nil {
+		t.Errorf("authenticate with newpass: %v", err)
+	}
+
+	// Assert: old password no longer works.
+	if _, err := auth.Authenticate(ctx, s.Store, "ALICE", "oldpass"); err == nil {
+		t.Error("oldpass should no longer authenticate")
+	}
+
+	// Assert: audit trail includes password_self event.
+	if !slices.ContainsFunc(rec.events, func(ev store.AuditEvent) bool {
+		return ev.Kind == store.AuditPasswordSelf && ev.Username == "ALICE"
+	}) {
+		t.Errorf("no %s audit event for ALICE; got %v", store.AuditPasswordSelf, rec.kinds())
+	}
+}
 
 func TestUserSettingsRowsAdaptive(t *testing.T) {
 	cases := []struct {
