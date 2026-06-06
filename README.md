@@ -22,6 +22,15 @@ Plain `go build` without ldflags still reports a useful version — a short VCS 
 hash from `runtime/debug.ReadBuildInfo`, with a `-dirty` suffix when the working tree
 has uncommitted changes.
 
+## Container images & releases
+
+Tagged releases (`vX.Y.Z`) publish cross-platform binaries (with `SHA256SUMS`) to the
+GitHub Releases page, and multi-arch Docker images to
+`ghcr.io/coffeemuse/tn3270proxy` (tags: `X.Y.Z`, `X.Y`, `X`, and `latest` for stable
+releases). See [`examples/docker-compose.yml`](examples/docker-compose.yml) for a
+ready-to-run deployment (persistent DB volume, MFA key, config/TLS mounts, and the
+first-admin bootstrap step).
+
 ## Bootstrap (first admin account)
 
 A fresh database has no admin, so the admin UI (menu entry `A`) is unreachable. Create the
