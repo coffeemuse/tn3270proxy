@@ -45,14 +45,8 @@ func (g Geometry) norm() Geometry {
 // HelpRow is the PF-key help line (last row; 23 on MOD 2).
 func (g Geometry) HelpRow() int { return g.norm().Rows - 1 }
 
-// ErrorRow is the red error/message line (21 on MOD 2).
-func (g Geometry) ErrorRow() int { return g.norm().Rows - 3 }
-
 // LegendRow is the admin-list line-command legend (20 on MOD 2).
 func (g Geometry) LegendRow() int { return g.norm().Rows - 4 }
-
-// InputRow is the "===>" command/selection input line (19 on MOD 2).
-func (g Geometry) InputRow() int { return g.norm().Rows - 5 }
 
 // ListPageSize is how many data rows fit on an admin list screen
 // (rows 4 .. Rows-7; 14 on MOD 2).
