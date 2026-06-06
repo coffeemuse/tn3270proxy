@@ -103,7 +103,7 @@ func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admi
 	status.TermType = term.Type // presenter owns the terminal-derived field
 	for {
 		status.Now = time.Now() // paint-time clock, refreshed every render
-		screen, mapping, cur := screens.MenuScreen(geom, svcs, admin, status, errMsg)
+		screen, mapping, cur := screens.MenuScreen(geom, svcs, admin, status, errMsg, 0)
 		resp, err := handleScreen(func() (go3270.Response, error) {
 			return go3270.HandleScreenAlt(
 				screen, nil, map[string]string{},

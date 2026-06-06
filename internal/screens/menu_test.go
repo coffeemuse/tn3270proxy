@@ -34,7 +34,7 @@ func TestMenuScreenMapping(t *testing.T) {
 		{ID: 1, Name: "PROD CICS", Host: "prod", Port: 23},
 		{ID: 2, Name: "TEST CICS", Host: "test", Port: 992, TLS: true},
 	}
-	screen, mapping, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "")
+	screen, mapping, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "", 0)
 
 	if len(mapping) != 2 {
 		t.Fatalf("mapping has %d entries, want 2", len(mapping))
@@ -52,7 +52,7 @@ func TestMenuScreenMapping(t *testing.T) {
 }
 
 func TestMenuScreenEmpty(t *testing.T) {
-	screen, mapping, _ := MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "")
+	screen, mapping, _ := MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "", 0)
 	if len(mapping) != 0 {
 		t.Errorf("mapping should be empty, got %d", len(mapping))
 	}
@@ -62,7 +62,7 @@ func TestMenuScreenEmpty(t *testing.T) {
 }
 
 func TestMenuScreenShowsError(t *testing.T) {
-	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "Backend unreachable")
+	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "Backend unreachable", 0)
 	f, ok := fieldByName(screen, FieldError)
 	if !ok {
 		t.Fatalf("missing error field")
@@ -73,7 +73,7 @@ func TestMenuScreenShowsError(t *testing.T) {
 }
 
 func TestMenuScreenAdminEntry(t *testing.T) {
-	screen, mapping, _ := MenuScreen(DefaultGeometry, nil, true, MenuStatus{}, "")
+	screen, mapping, _ := MenuScreen(DefaultGeometry, nil, true, MenuStatus{}, "", 0)
 	if len(mapping) != 0 {
 		t.Errorf("mapping = %v, want empty (admin entry is not a service)", mapping)
 	}
@@ -86,7 +86,7 @@ func TestMenuScreenAdminEntry(t *testing.T) {
 		t.Errorf("selection field must accept 'A' for admins: %+v", f)
 	}
 
-	screen, _, _ = MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "")
+	screen, _, _ = MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "", 0)
 	if screenContains(screen, "Administration") {
 		t.Errorf("non-admin must not see the admin entry")
 	}
@@ -102,7 +102,7 @@ func TestMenuScreenAdminEntryClampedWithManyServices(t *testing.T) {
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
 	}
-	screen, _, _ := MenuScreen(g, svcs, true, MenuStatus{}, "")
+	screen, _, _ := MenuScreen(g, svcs, true, MenuStatus{}, "", 0)
 	for _, f := range screen {
 		if strings.Contains(f.Content, "Administration") && f.Row > g.BodyBottomRow() {
 			t.Errorf("admin entry at row %d beyond body bottom %d", f.Row, g.BodyBottomRow())
@@ -111,7 +111,7 @@ func TestMenuScreenAdminEntryClampedWithManyServices(t *testing.T) {
 }
 
 func TestMenuScreenHelpSaysLogoff(t *testing.T) {
-	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "")
+	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "", 0)
 	if !screenContains(screen, "PF3=Logoff") {
 		t.Errorf("menu help should say PF3=Logoff")
 	}
@@ -119,7 +119,7 @@ func TestMenuScreenHelpSaysLogoff(t *testing.T) {
 
 func TestMenuScreenTopBand(t *testing.T) {
 	g := Geometry{Rows: 24, Cols: 80}
-	screen, _, cur := MenuScreen(g, nil, false, MenuStatus{}, "oops")
+	screen, _, cur := MenuScreen(g, nil, false, MenuStatus{}, "oops", 0)
 
 	sel, ok := fieldByName(screen, FieldSelection)
 	if !ok {
@@ -146,7 +146,7 @@ func TestMenuScreenTopBand(t *testing.T) {
 
 func TestMenuScreenBandsAcrossGeometries(t *testing.T) {
 	for _, g := range []Geometry{{Rows: 24, Cols: 80}, {Rows: 32, Cols: 80}, {Rows: 43, Cols: 80}} {
-		screen, _, _ := MenuScreen(g, nil, false, MenuStatus{}, "err")
+		screen, _, _ := MenuScreen(g, nil, false, MenuStatus{}, "err", 0)
 		sel, ok := fieldByName(screen, FieldSelection)
 		if !ok || sel.Row != g.CommandRow() {
 			t.Errorf("%+v: selection row = %d, want CommandRow %d", g, sel.Row, g.CommandRow())
@@ -158,17 +158,18 @@ func TestMenuScreenBandsAcrossGeometries(t *testing.T) {
 	}
 }
 
-func TestMenuScreenCapacityGrowsAndTruncates(t *testing.T) {
+func TestMenuScreenMappingCoversAllServices(t *testing.T) {
 	svcs := make([]store.Service, 30)
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
 	}
 
-	// MOD 2: truncated to capacity; nothing may touch the input row or below.
+	// Mapping is global: every service is selectable by number regardless of
+	// page. The rendered page window must never touch the help row or below.
 	g2 := Geometry{Rows: 24, Cols: 80}
-	screen, mapping, _ := MenuScreen(g2, svcs, false, MenuStatus{}, "")
-	if len(mapping) != g2.MenuCapacity(false) {
-		t.Errorf("MOD 2 mapping = %d entries, want %d", len(mapping), g2.MenuCapacity(false))
+	screen, mapping, _ := MenuScreen(g2, svcs, false, MenuStatus{}, "", 0)
+	if len(mapping) != len(svcs) {
+		t.Errorf("MOD 2 mapping = %d entries, want %d (full list)", len(mapping), len(svcs))
 	}
 	for _, f := range screen {
 		if f.Row > g2.HelpRow() {
@@ -176,11 +177,11 @@ func TestMenuScreenCapacityGrowsAndTruncates(t *testing.T) {
 		}
 	}
 
-	// MOD 3: more services fit.
+	// MOD 3 has the same full mapping (paging, not truncation).
 	g3 := Geometry{Rows: 32, Cols: 80}
-	_, mapping, _ = MenuScreen(g3, svcs, false, MenuStatus{}, "")
-	if len(mapping) != g3.MenuCapacity(false) {
-		t.Errorf("MOD 3 mapping = %d entries, want %d", len(mapping), g3.MenuCapacity(false))
+	_, mapping, _ = MenuScreen(g3, svcs, false, MenuStatus{}, "", 0)
+	if len(mapping) != len(svcs) {
+		t.Errorf("MOD 3 mapping = %d entries, want %d (full list)", len(mapping), len(svcs))
 	}
 }
 
@@ -188,7 +189,7 @@ func TestMenuRendersISPFStyleAndHidesHostPort(t *testing.T) {
 	svcs := []store.Service{
 		{Name: "PRODCICS", Description: "Production CICS Region", Host: "secret.internal", Port: 992},
 	}
-	screen, mapping, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "")
+	screen, mapping, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "", 0)
 	if _, ok := mapping["1"]; !ok {
 		t.Fatal("selection 1 not mapped")
 	}
@@ -211,7 +212,7 @@ func TestMenuRendersISPFStyleAndHidesHostPort(t *testing.T) {
 }
 
 func TestMenuScreenCursor(t *testing.T) {
-	screen, _, cur := MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "")
+	screen, _, cur := MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "", 0)
 	sf, ok := fieldByName(screen, FieldSelection)
 	if !ok {
 		t.Fatalf("missing %q field", FieldSelection)
@@ -227,9 +228,9 @@ func TestMenuScreenAdminEntryNeverCollidesWhenFull(t *testing.T) {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
 	}
 	for _, g := range []Geometry{{Rows: 24, Cols: 80}, {Rows: 43, Cols: 80}} {
-		screen, mapping, _ := MenuScreen(g, svcs, true, MenuStatus{}, "")
-		if len(mapping) != g.MenuCapacity(true) { // one less: row reserved for A entry
-			t.Errorf("%+v: admin mapping = %d entries, want %d", g, len(mapping), g.MenuCapacity(true))
+		screen, mapping, _ := MenuScreen(g, svcs, true, MenuStatus{}, "", 0)
+		if len(mapping) != len(svcs) { // global mapping covers every service
+			t.Errorf("%+v: admin mapping = %d entries, want %d", g, len(mapping), len(svcs))
 		}
 		adminRow := -1
 		occupied := map[int]int{}
@@ -260,7 +261,7 @@ func TestMenuScreenStatusBlock(t *testing.T) {
 		Release:  "v0.8.0",
 		Now:      time.Date(2026, 6, 5, 21, 14, 0, 0, time.UTC),
 	}
-	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, status, "")
+	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, status, "", 0)
 
 	// The block shows even on the no-services screen. Assert content (not
 	// columns — columns are verified by the s3270 smoke script).
@@ -285,7 +286,7 @@ func TestMenuScreenStatusBlockTruncates(t *testing.T) {
 		Release:  "0123456789ab", // 12-char VCS-style rev
 		Now:      time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
-	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, status, "")
+	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, status, "", 0)
 	if !hasContent(screen, "AVERYLO") { // username upper, cut to 7
 		t.Errorf("username not cut to 7 runes")
 	}
@@ -296,7 +297,7 @@ func TestMenuScreenStatusBlockTruncates(t *testing.T) {
 
 func TestMenuScreenGridDescription(t *testing.T) {
 	svcs := []store.Service{{ID: 1, Name: "CICSPROD", Description: "CICS TS Prod"}}
-	screen, _, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "")
+	screen, _, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "", 0)
 	// Name and description are now separate fields (separately colored grid),
 	// not one combined string.
 	if !hasContent(screen, "CICSPROD") {
@@ -308,7 +309,7 @@ func TestMenuScreenGridDescription(t *testing.T) {
 }
 
 func TestMenuShowsUserSettingsEntry(t *testing.T) {
-	screen, _, _ := MenuScreen(Geometry{}, nil, false, MenuStatus{}, "")
+	screen, _, _ := MenuScreen(Geometry{}, nil, false, MenuStatus{}, "", 0)
 	if !screenContains(screen, "User Settings") {
 		t.Errorf("menu missing '0 User Settings' meta entry")
 	}
@@ -318,7 +319,7 @@ func TestMenuGridColumns(t *testing.T) {
 	// Tri-color grid spacing (GH #65 QA): number col 0, name col 6, description
 	// col 17 — three blank columns at each gap.
 	svcs := []store.Service{{ID: 1, Name: "PRODCICS", Description: "Production CICS Region"}}
-	screen, _, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "")
+	screen, _, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "", 0)
 	name, ok := fieldByContent(screen, "PRODCICS")
 	if !ok || name.Col != 6 {
 		t.Errorf("service name col = %d ok=%v, want 6", name.Col, ok)
@@ -330,6 +331,92 @@ func TestMenuGridColumns(t *testing.T) {
 	us, ok := fieldByContent(screen, "User Settings")
 	if !ok || us.Col != 17 {
 		t.Errorf("meta label col = %d ok=%v, want 17", us.Col, ok)
+	}
+}
+
+func TestMenuScreenPagesWithGlobalNumbers(t *testing.T) {
+	svcs := make([]store.Service, 22)
+	for i := range svcs {
+		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i+1), Host: "h", Port: 23}
+	}
+	g := DefaultGeometry // capacity 17 non-admin
+
+	// Page 0: shows global numbers 1..17, the page-1 indicator, and NOT item 18.
+	p0, mapping, _ := MenuScreen(g, svcs, false, MenuStatus{}, "", 0)
+	if len(mapping) != 22 {
+		t.Fatalf("mapping = %d, want 22 (full list)", len(mapping))
+	}
+	if mapping["18"].Name != "SVC18" {
+		t.Errorf(`mapping["18"] = %q, want SVC18 (off-page but selectable)`, mapping["18"].Name)
+	}
+	if !hasContent(p0, fmt.Sprintf("%3d", 1)) {
+		t.Errorf("page 0 missing global number 1")
+	}
+	if hasContent(p0, fmt.Sprintf("%3d", 18)) {
+		t.Errorf("page 0 should not render global number 18")
+	}
+	if !hasContent(p0, "ITEMS 1 TO 17 OF 22") {
+		t.Errorf("page 0 missing indicator 'ITEMS 1 TO 17 OF 22'")
+	}
+
+	// Page 1: shows global numbers 18..22, the page-2 indicator, and NOT item 1.
+	p1, _, _ := MenuScreen(g, svcs, false, MenuStatus{}, "", 1)
+	if !hasContent(p1, fmt.Sprintf("%3d", 18)) {
+		t.Errorf("page 1 missing global number 18")
+	}
+	if hasContent(p1, fmt.Sprintf("%3d", 1)) {
+		t.Errorf("page 1 should not render global number 1")
+	}
+	if !hasContent(p1, "ITEMS 18 TO 22 OF 22") {
+		t.Errorf("page 1 missing indicator 'ITEMS 18 TO 22 OF 22'")
+	}
+}
+
+func TestMenuScreenMetaBandOnEveryPage(t *testing.T) {
+	svcs := make([]store.Service, 22)
+	for i := range svcs {
+		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i+1), Host: "h", Port: 23}
+	}
+	g := DefaultGeometry
+	for _, page := range []int{0, 1} {
+		screen, _, _ := MenuScreen(g, svcs, true, MenuStatus{}, "", page)
+		if !screenContains(screen, "User Settings") {
+			t.Errorf("page %d missing '0 User Settings' meta entry", page)
+		}
+		if !screenContains(screen, "Administration") {
+			t.Errorf("page %d missing 'A Administration' meta entry", page)
+		}
+		// Meta band is bottom-anchored: "0" one above menuBottomRow, "A" on it.
+		us, _ := fieldByContent(screen, "User Settings")
+		if us.Row != g.menuBottomRow()-1 {
+			t.Errorf("page %d: User Settings row = %d, want %d", page, us.Row, g.menuBottomRow()-1)
+		}
+		admin, _ := fieldByContent(screen, "Administration")
+		if admin.Row != g.menuBottomRow() {
+			t.Errorf("page %d: Administration row = %d, want %d", page, admin.Row, g.menuBottomRow())
+		}
+	}
+}
+
+func TestMenuScreenBlankSeparatorAboveHelp(t *testing.T) {
+	svcs := make([]store.Service, 22)
+	for i := range svcs {
+		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i+1), Host: "h", Port: 23}
+	}
+	g := DefaultGeometry
+	screen, _, _ := MenuScreen(g, svcs, true, MenuStatus{}, "", 0)
+	sep := g.BodyBottomRow() // the row left blank between content and PF legend
+	for _, f := range screen {
+		if f.Row == sep && f.Content != "" {
+			t.Errorf("separator row %d should be blank, found %+v", sep, f)
+		}
+	}
+}
+
+func TestMenuScreenHelpListsPagingKeys(t *testing.T) {
+	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, MenuStatus{}, "", 0)
+	if !screenContains(screen, "PF7") || !screenContains(screen, "PF8") {
+		t.Errorf("menu help should list PF7/PF8 paging keys")
 	}
 }
 
