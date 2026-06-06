@@ -689,7 +689,7 @@ Wait(5,InputField)
 Ascii()
 Quit()
 EOF
-check  "16g PF8 -> page 2 indicator" "ITEMS 18 TO 22 OF" "$WORK/t16p2.out"
+check  "16g PF8 -> page 2 indicator" "ITEMS 18 TO 22 OF 22" "$WORK/t16p2.out"
 check  "16h page 2 shows overflow service" "PAGE22" "$WORK/t16p2.out"
 ncheck "16i page 2 hides page-1 service" "PAGE01" "$WORK/t16p2.out"
 check  "16j meta entry present on page 2" "User Settings" "$WORK/t16p2.out"
@@ -717,7 +717,7 @@ Ascii()
 ReadBuffer(Ascii)
 Quit()
 EOF
-check  "16k PF8 at last page is a no-op" "ITEMS 18 TO 22 OF" "$WORK/t16p3.out"
+check  "16k PF8 at last page is a no-op" "ITEMS 18 TO 22 OF 22" "$WORK/t16p3.out"
 
 s3 t16p4 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)

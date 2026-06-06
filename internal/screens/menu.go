@@ -109,9 +109,18 @@ func MenuPageBounds(geom Geometry, total int, admin bool, page int) (clamped, st
 func MenuScreen(geom Geometry, services []store.Service, admin bool, status MenuStatus, errMsg string, page int) (go3270.Screen, map[string]store.Service, Cursor) {
 	_, start, end, indicator := MenuPageBounds(geom, len(services), admin, page)
 
+	// Right-align the page indicator so its content ends at the screen's right
+	// margin (col 79); this guarantees the full "ITEMS x TO y OF z" never clips
+	// (a Field's Col is the attribute byte, so content starts at Col+1). Kept
+	// within the 80-column logical width per the rows-only adaptation model.
+	indicatorCol := 79 - len(indicator)
+	if indicatorCol < 0 {
+		indicatorCol = 0
+	}
+
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len("TN3270 GATEWAY MENU")), Color: go3270.White, Intense: true, Content: "TN3270 GATEWAY MENU"},
-		{Row: geom.TitleRow(), Col: geom.StatusBlockCol(), Color: go3270.Turquoise, Content: indicator},
+		{Row: geom.TitleRow(), Col: indicatorCol, Color: go3270.Turquoise, Content: indicator},
 		{Row: geom.BodyTopRow(), Col: 2, Color: go3270.Turquoise, Content: "Select a service and press ENTER:"},
 	}
 
