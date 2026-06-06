@@ -174,6 +174,23 @@ func (s *Session) log() *slog.Logger {
 	return slog.Default()
 }
 
+// logAuthFailure emits the stable, fail2ban-friendly auth-failure line. The
+// field set — msg="auth failed" plus src, trusted, reason, and the user carried
+// by lg — is a DOCUMENTED STABLE CONTRACT (operators build log filters against
+// it); do not rename or drop fields without updating README and the shape test.
+// lg must already carry the attempted username as "user": pre-auth callers pass
+// s.log().With("user", user); post-auth callers pass s.log() (already enriched).
+// reason is coarse ("invalid_credentials" or "bad_mfa") so it never reveals
+// whether a username exists. Never pass credential content (password / TOTP
+// code / MFA secret).
+func (s *Session) logAuthFailure(lg *slog.Logger, reason string) {
+	lg.Warn("auth failed",
+		"src", s.RemoteHost,
+		"trusted", s.Trusted,
+		"reason", reason,
+	)
+}
+
 // motdReadCap bounds how much of the MOTD file is read. A legitimate notice is
 // a few screens of text; the cap is a defensive ceiling against a misconfigured
 // path (a device/FIFO or a huge file). An over-cap file is truncated, not
@@ -616,7 +633,9 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		// Auth fail: per-username backoff (GH #48). Compute before auditing so
 		// the audit detail records the applied delay; never log the password.
 		delay, count := s.failDelay(ctx, user)
-		s.log().Warn("auth failed", "user", user)
+		// Auth fail: stable fail2ban line — attempted username only, never the
+		// password (CLAUDE.md hard rule). Coarse reason: no enumeration leak.
+		s.logAuthFailure(s.log().With("user", user), "invalid_credentials")
 		aud.record(ctx, store.AuditEvent{
 			Kind: store.AuditAuthFail, Username: user, Detail: throttleDetail("", delay, count)})
 		s.sleepFor(delay) // bounded well under pre_auth_idle by default; a tight pre-auth window could turn a large delay into a timeout
