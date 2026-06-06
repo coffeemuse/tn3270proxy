@@ -68,6 +68,19 @@ func TestClassifyMenuSubmit(t *testing.T) {
 	}
 }
 
+func TestClassifyMenuSubmitUserSettings(t *testing.T) {
+	mapping := map[string]store.Service{"1": {Name: "SVC"}}
+	if c, _ := classifyMenuSubmit("0", mapping, false); c != menuUserSettings {
+		t.Errorf(`classify "0" (non-admin) = %v, want menuUserSettings`, c)
+	}
+	if c, _ := classifyMenuSubmit("0", mapping, true); c != menuUserSettings {
+		t.Errorf(`classify "0" (admin) = %v, want menuUserSettings`, c)
+	}
+	if c, _ := classifyMenuSubmit("0", map[string]store.Service{}, false); c != menuUserSettings {
+		t.Errorf(`classify "0" (empty mapping) = %v, want menuUserSettings`, c)
+	}
+}
+
 func TestBackendTLSConfig(t *testing.T) {
 	if cfg := backendTLSConfig("h:23", BackendTLS{Enabled: false, Verify: true}); cfg != nil {
 		t.Errorf("disabled → want nil config, got %+v", cfg)

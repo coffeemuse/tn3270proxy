@@ -35,10 +35,12 @@ import (
 type menuChoice int
 
 const (
-	menuReprompt menuChoice = iota // invalid key, services available — show inline error
-	menuRequery                    // no selectable entries — return nil so session re-queries
-	menuAdmin                      // admin "A" entry selected
-	menuService                    // valid service key selected
+	menuReprompt     menuChoice = iota // invalid key, services available — show inline error
+	menuRequery                        // no selectable entries — return nil so session re-queries
+	menuAdmin                          // admin "A" entry selected
+	menuService                        // valid service key selected
+	menuUserSettings                   // "0" user-settings entry selected
+	menuQuit                           // PF3 at the menu — logoff
 )
 
 // classifyMenuSubmit decides what a menu submit means given the current
@@ -48,6 +50,9 @@ const (
 func classifyMenuSubmit(key string, mapping map[string]store.Service, admin bool) (menuChoice, store.Service) {
 	if admin && key == "A" {
 		return menuAdmin, store.Service{}
+	}
+	if key == "0" {
+		return menuUserSettings, store.Service{}
 	}
 	if svc, ok := mapping[key]; ok {
 		return menuService, svc
