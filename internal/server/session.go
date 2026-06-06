@@ -708,18 +708,20 @@ const (
 	usDisable
 )
 
-func usActionLabel(a usAction) string {
+// usActionRow returns the tri-color grid name (short keyword) and description for
+// a self-service action.
+func usActionRow(a usAction) (name, desc string) {
 	switch a {
 	case usChangePassword:
-		return "Change Password"
+		return "Password", "Change your sign-on password"
 	case usEnroll:
-		return "Enroll in MFA"
+		return "MFA", "Enroll in multi-factor authentication"
 	case usReenroll:
-		return "Re-enroll MFA"
+		return "MFA", "Re-enroll your authenticator (replaces the key)"
 	case usDisable:
-		return "Disable MFA"
+		return "MFA", "Disable multi-factor authentication"
 	}
-	return ""
+	return "", ""
 }
 
 // userSettingsActions returns the ordered self-service actions for a user's
@@ -761,7 +763,8 @@ func (s *Session) userSettings(ctx context.Context, conn net.Conn, term Term, id
 		actions := userSettingsActions(s.MFA != nil, u.MFARequired, u.MFASecret != "")
 		rows := make([]screens.UserSettingsRow, len(actions))
 		for i, a := range actions {
-			rows[i] = screens.UserSettingsRow{Key: strconv.Itoa(i + 1), Label: usActionLabel(a)}
+			name, desc := usActionRow(a)
+			rows[i] = screens.UserSettingsRow{Key: strconv.Itoa(i + 1), Name: name, Description: desc}
 		}
 		choice, back, err := s.Presenter.UserSettings(conn, term, identity.Username, rows, "")
 		if err != nil {

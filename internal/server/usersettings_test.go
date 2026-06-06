@@ -311,26 +311,26 @@ func TestSelfMFADisableBlockedWhenRequired(t *testing.T) {
 
 func TestUserSettingsRowsAdaptive(t *testing.T) {
 	cases := []struct {
-		name       string
-		mfaCfg     bool
-		required   bool
-		enrolled   bool
-		wantLabels []string
+		name     string
+		mfaCfg   bool
+		required bool
+		enrolled bool
+		want     []usAction
 	}{
-		{"mfa_off", false, false, false, []string{"Change Password"}},
-		{"can_enroll", true, false, false, []string{"Change Password", "Enroll in MFA"}},
-		{"enrolled_required", true, true, true, []string{"Change Password", "Re-enroll MFA"}},
-		{"enrolled_optional", true, false, true, []string{"Change Password", "Re-enroll MFA", "Disable MFA"}},
+		{"mfa_off", false, false, false, []usAction{usChangePassword}},
+		{"can_enroll", true, false, false, []usAction{usChangePassword, usEnroll}},
+		{"enrolled_required", true, true, true, []usAction{usChangePassword, usReenroll}},
+		{"enrolled_optional", true, false, true, []usAction{usChangePassword, usReenroll, usDisable}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := userSettingsActions(tc.mfaCfg, tc.required, tc.enrolled)
-			if len(got) != len(tc.wantLabels) {
-				t.Fatalf("actions=%d want %d (%v)", len(got), len(tc.wantLabels), got)
+			if len(got) != len(tc.want) {
+				t.Fatalf("actions=%d want %d (%v)", len(got), len(tc.want), got)
 			}
 			for i, a := range got {
-				if usActionLabel(a) != tc.wantLabels[i] {
-					t.Errorf("row %d label=%q want %q", i, usActionLabel(a), tc.wantLabels[i])
+				if a != tc.want[i] {
+					t.Errorf("row %d action=%v want %v", i, a, tc.want[i])
 				}
 			}
 		})

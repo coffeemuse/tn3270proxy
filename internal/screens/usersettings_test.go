@@ -19,19 +19,37 @@
 
 package screens
 
-import "testing"
+import (
+	"testing"
 
-func TestUserSettingsScreen(t *testing.T) {
-	rows := []UserSettingsRow{{Key: "1", Label: "Change Password"}, {Key: "2", Label: "Enroll in MFA"}}
-	screen, cur := UserSettingsScreen(Geometry{}, "ALICE", rows, "")
-	if _, ok := fieldByName(screen, FieldUSOption); !ok {
-		t.Fatalf("missing %q field", FieldUSOption)
+	"github.com/racingmars/go3270"
+)
+
+func TestUserSettingsTriColor(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	rows := []UserSettingsRow{
+		{Key: "1", Name: "Password", Description: "Change your sign-on password"},
+		{Key: "2", Name: "MFA", Description: "Enroll in multi-factor authentication"},
 	}
-	if !screenContains(screen, "Change Password") || !screenContains(screen, "Enroll in MFA") {
-		t.Errorf("rows not rendered: %+v", screen)
+	screen, cur := UserSettingsScreen(g, "ROBERT", rows, "")
+
+	key, ok := fieldByContent(screen, "  1")
+	if !ok || key.Color != go3270.White || !key.Intense {
+		t.Errorf("key = %+v ok=%v, want white intense", key, ok)
 	}
-	opt, _ := fieldByName(screen, FieldUSOption)
-	if cur.Row != opt.Row || cur.Col != opt.Col+1 {
-		t.Errorf("cursor = %v, want one past the option field at (%d,%d)", cur, opt.Row, opt.Col)
+	name, ok := fieldByContent(screen, "Password")
+	if !ok || name.Col != 4 || name.Color != go3270.Turquoise {
+		t.Errorf("name = %+v ok=%v, want col 4 turquoise", name, ok)
+	}
+	desc, ok := fieldByContent(screen, "Change your sign-on password")
+	if !ok || desc.Col != 13 || desc.Color != go3270.Green {
+		t.Errorf("desc = %+v ok=%v, want col 13 green", desc, ok)
+	}
+	opt, ok := fieldByName(screen, FieldUSOption)
+	if !ok || opt.Row != 1 {
+		t.Errorf("option field row = %d ok=%v, want 1", opt.Row, ok)
+	}
+	if cur.Row != 1 || cur.Col != 15 {
+		t.Errorf("cursor = %+v, want (1,15)", cur)
 	}
 }
