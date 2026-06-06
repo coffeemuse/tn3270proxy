@@ -38,12 +38,12 @@ func TestUserSettingsTriColor(t *testing.T) {
 		t.Errorf("key = %+v ok=%v, want white intense", key, ok)
 	}
 	name, ok := fieldByContent(screen, "Password")
-	if !ok || name.Col != 4 || name.Color != go3270.Turquoise {
-		t.Errorf("name = %+v ok=%v, want col 4 turquoise", name, ok)
+	if !ok || name.Col != 5 || name.Color != go3270.Turquoise {
+		t.Errorf("name = %+v ok=%v, want col 5 turquoise", name, ok)
 	}
 	desc, ok := fieldByContent(screen, "Change your sign-on password")
-	if !ok || desc.Col != 13 || desc.Color != go3270.Green {
-		t.Errorf("desc = %+v ok=%v, want col 13 green", desc, ok)
+	if !ok || desc.Col != 15 || desc.Color != go3270.Green {
+		t.Errorf("desc = %+v ok=%v, want col 15 green", desc, ok)
 	}
 	opt, ok := fieldByName(screen, FieldUSOption)
 	if !ok || opt.Row != 1 {

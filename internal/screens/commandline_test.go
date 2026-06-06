@@ -8,7 +8,7 @@ import (
 
 func TestCommandLine(t *testing.T) {
 	g := Geometry{Rows: 24, Cols: 80}
-	prompt, input, _ := commandLine(g, "Option ===>", FieldSelection)
+	prompt, input, stop := commandLine(g, "Option ===>", FieldSelection)
 
 	if prompt.Row != 1 || prompt.Col != 2 || prompt.Color != go3270.Turquoise {
 		t.Errorf("prompt = %+v, want row 1 col 2 turquoise", prompt)
@@ -25,5 +25,9 @@ func TestCommandLine(t *testing.T) {
 	}
 	if c := cursorAt(input); c.Row != 1 || c.Col != 15 {
 		t.Errorf("cursor = %+v, want (1,15)", c)
+	}
+	// The input runs to the end of the line: stop field at col 79.
+	if stop.Col != 79 {
+		t.Errorf("stop field col = %d, want 79", stop.Col)
 	}
 }

@@ -33,6 +33,6 @@ func commandLine(geom Geometry, prompt, fieldName string) (promptF, input, stop 
 	inputCol := promptAttrCol + 1 + len([]rune(prompt))
 	promptF = go3270.Field{Row: geom.CommandRow(), Col: promptAttrCol, Color: go3270.Turquoise, Content: prompt}
 	input = go3270.Field{Row: geom.CommandRow(), Col: inputCol, Name: fieldName, Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
-	stop = go3270.Field{Row: geom.CommandRow(), Col: min(inputCol+9, 79)} // ~8-col input window
+	stop = go3270.Field{Row: geom.CommandRow(), Col: 79} // input runs to the end of the line (ISPF command-line look)
 	return promptF, input, stop
 }

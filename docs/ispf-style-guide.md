@@ -132,8 +132,12 @@ Menu look:
 | Field | Column | Color | Attr | Example |
 |---|---|---|---|---|
 | Option key | 0 (right-aligned in cols 0–2) | **White** | Intense | `1`, `0`, `A` |
-| Name (short keyword) | 4 | **Turquoise** | — | `Users`, `Sysparms` |
-| Description | 13 | **Green** | — | `User accounts and group membership` |
+| Name (short keyword) | 5 | **Turquoise** | — | `Users`, `Sysparms` |
+| Description | 15 | **Green** | — | `User accounts and group membership` |
+
+(Two blank columns separate number↔name and name↔description — names are hard-cut
+to 8, so the description column clears the widest name. The `0`/`A` meta-row labels
+sit in the description column.)
 
 The service menu already renders this exactly (number/`Service.Name`/
 `Service.Description`). The admin and User Settings menus adopt the same grid using

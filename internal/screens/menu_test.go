@@ -314,6 +314,25 @@ func TestMenuShowsUserSettingsEntry(t *testing.T) {
 	}
 }
 
+func TestMenuGridColumns(t *testing.T) {
+	// Tri-color grid spacing (GH #65 QA): number col 0, name col 5, description
+	// col 15 — two blank columns at each gap.
+	svcs := []store.Service{{ID: 1, Name: "PRODCICS", Description: "Production CICS Region"}}
+	screen, _, _ := MenuScreen(DefaultGeometry, svcs, false, MenuStatus{}, "")
+	name, ok := fieldByContent(screen, "PRODCICS")
+	if !ok || name.Col != 5 {
+		t.Errorf("service name col = %d ok=%v, want 5", name.Col, ok)
+	}
+	desc, ok := fieldByContent(screen, "Production CICS Region")
+	if !ok || desc.Col != 15 {
+		t.Errorf("service desc col = %d ok=%v, want 15", desc.Col, ok)
+	}
+	us, ok := fieldByContent(screen, "User Settings")
+	if !ok || us.Col != 15 {
+		t.Errorf("meta label col = %d ok=%v, want 15", us.Col, ok)
+	}
+}
+
 // hasContent reports whether any field's Content equals want.
 func hasContent(screen go3270.Screen, want string) bool {
 	for _, f := range screen {
