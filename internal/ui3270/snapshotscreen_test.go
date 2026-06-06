@@ -77,3 +77,49 @@ func TestBuildSnapshotScreen_Empty(t *testing.T) {
 		t.Errorf("empty cursor = %+v, want home {0,0}", cur)
 	}
 }
+
+func TestWrapText(t *testing.T) {
+	got := wrapText("alpha beta gamma delta", 11)
+	want := []string{"alpha beta", "gamma delta"}
+	if len(got) != len(want) {
+		t.Fatalf("wrapText lines = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("line %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+	// A single token longer than width is hard-split, never dropped.
+	if g := wrapText("abcdefgh", 3); len(g) != 3 || g[0] != "abc" {
+		t.Errorf("hard-split = %v", g)
+	}
+	if g := wrapText("", 10); len(g) != 0 {
+		t.Errorf("empty = %v, want no lines", g)
+	}
+}
+
+func TestBuildDetailScreen(t *testing.T) {
+	v := DetailView{
+		Title: "AUDIT DETAIL",
+		Fields: []DetailField{
+			{Label: "Date/Time", Value: "2026-06-06 (2026.157) 14:28:07 UTC"},
+			{Label: "Event", Value: "AUTH_FAIL", Color: go3270.Red},
+		},
+		BodyLabel: "Detail", Body: "delay=4s count=2",
+		PFHelp: "PF3=Back",
+	}
+	screen, cur := buildDetailScreen(24, v)
+
+	if f, ok := fieldAt(screen, 0, 2); !ok || f.Content != "AUDIT DETAIL" {
+		t.Errorf("title wrong: %+v ok=%v", f, ok)
+	}
+	if f, ok := fieldAt(screen, 2, 2); !ok || f.Content != "Date/Time" {
+		t.Errorf("first label wrong: %+v ok=%v", f, ok)
+	}
+	if f, ok := fieldAt(screen, 3, detailValueCol); !ok || f.Content != "AUTH_FAIL" || f.Color != go3270.Red {
+		t.Errorf("event value wrong/uncoloured: %+v ok=%v", f, ok)
+	}
+	if cur != (Cursor{Row: 0, Col: 0}) {
+		t.Errorf("cursor = %+v, want home", cur)
+	}
+}

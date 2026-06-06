@@ -21,6 +21,7 @@ package ui3270
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/racingmars/go3270"
 )
@@ -82,4 +83,79 @@ func buildSnapshotScreen(rows int, v SnapshotView) (go3270.Screen, Cursor) {
 		go3270.Field{Row: helpRow(rows), Col: 2, Content: v.PFHelp},
 	)
 	return screen, cur
+}
+
+// detailValueCol is the attribute-byte column of the value fields on the detail
+// screen (content one column right). Matches the form's historical input column.
+const detailValueCol = 16
+
+// detailBodyWidth is the wrap width for the free-text body (content cols 3-79).
+const detailBodyWidth = 76
+
+// wrapText greedily wraps s to lines of at most width runes, breaking on spaces.
+// A token longer than width is hard-split. Returns nil for empty input.
+func wrapText(s string, width int) []string {
+	if width < 1 || s == "" {
+		if s == "" {
+			return nil
+		}
+		width = 1
+	}
+	var lines []string
+	cur := ""
+	flush := func() {
+		if cur != "" {
+			lines = append(lines, cur)
+			cur = ""
+		}
+	}
+	for _, word := range strings.Fields(s) {
+		for len([]rune(word)) > width { // hard-split an over-long token
+			flush()
+			r := []rune(word)
+			lines = append(lines, string(r[:width]))
+			word = string(r[width:])
+		}
+		switch {
+		case cur == "":
+			cur = word
+		case len([]rune(cur))+1+len([]rune(word)) <= width:
+			cur += " " + word
+		default:
+			flush()
+			cur = word
+		}
+	}
+	flush()
+	return lines
+}
+
+// buildDetailScreen renders a read-only record: title on row 0, label/value
+// fields from row 2, then BodyLabel and the wrapped Body. Cursor homes ({0,0}).
+func buildDetailScreen(rows int, v DetailView) (go3270.Screen, Cursor) {
+	screen := go3270.Screen{
+		{Row: 0, Col: 2, Intense: true, Content: v.Title},
+	}
+	row := 2
+	for _, f := range v.Fields {
+		screen = append(screen,
+			go3270.Field{Row: row, Col: 2, Content: f.Label},
+			go3270.Field{Row: row, Col: detailValueCol, Content: f.Value, Color: f.Color},
+		)
+		row++
+	}
+	row++ // blank separator
+	if v.BodyLabel != "" {
+		screen = append(screen, go3270.Field{Row: row, Col: 2, Content: v.BodyLabel})
+		row++
+	}
+	for _, line := range wrapText(v.Body, detailBodyWidth) {
+		if row >= errorRow(rows) { // never overrun the bottom chrome
+			break
+		}
+		screen = append(screen, go3270.Field{Row: row, Col: 2, Content: line})
+		row++
+	}
+	screen = append(screen, go3270.Field{Row: helpRow(rows), Col: 2, Content: v.PFHelp})
+	return screen, Cursor{Row: 0, Col: 0}
 }
