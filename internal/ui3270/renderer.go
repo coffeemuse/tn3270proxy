@@ -97,3 +97,20 @@ func (g *go3270Renderer) Form(v FormView) (FormAction, error) {
 	}
 	return formAction(resp, v.Fields), nil
 }
+
+var snapshotExitKeys = []go3270.AID{go3270.AIDPF3, go3270.AIDPF7, go3270.AIDPF8}
+
+func (g *go3270Renderer) Snapshot(v SnapshotView) (ListAction, error) {
+	screen, cur := buildSnapshotScreen(g.rows, v)
+	resp, err := g.call(screen, snapshotExitKeys, cur)
+	if err != nil {
+		return ListAction{}, err
+	}
+	return listAction(resp, len(v.Rows)), nil
+}
+
+func (g *go3270Renderer) Detail(v DetailView) error {
+	screen, cur := buildDetailScreen(g.rows, v)
+	_, err := g.call(screen, []go3270.AID{go3270.AIDPF3}, cur)
+	return err
+}

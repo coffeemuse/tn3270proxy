@@ -231,6 +231,35 @@ func TestSystemIDValidate(t *testing.T) {
 	}
 }
 
+func TestAuditCatalogEntries(t *testing.T) {
+	want := map[string]string{
+		KeyAuditMaxRows:    "1000",
+		KeyAuditReverseDNS: "ON",
+	}
+	got := map[string]string{}
+	for _, e := range Catalog {
+		if _, ok := want[e.Key]; ok {
+			got[e.Key] = e.Default
+			if e.Validate == nil {
+				t.Errorf("%s has no Validate", e.Key)
+			}
+		}
+	}
+	for k, def := range want {
+		if got[k] != def {
+			t.Errorf("Catalog[%s].Default = %q, want %q", k, got[k], def)
+		}
+	}
+	// AUDIT_MAX_ROWS bounds: 0 and 10001 rejected, 1000 accepted.
+	for _, e := range Catalog {
+		if e.Key == KeyAuditMaxRows {
+			if e.Validate("0") == "" || e.Validate("10001") == "" || e.Validate("1000") != "" {
+				t.Errorf("AUDIT_MAX_ROWS validator bounds wrong")
+			}
+		}
+	}
+}
+
 func entryByKey(t *testing.T, key string) *Entry {
 	t.Helper()
 	for i := range Catalog {
@@ -240,4 +269,31 @@ func entryByKey(t *testing.T, key string) *Entry {
 	}
 	t.Fatalf("%s not in catalog", key)
 	return nil
+}
+
+func TestIntInRange(t *testing.T) {
+	v := intInRange(1, 10000)
+	for _, ok := range []string{"1", "10000", " 500 "} {
+		if msg := v(ok); msg != "" {
+			t.Errorf("intInRange(%q) = %q, want accept", ok, msg)
+		}
+	}
+	for _, bad := range []string{"0", "10001", "-1", "", "x", "1.5"} {
+		if v(bad) == "" {
+			t.Errorf("intInRange(%q) accepted, want reject", bad)
+		}
+	}
+}
+
+func TestOnOff(t *testing.T) {
+	for _, ok := range []string{"ON", "OFF", " on ", "off"} {
+		if msg := onOff(ok); msg != "" {
+			t.Errorf("onOff(%q) = %q, want accept", ok, msg)
+		}
+	}
+	for _, bad := range []string{"", "YES", "1", "TRUE"} {
+		if onOff(bad) == "" {
+			t.Errorf("onOff(%q) accepted, want reject", bad)
+		}
+	}
 }

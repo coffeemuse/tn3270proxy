@@ -391,7 +391,7 @@ func (s *Session) Run(conn net.Conn) {
 				flow := &adminFlow{store: s.Store, presenter: s.AdminPresenter,
 					renderer: renderer,
 					identity: identity, term: term, audit: aud.record,
-					logger: s.log()}
+					logger: s.log(), now: s.now}
 				if aerr := flow.Run(ctx, conn); aerr != nil {
 					if isTimeoutErr(aerr) {
 						aud.record(ctx, store.AuditEvent{
