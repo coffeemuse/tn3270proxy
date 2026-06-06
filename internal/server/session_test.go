@@ -820,8 +820,8 @@ func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
 
 func TestSessionPopulatesMenuStatus(t *testing.T) {
 	// Verify that the session builds screens.MenuStatus with the correct
-	// Username (from the identity), SystemID ("PROXY"), and Release (from
-	// Session.Release) before calling Presenter.Menu.
+	// Username (from the identity), SystemID ("PROXY", the seeded sysconfig
+	// default), and Release (from Session.Release) before calling Presenter.Menu.
 	p := &fakePresenter{
 		termType: "IBM-3278-2-E",
 		logins: []loginResult{
