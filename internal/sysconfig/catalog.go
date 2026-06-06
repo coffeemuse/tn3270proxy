@@ -66,6 +66,22 @@ const (
 	DefaultAuthFailWindowMins = 15
 )
 
+// KeyAuditMaxRows caps how many audit rows the admin Audit Log viewer (GH #40)
+// holds in a single snapshot. Clamped to [1, 10000]; read with a fallback to
+// DefaultAuditMaxRows for a hand-edited DB.
+const (
+	KeyAuditMaxRows     = "AUDIT_MAX_ROWS"
+	DefaultAuditMaxRows = 1000
+)
+
+// KeyAuditReverseDNS toggles the reverse-DNS (PTR) lookup on the Audit Log
+// detail screen. "ON" (default) or "OFF"; OFF suppresses all outbound DNS the
+// viewer would otherwise emit (air-gapped / egress-locked deployments).
+const (
+	KeyAuditReverseDNS     = "AUDIT_REVERSE_DNS"
+	DefaultAuditReverseDNS = "ON"
+)
+
 // Catalog is the application-defined set of valid system parameters. The store
 // seeds every key with its Default via INSERT OR IGNORE; admins may change the
 // values through the admin UI. Keys are canonical uppercase.
@@ -121,6 +137,20 @@ var Catalog = []Entry{
 		Label:    "Auth Fail Window (min):",
 		Default:  strconv.Itoa(DefaultAuthFailWindowMins),
 		Validate: positiveInt,
+	},
+	{
+		Key:      KeyAuditMaxRows,
+		Label:    "Audit View Max Rows:",
+		Default:  strconv.Itoa(DefaultAuditMaxRows),
+		Validate: intInRange(1, 10000),
+	},
+	{
+		Key:       KeyAuditReverseDNS,
+		Label:     "Audit Reverse DNS:",
+		Default:   DefaultAuditReverseDNS,
+		Length:    3,
+		Normalize: func(v string) string { return strings.ToUpper(strings.TrimSpace(v)) },
+		Validate:  onOff,
 	},
 }
 
