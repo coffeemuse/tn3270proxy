@@ -160,7 +160,7 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 	// Rebuilt-by-reference so a rejected submit re-seeds typed input on the next
 	// render (RunForm re-sends the same slice each loop).
 	fields := []ui3270.FormField{
-		{Name: screens.FieldUsername, Label: "Userid . . .", Length: 32, Value: username, ReadOnly: !create},
+		{Name: screens.FieldUsername, Label: "User ID. . .", Length: 32, Value: username, ReadOnly: !create},
 		{Name: screens.FieldFullName, Label: "Full name .", Length: 40, Value: fullName},
 		{Name: screens.FieldEmail, Label: "Email  . . .", Length: 40, Value: email},
 		{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
@@ -216,7 +216,7 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 func (f *adminFlow) userCreate(ctx context.Context, vals map[string]string, fullName, email string) (string, error) {
 	username := vals[screens.FieldUsername]
 	if username == "" {
-		return "USERID IS REQUIRED", nil
+		return "USER ID IS REQUIRED", nil
 	}
 	pass, _, msg := passwordFromForm(vals, true)
 	if msg != "" {

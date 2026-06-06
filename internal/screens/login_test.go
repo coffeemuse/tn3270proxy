@@ -21,6 +21,7 @@ package screens
 
 import (
 	"testing"
+	"time"
 
 	"github.com/racingmars/go3270"
 )
@@ -35,7 +36,7 @@ func fieldByName(s go3270.Screen, name string) (go3270.Field, bool) {
 }
 
 func TestLoginScreenFields(t *testing.T) {
-	screen, rules, _ := LoginScreen(DefaultGeometry, "")
+	screen, rules, _ := LoginScreen(DefaultGeometry, MenuStatus{}, "")
 
 	uf, ok := fieldByName(screen, FieldUsername)
 	if !ok {
@@ -64,7 +65,7 @@ func TestLoginScreenFields(t *testing.T) {
 }
 
 func TestLoginScreenShowsError(t *testing.T) {
-	screen, _, _ := LoginScreen(DefaultGeometry, "Invalid credentials")
+	screen, _, _ := LoginScreen(DefaultGeometry, MenuStatus{}, "Invalid credentials")
 	f, ok := fieldByName(screen, FieldError)
 	if !ok {
 		t.Fatalf("missing error field")
@@ -82,7 +83,7 @@ func TestLoginScreenBands(t *testing.T) {
 		{Rows: 27, Cols: 132},
 		{}, // zero value normalizes to 24×80
 	} {
-		screen, _, _ := LoginScreen(g, "err")
+		screen, _, _ := LoginScreen(g, MenuStatus{}, "err")
 		f, ok := fieldByName(screen, FieldError)
 		if !ok || f.Row != g.MessageRow() {
 			t.Errorf("%+v: error row = %d, want MessageRow %d", g, f.Row, g.MessageRow())
@@ -113,7 +114,7 @@ func fieldByContent(s go3270.Screen, content string) (go3270.Field, bool) {
 
 func TestLoginScreenPalette(t *testing.T) {
 	g := Geometry{Rows: 24, Cols: 80}
-	screen, _, cur := LoginScreen(g, "bad creds")
+	screen, _, cur := LoginScreen(g, MenuStatus{}, "bad creds")
 
 	title, ok := fieldByContent(screen, "TN3270 GATEWAY LOGIN")
 	if !ok {
@@ -125,7 +126,7 @@ func TestLoginScreenPalette(t *testing.T) {
 	if title.Col != g.CenterCol(len("TN3270 GATEWAY LOGIN")) {
 		t.Errorf("title not centered: col %d", title.Col)
 	}
-	label, ok := fieldByContent(screen, "Userid . . .")
+	label, ok := fieldByContent(screen, "User ID. . .")
 	if !ok {
 		t.Fatal("missing userid label")
 	}
@@ -151,8 +152,46 @@ func TestLoginScreenPalette(t *testing.T) {
 	}
 }
 
+func TestLoginScreenStatusBlock(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	now := time.Date(2026, 6, 6, 14, 52, 0, 0, time.UTC)
+	status := MenuStatus{SystemID: "PROXY", Release: "aa23543", Now: now}
+	screen, _, _ := LoginScreen(g, status, "")
+
+	// The info block mirrors the menu's right-hand status block (same column,
+	// turquoise labels / green values) but without User ID or Terminal rows.
+	want := map[string]string{
+		"Date . . :": "26.157", // 2026-06-06 is day 157
+		"Time . . :": "14:52",
+		"System ID:": "PROXY",
+		"Release. :": "aa23543",
+	}
+	for label, val := range want {
+		lf, ok := fieldByContent(screen, label)
+		if !ok {
+			t.Errorf("missing status label %q", label)
+			continue
+		}
+		if lf.Col != g.StatusBlockCol() || lf.Color != go3270.Turquoise {
+			t.Errorf("label %q at col %d color %v, want col %d turquoise", label, lf.Col, lf.Color, g.StatusBlockCol())
+		}
+		if vf, ok := fieldByContent(screen, val); !ok {
+			t.Errorf("missing status value %q for label %q", val, label)
+		} else if vf.Color != go3270.Green {
+			t.Errorf("value %q color = %v, want Green", val, vf.Color)
+		}
+	}
+	// Pre-login: no User ID and no Terminal rows.
+	if _, ok := fieldByContent(screen, "User ID. :"); ok {
+		t.Error("login info block must not show a User ID row")
+	}
+	if _, ok := fieldByContent(screen, "Terminal :"); ok {
+		t.Error("login info block must not show a Terminal row")
+	}
+}
+
 func TestLoginScreenCursor(t *testing.T) {
-	screen, _, cur := LoginScreen(DefaultGeometry, "")
+	screen, _, cur := LoginScreen(DefaultGeometry, MenuStatus{}, "")
 	uf, ok := fieldByName(screen, FieldUsername)
 	if !ok {
 		t.Fatalf("missing %q field", FieldUsername)

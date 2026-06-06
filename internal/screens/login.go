@@ -34,14 +34,17 @@ const (
 // cursor position (on the username field), sized for geom (bottom rows
 // anchored to the last screen rows). errMsg, if non-empty, is shown on the
 // error line (e.g. a generic "invalid credentials" message after a failed
-// sign-on). The caller drives it with go3270.HandleScreenAlt using AIDEnter
-// to submit and AIDPF3 to quit, with errorField = FieldError.
-func LoginScreen(geom Geometry, errMsg string) (go3270.Screen, go3270.Rules, Cursor) {
+// sign-on). status supplies the right-hand info block (Date / Time / System ID
+// / Release); the presenter stamps status.Now at paint time so the clock is
+// live (Username/TermType are unset pre-login and not shown). The caller drives
+// it with go3270.HandleScreenAlt using AIDEnter to submit and AIDPF3 to quit,
+// with errorField = FieldError.
+func LoginScreen(geom Geometry, status MenuStatus, errMsg string) (go3270.Screen, go3270.Rules, Cursor) {
 	title := "TN3270 GATEWAY LOGIN"
 	username := go3270.Field{Row: 3, Col: 16, Name: FieldUsername, Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},
-		{Row: 3, Col: 2, Color: go3270.Turquoise, Content: "Userid . . ."},
+		{Row: 3, Col: 2, Color: go3270.Turquoise, Content: "User ID. . ."},
 		username,
 		{Row: 3, Col: 33}, // stop field: closes the username input
 		{Row: 5, Col: 2, Color: go3270.Turquoise, Content: "Password . ."},
@@ -50,8 +53,17 @@ func LoginScreen(geom Geometry, errMsg string) (go3270.Screen, go3270.Rules, Cur
 		{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
 		{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Disconnect"},
 	}
+	// Right-hand info block, top-aligned with the User ID field (row 3) and
+	// sharing the menu's column so the two screens line up. No User ID yet
+	// (pre-login) and Terminal is omitted by design.
+	screen = append(screen, statusBlock(geom, 3, []statusRow{
+		{"Date . . :", julianDate(status.Now)},
+		{"Time . . :", clockHM(status.Now)},
+		{"System ID:", truncateRunes(status.SystemID, 7)},
+		{"Release. :", truncateRunes(status.Release, 7)},
+	})...)
 	rules := go3270.Rules{
-		FieldUsername: {Validator: go3270.NonBlank, ErrorText: "Userid is required"},
+		FieldUsername: {Validator: go3270.NonBlank, ErrorText: "User ID is required"},
 	}
 	return screen, rules, cursorAt(username)
 }

@@ -151,28 +151,37 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 	return screen, mapping, cursorAt(selection)
 }
 
-// statusBlockFields builds the right-hand ISPF-style status block: six rows
-// (User ID / Date / Time / Terminal / System ID / Release) starting at the
-// first service row (row 4). Labels are 10 chars (colon-aligned, turquoise);
-// values are hard-cut to 7 runes (green). Placement is geom.StatusBlockCol().
-func statusBlockFields(geom Geometry, status MenuStatus) go3270.Screen {
+// statusRow is one label/value pair in an ISPF status block.
+type statusRow struct{ label, value string }
+
+// statusBlock renders a right-hand ISPF-style status block at
+// geom.StatusBlockCol(): each row a 10-char colon-aligned turquoise label and a
+// green value, stacked from startRow down. The menu and login screens share it
+// so the two blocks line up column-for-column.
+func statusBlock(geom Geometry, startRow int, rows []statusRow) go3270.Screen {
 	const labelWidth = 10 // "System ID:" etc.; value field sits one space past
 	labelCol := geom.StatusBlockCol()
 	valueCol := labelCol + labelWidth + 1
-	rows := []struct{ label, value string }{
+	var fields go3270.Screen
+	for i, r := range rows {
+		fields = append(fields,
+			go3270.Field{Row: startRow + i, Col: labelCol, Color: go3270.Turquoise, Content: r.label},
+			go3270.Field{Row: startRow + i, Col: valueCol, Color: go3270.Green, Content: r.value},
+		)
+	}
+	return fields
+}
+
+// statusBlockFields builds the menu's right-hand status block: six rows
+// (User ID / Date / Time / Terminal / System ID / Release) starting at the
+// first service row (row 4). Values are hard-cut to 7 runes.
+func statusBlockFields(geom Geometry, status MenuStatus) go3270.Screen {
+	return statusBlock(geom, 4, []statusRow{
 		{"User ID. :", truncateRunes(strings.ToUpper(status.Username), 7)},
 		{"Date . . :", julianDate(status.Now)},
 		{"Time . . :", clockHM(status.Now)},
 		{"Terminal :", termDisplay(status.TermType)},
 		{"System ID:", truncateRunes(status.SystemID, 7)},
 		{"Release. :", truncateRunes(status.Release, 7)},
-	}
-	var fields go3270.Screen
-	for i, r := range rows {
-		fields = append(fields,
-			go3270.Field{Row: 4 + i, Col: labelCol, Color: go3270.Turquoise, Content: r.label},
-			go3270.Field{Row: 4 + i, Col: valueCol, Color: go3270.Green, Content: r.value},
-		)
-	}
-	return fields
+	})
 }

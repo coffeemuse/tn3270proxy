@@ -49,7 +49,7 @@ import (
 // at the client's negotiated size and codepage.
 type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
-	Login(conn net.Conn, term Term, errMsg string) (username, password string, quit bool, err error)
+	Login(conn net.Conn, term Term, status screens.MenuStatus, errMsg string) (username, password string, quit bool, err error)
 	Menu(conn net.Conn, term Term, services []store.Service, admin bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
 	// UserSettings renders the self-service settings menu with the given
 	// adaptive rows and returns the typed option key (e.g. "1"); back=true on
@@ -658,8 +658,11 @@ func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u sto
 // render error is classified here so the caller audits it distinctly.
 func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *auditTrail) (auth.Identity, bool, string) {
 	errMsg := ""
+	// Login info block: SystemID/Release are stable for the session; the
+	// presenter stamps the paint-time clock per render.
+	status := screens.MenuStatus{SystemID: s.systemID(ctx), Release: s.Release}
 	for {
-		user, pass, quit, err := s.Presenter.Login(conn, term, errMsg)
+		user, pass, quit, err := s.Presenter.Login(conn, term, status, errMsg)
 		if err != nil {
 			if isTimeoutErr(err) {
 				return auth.Identity{}, false, "idle timeout"
@@ -695,7 +698,7 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 			Kind: store.AuditAuthFail, Username: user, Detail: throttleDetail("", delay, count)})
 		s.sleepFor(delay) // bounded well under pre_auth_idle by default; a tight pre-auth window could turn a large delay into a timeout
 		// Generic message — never reveals whether the username exists (spec §7).
-		errMsg = "Invalid userid or password"
+		errMsg = "Invalid user ID or password"
 	}
 }
 

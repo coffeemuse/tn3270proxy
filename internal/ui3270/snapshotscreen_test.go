@@ -51,8 +51,8 @@ func TestBuildSnapshotScreen_RowLayoutAndColor(t *testing.T) {
 	if f, ok := fieldAt(screen, 0, centerCol(len("RECENT ACTIVITY"))); !ok || f.Content != "RECENT ACTIVITY" || f.Color != go3270.White || !f.Intense {
 		t.Errorf("title missing/not centered-white: %+v ok=%v", f, ok)
 	}
-	if f, ok := fieldAt(screen, 1, snapLeftAttr); !ok || f.Content != v.AsOf {
-		t.Errorf("as-of stamp missing on row 1: %+v ok=%v", f, ok)
+	if f, ok := fieldAt(screen, 1, centerCol(len(v.AsOf))); !ok || f.Content != v.AsOf || f.Color != go3270.Turquoise {
+		t.Errorf("as-of stamp missing/not centered-turquoise on row 1: %+v ok=%v", f, ok)
 	}
 	if f, ok := fieldAt(screen, 3, snapLeftAttr); !ok || f.Color != go3270.Blue {
 		t.Errorf("heading-left not blue on row 3: %+v ok=%v", f, ok)
@@ -124,5 +124,22 @@ func TestBuildDetailScreen(t *testing.T) {
 	}
 	if cur != (Cursor{Row: 0, Col: 0}) {
 		t.Errorf("cursor = %+v, want home", cur)
+	}
+}
+
+func TestBuildDetailScreen_DotLeader(t *testing.T) {
+	v := DetailView{
+		Title:     "AUDIT DETAIL",
+		Fields:    []DetailField{{Label: "PTR", Value: "host.example"}},
+		PFHelp:    "PF3=Back",
+		DotLeader: true,
+	}
+	screen, _ := buildDetailScreen(24, v)
+
+	// Label is dot-leadered to the form width (colon right-aligned just before
+	// the value column) instead of the plain "PTR".
+	want := dotLeaderLabel("PTR", formLabelMax(detailValueCol))
+	if f, ok := fieldAt(screen, 2, labelAttrCol); !ok || f.Content != want {
+		t.Errorf("dot-leader label = %q ok=%v, want %q", f.Content, ok, want)
 	}
 }

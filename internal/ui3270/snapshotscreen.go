@@ -56,7 +56,7 @@ func buildSnapshotScreen(rows int, v SnapshotView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
 		{Row: 0, Col: centerCol(len(v.Title)), Color: go3270.White, Intense: true, Content: v.Title},
 		{Row: 0, Col: 60, Content: v.RowInfo},
-		{Row: 1, Col: snapLeftAttr, Color: go3270.Turquoise, Content: v.AsOf},
+		{Row: 1, Col: centerCol(len(v.AsOf)), Color: go3270.Turquoise, Content: v.AsOf},
 		{Row: bodyTopRow(), Col: snapLeftAttr, Color: go3270.Blue, Content: v.Head.Left},
 		{Row: bodyTopRow(), Col: snapMidAttr, Color: go3270.Blue, Content: v.Head.Mid},
 		{Row: bodyTopRow(), Col: snapRightAttr, Color: go3270.Blue, Content: v.Head.Right},
@@ -139,9 +139,16 @@ func buildDetailScreen(rows int, v DetailView) (go3270.Screen, Cursor) {
 		{Row: 0, Col: centerCol(len(v.Title)), Color: go3270.White, Intense: true, Content: v.Title},
 	}
 	row := 2
+	// Dot-leadered labels right-align their colon just before the value column
+	// (col detailValueCol), matching the form view's geometry.
+	labelMax := formLabelMax(detailValueCol)
 	for _, f := range v.Fields {
+		label := f.Label
+		if v.DotLeader {
+			label = dotLeaderLabel(f.Label, labelMax)
+		}
 		screen = append(screen,
-			go3270.Field{Row: row, Col: 2, Color: go3270.Turquoise, Content: f.Label},
+			go3270.Field{Row: row, Col: labelAttrCol, Color: go3270.Turquoise, Content: label},
 			go3270.Field{Row: row, Col: detailValueCol, Content: f.Value, Color: f.Color},
 		)
 		row++
