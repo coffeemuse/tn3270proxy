@@ -67,6 +67,22 @@ EOF
 "$WORK/tn3270proxy" seed -db "$WORK/front.db" -file "$WORK/front-seed.json" >/dev/null || exit 1
 "$WORK/tn3270proxy" seed -db "$WORK/back.db" -file "$WORK/back-seed.json" >/dev/null || exit 1
 
+# Pager seed: user 'pager' (group 'many') sees 22 services, forcing a 2-page
+# menu at MOD 2's non-admin capacity (17). Services point at a dead port (never
+# bridged — we only page through the list). NAMEs are <=8 A-Z/0-9.
+pager_svcs=""
+for i in $(seq 1 22); do
+  n=$(printf "PAGE%02d" "$i")
+  sep=","; [ -z "$pager_svcs" ] && sep=""
+  pager_svcs="${pager_svcs}${sep}{\"name\":\"$n\",\"description\":\"Pager Service $i\",\"host\":\"127.0.0.1\",\"port\":1,\"groups\":[\"many\"]}"
+done
+cat > "$WORK/pager-seed.json" <<EOF
+{"groups":["many"],
+ "users":[{"username":"pager","password":"changeme","groups":["many"]}],
+ "services":[$pager_svcs]}
+EOF
+"$WORK/tn3270proxy" seed -db "$WORK/front.db" -file "$WORK/pager-seed.json" >/dev/null || exit 1
+
 "$WORK/tn3270proxy" serve -db "$WORK/front.db" -config "$WORK/front-cfg.json" >"$WORK/front.log" 2>&1 &
 FRONT_PID=$!
 "$WORK/tn3270proxy" serve -db "$WORK/back.db" -config "$WORK/back-cfg.json" >"$WORK/back.log" 2>&1 &
@@ -623,6 +639,83 @@ if awk '/USER SETTINGS/{seen=1} seen && /TN3270 GATEWAY MENU/{ok=1} END{exit !ok
 else
   FAIL=$((FAIL+1)); echo "FAIL: 15e PF3 on User Settings did not return to service menu"
 fi
+
+# --- 16. multi-page service menu: pager (22 services) pages with PF7/PF8 ---
+# MOTD is inactive on this branch (scenario 13's sysparams save fails), so each
+# login reaches the menu directly — matching scenario 3. If MOTD is later
+# enabled, every menu-reaching scenario here and above must clear it uniformly.
+s3 t16p1 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(pager)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+Ascii()
+ReadBuffer(Ascii)
+Quit()
+EOF
+check  "16a page 1 indicator" "ITEMS 1 TO 17 OF 22" "$WORK/t16p1.out"
+check  "16b page 1 first service"  "PAGE01" "$WORK/t16p1.out"
+check  "16c page 1 last on-page service" "PAGE17" "$WORK/t16p1.out"
+ncheck "16d page 1 hides overflow service" "PAGE18" "$WORK/t16p1.out"
+check  "16e meta entry present on page 1" "User Settings" "$WORK/t16p1.out"
+check  "16f menu cursor on selection input (1,15)" "I 2 24 80 1 15 " "$WORK/t16p1.out"
+
+s3 t16p2 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(pager)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+PF(8)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check  "16g PF8 -> page 2 indicator" "ITEMS 18 TO 22 OF 22" "$WORK/t16p2.out"
+check  "16h page 2 shows overflow service" "PAGE22" "$WORK/t16p2.out"
+ncheck "16i page 2 hides page-1 service" "PAGE01" "$WORK/t16p2.out"
+check  "16j meta entry present on page 2" "User Settings" "$WORK/t16p2.out"
+
+# PF8 at the last page is a no-op (still page 2); PF7 then returns to page 1.
+s3 t16p3 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(pager)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+PF(8)
+Wait(5,InputField)
+PF(8)
+Wait(5,InputField)
+Ascii()
+ReadBuffer(Ascii)
+Quit()
+EOF
+check  "16k PF8 at last page is a no-op" "ITEMS 18 TO 22 OF 22" "$WORK/t16p3.out"
+
+s3 t16p4 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(pager)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+PF(8)
+Wait(5,InputField)
+PF(7)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check  "16l PF7 returns to page 1" "ITEMS 1 TO 17 OF 22" "$WORK/t16p4.out"
 
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="

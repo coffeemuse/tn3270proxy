@@ -72,35 +72,66 @@ func truncateRunes(s string, n int) string {
 // FieldSelection is the name of the menu's numeric input field.
 const FieldSelection = "selection"
 
-// MenuScreen renders the service menu sized for geom and returns a mapping
-// from the user's typed selection (e.g. "1") to the chosen service, plus the
-// initial cursor. Services render on a fixed grid (number col 0, name col 4,
-// description col 13, hard-cut to 40) so they never collide with the right-hand
-// status block (StatusBlockCol). status supplies the block's values; an empty
-// MenuStatus simply renders blank values. When admin is true an
-// "A  Administration" entry is shown (handled by the presenter, not the
-// mapping) and the selection field accepts letters. errMsg, if non-empty, is
-// shown on the error line. Services beyond the screen's capacity are truncated
-// (no pagination) so the list can never collide with the input/error/help rows.
-func MenuScreen(geom Geometry, services []store.Service, admin bool, status MenuStatus, errMsg string) (go3270.Screen, map[string]store.Service, Cursor) {
+// MenuPageBounds clamps page against the service total and the per-page menu
+// capacity, returning the clamped page, the [start,end) slice bounds for that
+// page, and the "ITEMS x TO y OF z" indicator string. It is the single source
+// of menu paging math: MenuScreen uses it to render the page window, and the
+// presenter uses it to clamp its stored page so PF7/PF8 are no-ops at the ends.
+func MenuPageBounds(geom Geometry, total int, admin bool, page int) (clamped, start, end int, indicator string) {
+	if total == 0 {
+		return 0, 0, 0, "ITEMS 0 OF 0"
+	}
+	size := geom.MenuCapacity(admin)
+	maxPage := (total - 1) / size
+	if page > maxPage {
+		page = maxPage
+	}
+	if page < 0 {
+		page = 0
+	}
+	start = page * size
+	end = min(start+size, total)
+	return page, start, end, fmt.Sprintf("ITEMS %d TO %d OF %d", start+1, end, total)
+}
+
+// MenuScreen renders one page of the service menu sized for geom and returns a
+// mapping from the user's typed selection (e.g. "1") to the chosen service,
+// plus the initial cursor. Numbering is global and stable: the mapping covers
+// ALL services keyed by global index, while only page's window (sized by
+// MenuCapacity) is rendered, each row showing its global number. Services render
+// on a fixed grid (number col 0, name col 6, description col 17, hard-cut 40) so
+// they never collide with the right-hand status block (StatusBlockCol). status
+// supplies the block's values; an empty MenuStatus renders blank values. The
+// "0 User Settings" meta row (and, when admin, "A Administration") is bottom-
+// anchored on every page. An "ITEMS x TO y OF z" indicator sits on the title
+// row. errMsg, if non-empty, shows on the message line. PF7/PF8 page; out-of-
+// range pages clamp (see MenuPageBounds).
+func MenuScreen(geom Geometry, services []store.Service, admin bool, status MenuStatus, errMsg string, page int) (go3270.Screen, map[string]store.Service, Cursor) {
+	_, start, end, indicator := MenuPageBounds(geom, len(services), admin, page)
+
+	// Right-align the page indicator so its content ends at the screen's right
+	// margin (col 79); this guarantees the full "ITEMS x TO y OF z" never clips
+	// (a Field's Col is the attribute byte, so content starts at Col+1). Kept
+	// within the 80-column logical width per the rows-only adaptation model.
+	indicatorCol := max(79-len(indicator), 0)
+
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len("TN3270 GATEWAY MENU")), Color: go3270.White, Intense: true, Content: "TN3270 GATEWAY MENU"},
+		{Row: geom.TitleRow(), Col: indicatorCol, Color: go3270.Turquoise, Content: indicator},
 		{Row: geom.BodyTopRow(), Col: 2, Color: go3270.Turquoise, Content: "Select a service and press ENTER:"},
 	}
 
-	shown := services
-	if capacity := geom.MenuCapacity(admin); len(shown) > capacity {
-		shown = shown[:capacity]
+	// Global mapping: every service is selectable by its global number, even one
+	// that lives on another page.
+	mapping := make(map[string]store.Service, len(services))
+	for i, svc := range services {
+		mapping[fmt.Sprintf("%d", i+1)] = svc
 	}
-	mapping := make(map[string]store.Service, len(shown))
 
-	// Fixed grid: number col 0 (intense white), name col 4 (turquoise),
-	// description col 13 (green, hard-cut 40). Three separate fields keep the
-	// columns aligned and individually colored (ISPF style).
+	// Render only the current page's window, with global (stable) numbers.
 	row := geom.BodyTopRow() + 1
-	for i, svc := range shown {
-		key := fmt.Sprintf("%d", i+1)
-		mapping[key] = svc
+	for i := start; i < end; i++ {
+		svc := services[i]
 		screen = append(screen,
 			go3270.Field{Row: row, Col: 0, Intense: true, Content: fmt.Sprintf("%3d", i+1)},
 			go3270.Field{Row: row, Col: 6, Color: go3270.Turquoise, Content: truncateRunes(svc.Name, 8)},
@@ -108,21 +139,17 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 		)
 		row++
 	}
-	if len(shown) == 0 {
+	if len(services) == 0 {
 		screen = append(screen, go3270.Field{Row: geom.BodyTopRow() + 1, Col: 6, Content: "(no services available for your account)"})
-		row = geom.BodyTopRow() + 2
 	}
-	// Bottom "meta" entries below the service list: User Settings (0) is shown
-	// for every user; Administration (A) only for admins. Clamp so they never
-	// overrun the input row (MenuCapacity reserved these rows when the list is
-	// full).
-	metaRow := row + 1
-	lastMeta := geom.BodyBottomRow()
+
+	// Meta band: bottom-anchored on every page, one blank separator row above the
+	// PF legend (menuBottomRow). Non-admin: "0" on menuBottomRow. Admin: "0" one
+	// row above, "A" on menuBottomRow. The page window is capped at MenuCapacity,
+	// so service rows never reach the meta band.
+	metaRow := geom.menuBottomRow()
 	if admin {
-		lastMeta-- // leave a row below "0" for the "A" entry
-	}
-	if metaRow > lastMeta {
-		metaRow = lastMeta
+		metaRow-- // leave the bottom row for the "A" entry
 	}
 	screen = append(screen,
 		go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  0"},
@@ -146,7 +173,7 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 		selection,
 		stopF,
 		go3270.Field{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		go3270.Field{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Logoff    (PA3 returns here from a session)"},
+		go3270.Field{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Logoff   PF7=PgUp  PF8=PgDn   (PA3 returns here from a session)"},
 	)
 	return screen, mapping, cursorAt(selection)
 }

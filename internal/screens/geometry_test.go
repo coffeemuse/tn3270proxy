@@ -54,13 +54,13 @@ func TestGeometryMenuCapacity(t *testing.T) {
 		admin bool
 		want  int
 	}{
-		{Geometry{Rows: 24, Cols: 80}, false, 18}, // body rows 4..22 minus "0 User Settings"
-		{Geometry{Rows: 24, Cols: 80}, true, 17},  // one more row reserved for the A entry
-		{Geometry{Rows: 32, Cols: 80}, false, 26},
-		{Geometry{Rows: 43, Cols: 80}, true, 36},
-		{Geometry{Rows: 27, Cols: 132}, false, 21},
-		{Geometry{Rows: 27, Cols: 132}, true, 20},
-		{Geometry{}, false, 18}, // zero value normalizes
+		{Geometry{Rows: 24, Cols: 80}, false, 17}, // body rows 4..21 minus "0 User Settings"; row 22 is the blank separator
+		{Geometry{Rows: 24, Cols: 80}, true, 16},  // one more row reserved for the A entry
+		{Geometry{Rows: 32, Cols: 80}, false, 25},
+		{Geometry{Rows: 43, Cols: 80}, true, 35},
+		{Geometry{Rows: 27, Cols: 132}, false, 20},
+		{Geometry{Rows: 27, Cols: 132}, true, 19},
+		{Geometry{}, false, 17}, // zero value normalizes
 	}
 	for _, c := range cases {
 		if got := c.g.MenuCapacity(c.admin); got != c.want {
