@@ -134,7 +134,33 @@ func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admi
 }
 
 func (go3270Presenter) UserSettings(conn net.Conn, term Term, username string, rows []screens.UserSettingsRow, errMsg string) (string, bool, error) {
-	return "", true, nil
+	geom := term.Geometry()
+	valid := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		valid[r.Key] = true
+	}
+	for {
+		screen, cur := screens.UserSettingsScreen(geom, username, rows, errMsg)
+		resp, err := handleScreen(func() (go3270.Response, error) {
+			return go3270.HandleScreenAlt(
+				screen, nil, map[string]string{},
+				[]go3270.AID{go3270.AIDEnter},
+				withSilentExits([]go3270.AID{go3270.AIDPF3}),
+				screens.FieldError, cur.Row, cur.Col, conn, term.dev, term.codepage(),
+			)
+		})
+		if err != nil {
+			return "", false, err
+		}
+		if resp.AID == go3270.AIDPF3 {
+			return "", true, nil
+		}
+		key := strings.TrimSpace(resp.Values[screens.FieldUSOption])
+		if valid[key] {
+			return key, false, nil
+		}
+		errMsg = "Invalid selection: " + key
+	}
 }
 
 func (go3270Presenter) News(conn net.Conn, term Term, pages [][]string) error {
