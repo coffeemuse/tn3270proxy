@@ -62,14 +62,20 @@ admin menu (option 6)
        ├─ store.ListAudit(Since: now-72h, Limit: cap+1)   (existing — no change)
        ├─ sysconfig AUDIT_MAX_ROWS / AUDIT_REVERSE_DNS     internal/sysconfig/catalog.go
        └─ detail screen + PTR lookup
-            ├─ screens.AuditDetailScreen(...)      internal/screens/audit.go (new)
+            ├─ ui3270 Detail(DetailView) + buildDetailScreen  internal/ui3270 (new)
             └─ Resolver seam (net.Resolver)        internal/server (new, testable)
 ```
 
-Layering is preserved: `screens` and `ui3270` stay pure render (no DB, no
-network). The PTR lookup and the snapshot fetch live in the `server` layer; the
-resolved hostname and the formatted rows are passed *into* the screen builders as
-plain data. No SQL leaves `internal/store`.
+Both bespoke screens (snapshot list and detail) live in `internal/ui3270`
+alongside the driver, rendered through a widened `ui3270.Renderer` — cohesive
+with the existing `RunList`/`RunForm` admin sub-screens and able to reuse
+`pageBounds`/`Cursor`. (This refines the v1 sketch, which named
+`screens.AuditDetailScreen`.) Layering is preserved: `ui3270` stays pure render
+and never imports `store` — the event colour is computed in the `server` layer
+from `store` kinds and passed in as a `go3270.Color`. The PTR lookup and the
+snapshot fetch also live in `server`; the resolved hostname and the formatted
+rows are passed *into* the builders as plain data. No SQL leaves
+`internal/store`.
 
 ## Components
 
@@ -124,7 +130,12 @@ Column budget (the 72 chars from col 8):
 | HH:MM    | 5     | time, UTC (label only in header) |
 | USERNAME | 8     | truncated/padded; full value on detail |
 | EVENT    | 12    | longest kind (`bridge_start`/`mfa_enrolled`/`mfa_enforced`) is exactly 12; uppercased; coloured |
-| DETAIL   | 37    | summary; full value on detail (3 cols lost to field attribute bytes vs a single-field row) |
+| DETAIL   | 38    | summary; full value on detail |
+
+The row is laid as three fields — `[MM/DD HH:MM USERNAME]` (cols 8–27),
+`[EVENT]` (cols 29–40), `[DETAIL]` (cols 42–79) — and each field's attribute
+byte (cols 28, 41) doubles as the column separator, so there is no net column
+loss versus a single-field row.
 
 - **As-of stamp** (`AS OF YYYY-MM-DD (YYYY.DDD)  HH:MM UTC`) is the snapshot time,
   re-stamped only on refresh. Includes the Julian day-of-year.
@@ -146,7 +157,7 @@ the exceptions pop.
 | Notable / security-state change | Yellow | `admin`, `mfa_cleared`, `mfa_enforced`, `mfa_enrolled` |
 | Routine | default (no colour) | `connect`, `auth_ok`, `mfa_success`, `bridge_start`, `bridge_end`, `logout`, `disconnect` |
 
-### 4. Detail screen (`screens.AuditDetailScreen`, new)
+### 4. Detail screen (`ui3270.buildDetailScreen` + `Renderer.Detail`, new)
 
 Read-only, custom builder (not the generic single-line form) so the detail text
 can wrap full-width untruncated.
@@ -236,10 +247,16 @@ DefaultAuditReverseDNS = "ON"
 - `internal/screens/admin.go` — add `6.  Audit Log` to `AdminMenuScreen`.
 - `internal/server/presenter_admin.go` — accept `"6"` in the `AdminMenu` parse.
 - `internal/server/admin.go` — `case 6:` dispatch to `f.auditLog(ctx, conn)`.
-- `internal/server/admin_audit.go` (new) — the flow: read params, fetch, run the
-  snapshot list, handle `S` → detail + PTR.
-- `internal/ui3270/snapshotlist.go` (new) — `RunSnapshotList` + its row builder.
-- `internal/screens/audit.go` (new) — `AuditDetailScreen` builder.
+- `internal/server/admin_audit.go` (new) — the flow: read params, fetch, format
+  rows (event colour from kind), run the snapshot list, handle `S` → detail + PTR.
+- `internal/server/resolver.go` (new) — the `Resolver` seam + PTR helper.
+- `internal/ui3270/snapshotlist.go` (new) — `RunSnapshotList` driver.
+- `internal/ui3270/snapshotscreen.go` (new) — `buildSnapshotScreen` +
+  `buildDetailScreen` + `wrapText`.
+- `internal/ui3270/types.go` / `renderer.go` — widen `Renderer` with
+  `Snapshot`/`Detail`; new view types.
+- `internal/server/admin.go` — `ListAudit` added to `AdminStore`; `resolver`/`now`
+  fields on `adminFlow`; `case 6` dispatch.
 - `internal/sysconfig/catalog.go` — two new entries + `intInRange`/`onOff`.
 
 ## Testing
