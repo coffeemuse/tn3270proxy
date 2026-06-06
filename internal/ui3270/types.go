@@ -19,7 +19,11 @@
 
 package ui3270
 
-import "context"
+import (
+	"context"
+
+	"github.com/racingmars/go3270"
+)
 
 // Cursor is the initial input-cursor position, already adjusted for the 3270
 // attribute-byte offset. Cursor{0,0} means "home" (no input field to land on).
@@ -106,4 +110,35 @@ type FormConfig struct {
 	// DotLeader renders the form's labels with right-aligned colons and dot
 	// leaders (ISPF-style) so colons line up across rows. Default off.
 	DotLeader bool
+}
+
+// SnapshotRow is one row of a snapshot list, laid as three fields so the middle
+// segment (Mid) can carry its own colour. Left/Mid/Right are pre-formatted and
+// pre-padded by the caller; the builder places them at fixed columns.
+type SnapshotRow struct {
+	Left, Mid, Right string
+	MidColor         go3270.Color // go3270.DefaultColor ⇒ no explicit colour
+}
+
+// SnapshotView is what to paint for a snapshot (read-only, paged) list. AsOf is
+// a caller-formatted stamp shown on row 2; Head is the column-heading row;
+// Empty is shown in place of rows when there are none.
+type SnapshotView struct {
+	Title, RowInfo, AsOf, Legend, ErrMsg, PFHelp, Empty string
+	Head                                                SnapshotRow
+	Rows                                                []SnapshotRow
+}
+
+// DetailField is one label/value line on the detail screen. Color tints the
+// value (used for the event field); go3270.DefaultColor leaves it plain.
+type DetailField struct {
+	Label, Value string
+	Color        go3270.Color
+}
+
+// DetailView is what to paint for a read-only detail screen: a column of
+// label/value fields, then a full-width wrapped free-text block under BodyLabel.
+type DetailView struct {
+	Title, BodyLabel, Body, PFHelp string
+	Fields                         []DetailField
 }
