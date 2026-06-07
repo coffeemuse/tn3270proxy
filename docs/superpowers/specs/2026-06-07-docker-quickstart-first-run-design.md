@@ -96,22 +96,29 @@ resolves them regardless of working directory.
 
 ## 4. Fresh-vs-existing detection
 
-- **Provisioned marker = `tn3270proxy.json` exists.** `quickstart` writes this file
-  **last**, after every other artifact has been created successfully. Its presence
-  therefore means "the data dir is fully provisioned."
-- **Existing** (`tn3270proxy.json` present): print
-  `Existing installation detected at /data — leaving it untouched.` and exit 0 without
-  modifying anything.
-- **Fresh** (`tn3270proxy.json` absent): provision. Because the config file is written
-  last, a crash partway through leaves the dir without the marker, so the next boot
-  re-runs provisioning. Every step is individually idempotent and safe to re-run:
-  - `store.Open` runs an idempotent migration.
-  - The cert/key, `mfa.key`, and `motd.txt` are written only if absent.
-  - `seed.Apply` uses `INSERT OR IGNORE` (idempotent).
-  - `SETUP-DEFAULTS.TXT` is rewritten on each fresh provisioning pass.
+Provisioning is **all-or-nothing**, not resumable. `seed.Apply` is intentionally a
+one-time tool — it pre-flight-checks for any existing user/service and **errors** if the
+database is already populated — and a half-finished prior run would also have discarded
+the generated plaintext passwords that `SETUP-DEFAULTS.TXT` needs. So rather than
+pretend to resume, `quickstart` classifies the data dir into exactly three states:
 
-  This makes a partial provisioning resume cleanly rather than corrupting state or
-  duplicating rows.
+1. **Existing install** — `tn3270proxy.json` is present. Print
+   `Existing installation detected at /data — leaving it untouched.` and exit 0 without
+   touching anything. `quickstart` writes the config file **last**, after every other
+   artifact succeeds, so its presence reliably means "fully provisioned." This is the
+   normal path on every boot after the first.
+2. **Partial / foreign data dir** — `tn3270proxy.json` is absent but `proxy.db` (our
+   first-created artifact) is present. This means a prior provisioning was interrupted,
+   or the dir contains unrelated data. Fail loudly:
+   `data dir /data is partially provisioned or not empty (found proxy.db but no
+   tn3270proxy.json); remove its contents and retry`. This keeps us from running
+   `seed.Apply` against a populated DB (which would error anyway) and from emitting a
+   `SETUP-DEFAULTS.TXT` whose passwords don't match the stored hashes.
+3. **Fresh** — neither marker present (an empty or non-existent dir). Provision
+   everything in order (§5), writing `tn3270proxy.json` last as the commit point.
+
+`proxy.db` is created first precisely so it is a reliable "provisioning has begun" marker
+for state 2.
 
 ## 5. What gets generated
 
@@ -231,9 +238,9 @@ pure Go.)
 
 ### Unit tests (`quickstart`)
 - Fresh dir → every artifact is created (config, db, mfa.key, cert/key, motd, SETUP file).
-- Re-run on a provisioned dir → no-op, no mutation, exit 0.
-- Partial dir (artifacts present, config absent) → resumes and completes without
-  duplicating rows.
+- Re-run on a provisioned dir (config present) → no-op, no mutation, exit 0.
+- Partial/foreign dir (`proxy.db` present, config absent) → errors with the
+  "remove its contents and retry" message; mutates nothing further.
 - The generated `tn3270proxy.json` round-trips through `config.Load` without error.
 - The generated cert is a valid X509 leaf and is loadable by `listen.Build`
   (`tls.LoadX509KeyPair`).
