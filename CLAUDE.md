@@ -60,7 +60,11 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 
 ```
 cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, `version`,
-                  `audit list|prune`, and `mfa reset-all` (break-glass); wires everything.
+                  `audit list|prune`, `mfa reset-all` (break-glass), and `quickstart`;
+                  wires everything. `quickstart` provisions a fresh `-data` dir with
+                  opinionated Docker defaults (admin + sample users + DEMO service →
+                  dummy3270 + MFA key + self-signed cert + MOTD + SETUP-DEFAULTS.TXT);
+                  idempotent, all-or-nothing; emits a config the existing `serve` consumes.
                   `var version = "dev"` is the ldflags injection point (`-X main.version=vX.Y.Z`);
                   resolved via internal/version. serve runs the fail-closed MFA key check
                   (mfaStartup: refuse to start if enrolled users exist but no key, or if the key
@@ -146,6 +150,13 @@ internal/dummy    Throwaway TN3270 server: pure go3270 screen builders (3 random
                   "Press PA3 to disconnect." footer) + a Telnet-negotiating
                   accept/repaint loop. No state, no logging.
 internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative, idempotent seeding.
+internal/quickstart First-run provisioning for the Docker quick-start. Provision(ctx,dir)
+                  generates the data dir (proxy.db via store + seed, mfa.key, self-signed
+                  cert, motd.txt, SETUP-DEFAULTS.TXT) and writes tn3270proxy.json LAST as
+                  the "provisioned" marker. Detection: config present → no-op
+                  (ErrAlreadyProvisioned); proxy.db without config → partial-dir error;
+                  else fresh. Pure-Go cert (no openssl); shares GenPassword with bootstrap.
+                  Not the production path (see docs/security-hardening.md).
 internal/version  Resolve(injected) string: returns injected when set by ldflags, otherwise
                   falls back to a 12-char VCS revision from runtime/debug.ReadBuildInfo
                   (+"-dirty" suffix when the working tree is modified). Resolved in
