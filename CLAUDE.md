@@ -42,7 +42,14 @@ go build -ldflags "-X main.version=v1.2.3" -o bin/tn3270proxy ./cmd/tn3270proxy
 TN3270PROXY_MFA_KEY=$(openssl rand -base64 32) ./bin/tn3270proxy serve -db proxy.db   # serve with MFA enabled
 ./bin/tn3270proxy mfa reset-all -db proxy.db                   # break-glass: wipe all MFA enrollments (needs the key)
 
+./bin/tn3270proxy serve -db proxy.db -log-level debug -log-file proxy.json   # slog: stderr text + JSON file
+
 .claude/skills/s3270-smoke-testing/smoke.sh    # automated 3270 protocol smoke test (s3270)
+
+# container / release (GH #67):
+docker build -t tn3270proxy .                       # multi-stage distroless image
+docker compose -f examples/docker-compose.yml up    # sample deployment
+# tagged releases build via GoReleaser + GHCR multi-arch CI (.goreleaser.yaml, .github/).
 ```
 
 Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
@@ -56,13 +63,18 @@ cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, `ver
                   resolved via internal/version. serve runs the fail-closed MFA key check
                   (mfaStartup: refuse to start if enrolled users exist but no key, or if the key
                   can't decrypt the MFA_KEY_CHECK sentinel) and injects the *mfa.Cipher.
-internal/config   Config{DBPath, Plain, TLS, Limits}; Load(args) merges defaults<file<flags.
+internal/config   Config{DBPath, Plain, TLS, Limits, Log}; Load(args) merges defaults<file<flags
+                  (Log{Level,File}; flags -log-level/-log-file; level error|warn|info|debug).
                   Optional JSON file (tn3270proxy.json) defines plain+tls listeners and a
                   `limits` section (pre_auth_idle/idle/pre_auth_max as Go duration
                   strings, trusted_cidrs []IP-or-CIDR, bridge_idle "disconnect"|"exempt",
                   max_conns, max_per_ip; defaults 2m/30m/5m, [], disconnect, 512, 16,
                   max_per_ip 0 disables). trusted_cidrs is config-file-only by design
                   (it bypasses DoS controls — deployment surface, not the admin UI).
+internal/logging  slog setup: New(level, file) → (*slog.Logger, io.Closer) writing
+                  human-readable text to stderr always, plus optional JSON to a file
+                  (multiHandler). ParseLevel(error|warn|info|debug). Wired in main; the
+                  logger threads through the server seams (nil → slog.Default()).
 internal/listen   Build(cfg) → []net.Listener (plaintext + tls.NewListener, immediate TLS).
 internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + group-gated
                   ListServicesForGroups. All Create* are idempotent (INSERT OR IGNORE).
@@ -105,6 +117,15 @@ internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, s
                   meta-row (beside the admin-only `A`); UserSettingsScreen renders the
                   self-scoped settings sub-menu (FieldUSOption); FieldCurrentPassword is
                   the step-up / change-password input.
+internal/ui3270   Generic 3270 driver layer behind a Renderer seam (NewGo3270Renderer):
+                  RunForm/RunList/RunSnapshotList drive form/list/detail screens + row
+                  helpers, so the admin and self-service flows share one paging/line-command
+                  engine. ui3270 row helpers are the non-screens-pkg way to place rows.
+internal/sysconfig Catalog of runtime system parameters operators edit via the admin UI
+                  (MOTD file path, MFA issuer, System ID, #48 auth-throttle params). One
+                  Entry declaration per param; the store seeds the default and the admin
+                  form builds from the labels. The MFA_KEY_CHECK sentinel is deliberately
+                  NOT a Catalog entry (hidden from the form).
 internal/mfa      Pure TOTP (RFC 6238, pquerna/otp, 80-bit/16-char base32) + AES-256-GCM
                   secret-at-rest. NewCipher/Seal/Open (ErrDecrypt on wrong key), GenerateSecret,
                   Chunk (ABCD EFGH…), Validate(secret, code, lastStep, now) → (ok, step) with
