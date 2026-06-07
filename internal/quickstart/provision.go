@@ -102,6 +102,15 @@ func Provision(ctx context.Context, dir string) (*Result, error) {
 		return nil, fmt.Errorf("write setup file: %w", err)
 	}
 
+	// Close the DB (checkpointing WAL) BEFORE writing the commit marker, and
+	// surface any close/checkpoint failure — otherwise a failed final flush would
+	// be silently dropped behind an already-"provisioned" config file. The
+	// deferred Close above remains for the early-return error paths (a second
+	// Close on *sql.DB is a safe no-op).
+	if err := st.Close(); err != nil {
+		return nil, fmt.Errorf("close db: %w", err)
+	}
+
 	// Config LAST — its presence marks the dir as fully provisioned.
 	cfgBytes, err := renderConfigJSON(l)
 	if err != nil {
