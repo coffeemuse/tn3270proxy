@@ -1,5 +1,7 @@
 # TN3270Proxy
 
+[![CI](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml)
+
 A TN3270 gateway: presents itself as a TN3270 server, authenticates users,
 shows a group-filtered menu of internal TN3270 services, and bridges the user
 to the selected service. See `docs/superpowers/specs/` for the design.
@@ -19,6 +21,15 @@ Print the resolved version:
 Plain `go build` without ldflags still reports a useful version — a short VCS commit
 hash from `runtime/debug.ReadBuildInfo`, with a `-dirty` suffix when the working tree
 has uncommitted changes.
+
+## Container images & releases
+
+Tagged releases (`vX.Y.Z`) publish cross-platform binaries (with `SHA256SUMS`) to the
+GitHub Releases page, and multi-arch Docker images to
+`ghcr.io/coffeemuse/tn3270proxy` (tags: `X.Y.Z`, `X.Y`, `X`, and `latest` for stable
+releases). See [`examples/docker-compose.yml`](examples/docker-compose.yml) for a
+ready-to-run deployment (persistent DB volume, MFA key, config/TLS mounts, and the
+first-admin bootstrap step).
 
 ## Bootstrap (first admin account)
 

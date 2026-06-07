@@ -1,0 +1,34 @@
+# TN3270 gateway — sample docker-compose.
+#
+# FIRST-RUN BOOTSTRAP (one-shot, creates the first admin):
+#   docker compose run --rm tn3270proxy bootstrap -db /data/proxy.db
+# Then start the gateway normally with:
+#   docker compose up -d
+#
+# MFA MASTER KEY: generate once and keep it secret/stable:
+#   openssl rand -base64 32
+# Supply it via TN3270PROXY_MFA_KEY below (or mount a key file and use mfa.key_file
+# in the config). The server refuses to start if enrolled users exist but no key is set.
+#
+# GOTCHA: a tn3270proxy.json in the working dir auto-enables a TLS listener on :2324.
+# This sample uses an explicit config mount; map :2324 too if you enable TLS.
+
+services:
+  tn3270proxy:
+    image: ghcr.io/coffeemuse/tn3270proxy:latest   # pin a version (e.g. :1.0.0) in production
+    restart: unless-stopped
+    # Drop "-listen" below if you mount a config that disables the plain listener.
+    command: ["serve", "-db", "/data/proxy.db", "-listen", ":2323"]
+    ports:
+      - "2323:2323"      # plaintext TN3270 listener
+      # - "2324:2324"    # TLS listener (uncomment if you mount a TLS-enabled config)
+    environment:
+      # Generate with: openssl rand -base64 32
+      TN3270PROXY_MFA_KEY: "${TN3270PROXY_MFA_KEY:?set TN3270PROXY_MFA_KEY in your .env}"
+    volumes:
+      - proxy-db:/data                              # persistent SQLite DB
+      # - ./tn3270proxy.json:/tn3270proxy.json:ro   # optional config (enables :2324 TLS)
+      # - ./certs:/certs:ro                          # optional TLS cert/key material
+
+volumes:
+  proxy-db:
