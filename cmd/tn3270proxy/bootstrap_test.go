@@ -28,6 +28,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CoffeeMuse/tn3270proxy/internal/quickstart"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -99,8 +100,8 @@ func TestGenerateBootstrapPasswordCharset(t *testing.T) {
 			t.Fatalf("generateBootstrapPassword: %v", err)
 		}
 		for _, c := range strings.ReplaceAll(pw, "-", "") {
-			if !strings.ContainsRune(bootstrapCharset, c) {
-				t.Errorf("char %c not in bootstrapCharset: %q", c, pw)
+			if !strings.ContainsRune(quickstart.PasswordCharset, c) {
+				t.Errorf("char %c not in quickstart.PasswordCharset: %q", c, pw)
 			}
 		}
 		// Verify excluded ambiguous chars never appear.

@@ -21,35 +21,20 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
-	"math/big"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
+	"github.com/CoffeeMuse/tn3270proxy/internal/quickstart"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
-// bootstrapCharset is the 3270-typeable unambiguous alphanumeric set used for
-// one-time passwords: uppercase letters excluding I, L, O; digits excluding 0
-// and 1. Eliminates common transcription errors on physical 3270 keyboards.
-const bootstrapCharset = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
-
-// generateBootstrapPassword returns a random password in XXXX-XXXX-XXXX form
-// using bootstrapCharset. The format groups 12 characters for readability.
+// generateBootstrapPassword returns a one-time password using the shared
+// 3270-safe generator (see internal/quickstart.GenPassword).
 func generateBootstrapPassword() (string, error) {
-	b := make([]byte, 12)
-	n := big.NewInt(int64(len(bootstrapCharset)))
-	for i := range b {
-		idx, err := rand.Int(rand.Reader, n)
-		if err != nil {
-			return "", fmt.Errorf("generate password: %w", err)
-		}
-		b[i] = bootstrapCharset[idx.Int64()]
-	}
-	return fmt.Sprintf("%s-%s-%s", string(b[0:4]), string(b[4:8]), string(b[8:12])), nil
+	return quickstart.GenPassword()
 }
 
 // adminCounter is the store subset the warning helper needs.

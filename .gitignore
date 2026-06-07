@@ -50,3 +50,6 @@ tn3270proxy.json
 # Git worktrees
 .worktrees/
 seed.json
+
+# Docker quick-start generated data (secrets, db, certs)
+/data/
