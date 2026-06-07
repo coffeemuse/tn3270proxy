@@ -26,8 +26,17 @@ func TestGenerateSelfSignedCert(t *testing.T) {
 	if err := leaf.VerifyHostname("localhost"); err != nil {
 		t.Errorf("VerifyHostname(localhost): %v", err)
 	}
-	if !leaf.IPAddresses[0].Equal(net.ParseIP("127.0.0.1")) && len(leaf.IPAddresses) < 1 {
-		t.Errorf("expected 127.0.0.1 in IP SANs, got %v", leaf.IPAddresses)
+	for _, want := range []string{"127.0.0.1", "::1"} {
+		found := false
+		for _, ip := range leaf.IPAddresses {
+			if ip.Equal(net.ParseIP(want)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %s in IP SANs, got %v", want, leaf.IPAddresses)
+		}
 	}
 	wantNotAfter := leaf.NotBefore.Add(825 * 24 * time.Hour)
 	if leaf.NotAfter.Sub(wantNotAfter) > time.Hour || wantNotAfter.Sub(leaf.NotAfter) > time.Hour {
