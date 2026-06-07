@@ -57,6 +57,9 @@ func TestEachScreenHasBlinkingRedMarker(t *testing.T) {
 		if f.Highlighting != go3270.Blink {
 			t.Errorf("screen %d: marker highlight = %v, want Blink", i, f.Highlighting)
 		}
+		if f.Col != 70 {
+			t.Errorf("screen %d: marker Col = %d, want 70 (attribute byte; content 71-79)", i, f.Col)
+		}
 	}
 }
 
@@ -79,7 +82,7 @@ func TestScreensHaveNoInputFields(t *testing.T) {
 }
 
 func TestScreenForWrapsAndCoversAll(t *testing.T) {
-	titleOf := func(s go3270.Screen) string { return s[0].Content } // title is field 0
+	titleOf := func(s go3270.Screen) string { return s[0].Content } // compose puts title at index 0
 	a, b, c := titleOf(screenFor(0)), titleOf(screenFor(1)), titleOf(screenFor(2))
 	if a == b || b == c || a == c {
 		t.Errorf("screens not distinct: %q %q %q", a, b, c)

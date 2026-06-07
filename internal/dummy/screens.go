@@ -39,10 +39,11 @@ func screenFor(i int) go3270.Screen {
 	return builders[((i%n)+n)%n]()
 }
 
-// titleField centers text on row 0 in intense white. (Exact 1-column attribute
-// offset is not significant for this fixture.)
+// titleField centers text on row 0 in intense white. Col is the attribute
+// byte, so placing it one column left of the centered start puts the content
+// itself (which begins at Col+1) at the true center.
 func titleField(text string) go3270.Field {
-	return go3270.Field{Row: 0, Col: (80 - len(text)) / 2, Content: text, Color: go3270.White, Intense: true}
+	return go3270.Field{Row: 0, Col: (80-len(text))/2 - 1, Content: text, Color: go3270.White, Intense: true}
 }
 
 // footerField is the bottom-anchored PA3 hint shared by every screen.
