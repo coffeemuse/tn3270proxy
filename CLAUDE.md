@@ -30,6 +30,8 @@ go build ./...                 # build
 go test ./...                  # all tests
 go test ./... -race            # tests with race detector (bridge is concurrent — use this)
 go build -o bin/tn3270proxy ./cmd/tn3270proxy
+go build -o bin/dummy3270 ./cmd/dummy3270                     # demo/test TN3270 bridge target
+./bin/dummy3270 -listen :3300                                 # run the dummy backend (no TLS, no auth, no logging)
 # release build (stamps version):
 go build -ldflags "-X main.version=v1.2.3" -o bin/tn3270proxy ./cmd/tn3270proxy
 
@@ -63,6 +65,8 @@ cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, `ver
                   resolved via internal/version. serve runs the fail-closed MFA key check
                   (mfaStartup: refuse to start if enrolled users exist but no key, or if the key
                   can't decrypt the MFA_KEY_CHECK sentinel) and injects the *mfa.Cipher.
+cmd/dummy3270     main: tiny standalone TN3270 server (-listen, no TLS/DB/auth/logging)
+                  used as a demo/test bridge target; wraps internal/dummy.
 internal/config   Config{DBPath, Plain, TLS, Limits, Log}; Load(args) merges defaults<file<flags
                   (Log{Level,File}; flags -log-level/-log-file; level error|warn|info|debug).
                   Optional JSON file (tn3270proxy.json) defines plain+tls listeners and a
@@ -137,6 +141,10 @@ internal/bridge   The bespoke core. telnetProcessor parses one Telnet leg (forwa
                   backend (nil = plaintext, non-nil = TLS) + relays both ways.
                   Cause = {Error,BackendClosed,ClientClosed,UserEscaped}.
                   Exported escape key: EscapeAIDPA3.
+internal/dummy    Throwaway TN3270 server: pure go3270 screen builders (3 random
+                  mockup welcome screens with a blinking red DUMMY3270 marker +
+                  "Press PA3 to disconnect." footer) + a Telnet-negotiating
+                  accept/repaint loop. No state, no logging.
 internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative, idempotent seeding.
 internal/version  Resolve(injected) string: returns injected when set by ldflags, otherwise
                   falls back to a 12-char VCS revision from runtime/debug.ReadBuildInfo

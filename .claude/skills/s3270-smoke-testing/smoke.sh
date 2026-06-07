@@ -31,6 +31,7 @@ s3() { s3270 -model 3279-2 > "$WORK/$1.out" 2>&1; }
 
 # --- build ---
 go build -o "$WORK/tn3270proxy" ./cmd/tn3270proxy || { echo "FAIL: build"; exit 1; }
+go build -o "$WORK/dummy3270" ./cmd/dummy3270 || { echo "FAIL: build dummy3270"; exit 1; }
 
 # --- configs: each instance gets an explicit -config that DISABLES the TLS
 # listener. Without it the repo's tn3270proxy.json is auto-loaded and tries to
@@ -39,11 +40,8 @@ go build -o "$WORK/tn3270proxy" ./cmd/tn3270proxy || { echo "FAIL: build"; exit 
 cat > "$WORK/front-cfg.json" <<EOF
 {"listeners":{"plain":{"enabled":true,"addr":"127.0.0.1:$FRONT_PORT"},"tls":{"enabled":false}}}
 EOF
-cat > "$WORK/back-cfg.json" <<EOF
-{"listeners":{"plain":{"enabled":true,"addr":"127.0.0.1:$BACK_PORT"},"tls":{"enabled":false}}}
-EOF
 
-# Front seed: alice(ops) sees BACKEND (the second proxy) + DEADHOST (port 1,
+# Front seed: alice(ops) sees BACKEND (the dummy3270 backend) + DEADHOST (port 1,
 # nothing listens). DEVONLY(dev) must NOT appear on her menu. charlie(empty) is
 # in a group with no services — a legitimately empty menu, used by scenario 8.
 cat > "$WORK/front-seed.json" <<EOF
@@ -58,14 +56,7 @@ cat > "$WORK/front-seed.json" <<EOF
   {"name":"WIDEDESC","description":"1234567890123456789012345678901234567890","host":"127.0.0.1","port":1,"groups":["ops"]},
   {"name":"DEVONLY","description":"Dev Only","host":"127.0.0.1","port":9999,"groups":["dev"]}]}
 EOF
-# Back seed: the backend is a second tn3270proxy instance — a real TN3270
-# server we control. Bridged sessions land on its login screen.
-cat > "$WORK/back-seed.json" <<EOF
-{"groups":["ops"],"users":[{"username":"bob","password":"changeme","groups":["ops"]}],"services":[]}
-EOF
-
 "$WORK/tn3270proxy" seed -db "$WORK/front.db" -file "$WORK/front-seed.json" >/dev/null || exit 1
-"$WORK/tn3270proxy" seed -db "$WORK/back.db" -file "$WORK/back-seed.json" >/dev/null || exit 1
 
 # Pager seed: user 'pager' (group 'many') sees 22 services, forcing a 2-page
 # menu at MOD 2's non-admin capacity (17). Services point at a dead port (never
@@ -85,11 +76,11 @@ EOF
 
 "$WORK/tn3270proxy" serve -db "$WORK/front.db" -config "$WORK/front-cfg.json" >"$WORK/front.log" 2>&1 &
 FRONT_PID=$!
-"$WORK/tn3270proxy" serve -db "$WORK/back.db" -config "$WORK/back-cfg.json" >"$WORK/back.log" 2>&1 &
+"$WORK/dummy3270" -listen 127.0.0.1:$BACK_PORT >"$WORK/back.log" 2>&1 &
 BACK_PID=$!
 sleep 1
 grep -q listening "$WORK/front.log" || { echo "FAIL: front proxy did not start"; cat "$WORK/front.log"; exit 1; }
-grep -q listening "$WORK/back.log"  || { echo "FAIL: back proxy did not start";  cat "$WORK/back.log";  exit 1; }
+grep -q listening "$WORK/back.log"  || { echo "FAIL: dummy backend did not start";  cat "$WORK/back.log";  exit 1; }
 
 # A THIRD proxy with a deliberately short post-auth idle (2s) for the idle-logout
 # scenario (GH #18). It is isolated so the tiny idle window can't disconnect the
@@ -131,7 +122,7 @@ Wait(5,InputField)
 Ascii()
 Quit()
 EOF
-check "2a wrong password shows error line" "Invalid userid or password" "$WORK/t2.out"
+check "2a wrong password shows error line" "Invalid user ID or password" "$WORK/t2.out"
 check "2b login screen re-prompts" "TN3270 GATEWAY LOGIN" "$WORK/t2.out"
 
 # --- 3. correct login → group-filtered menu ---
@@ -160,8 +151,7 @@ check "3i status block coexists with wide desc" "User ID. :" "$WORK/t3.out"
 # reports 3 17, so 1 15 is the menu.
 check "3j menu cursor on selection input (1,15)" "I 2 24 80 1 15 " "$WORK/t3.out"
 
-# --- 4. select 1 + ENTER bridges to the backend proxy ---
-BACK_CONNS_BEFORE=$(grep -c "accepted connection" "$WORK/back.log")
+# --- 4. select 1 + ENTER bridges to the dummy backend ---
 s3 t4 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
 Wait(5,InputField)
@@ -172,19 +162,13 @@ Enter()
 Wait(5,InputField)
 String(1)
 Enter()
-Wait(5,Output)
-Wait(5,InputField)
+Wait(5,Unlock)
 Ascii()
 Quit()
 EOF
-# Bridged session lands on the BACKEND's login screen (menu is gone).
-check "4a bridge lands on backend login screen" "TN3270 GATEWAY LOGIN" "$WORK/t4.out"
-BACK_CONNS_AFTER=$(grep -c "accepted connection" "$WORK/back.log")
-if [ "$BACK_CONNS_AFTER" -gt "$BACK_CONNS_BEFORE" ]; then
-  PASS=$((PASS+1)); echo "PASS: 4b backend log shows new accepted connection"
-else
-  FAIL=$((FAIL+1)); echo "FAIL: 4b no new connection in back.log ($BACK_CONNS_BEFORE -> $BACK_CONNS_AFTER)"
-fi
+# Bridged session lands on the dummy backend screen (proxy menu is gone).
+check "4a bridge lands on dummy backend screen" "DUMMY3270" "$WORK/t4.out"
+ncheck "4b bridged screen is not the proxy menu" "TN3270 GATEWAY MENU" "$WORK/t4.out"
 
 # --- 5. PA3 during bridge returns to the menu, still logged in ---
 s3 t5 <<EOF
@@ -197,8 +181,7 @@ Enter()
 Wait(5,InputField)
 String(1)
 Enter()
-Wait(5,Output)
-Wait(5,InputField)
+Wait(5,Unlock)
 PA(3)
 Wait(5,Output)
 Wait(5,InputField)
