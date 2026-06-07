@@ -1,0 +1,21 @@
+services:
+  tn3270proxy:
+    build: .
+    image: tn3270proxy:quickstart
+    # No `command`: inherits the image CMD (quickstart then serve). Overriding it
+    # here would double the `sh -c` wrapper.
+    ports:
+      - "2323:2323"   # plaintext TN3270
+      - "2324:2324"   # TLS TN3270 (self-signed quick-start cert)
+    volumes:
+      - ./data:/data
+    depends_on:
+      - dummy3270
+    restart: unless-stopped
+
+  dummy3270:
+    image: tn3270proxy:quickstart
+    command: ["dummy3270", "-listen", ":3300"]
+    # No published ports: only the proxy reaches it, over the internal network
+    # at dummy3270:3300 (the seeded DEMO service host:port).
+    restart: unless-stopped
