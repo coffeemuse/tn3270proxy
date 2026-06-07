@@ -10,5 +10,6 @@ func DefaultMOTD() string {
 		"PLEASE CHANGE THE ADMIN AND SAMPLE PASSWORDS NOW:\n" +
 		"  log in, press A for the admin UI, and update each account.\n" +
 		"\n" +
-		"This is NOT a hardened production setup. See docs/security-hardening.md.\n"
+		"This is NOT a hardened production setup. To secure it, see:\n" +
+		"  github.com/CoffeeMuse/tn3270proxy/blob/main/docs/security-hardening.md\n"
 }

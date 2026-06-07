@@ -31,10 +31,6 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
-// bootstrapCharset is the 3270-typeable unambiguous alphanumeric set re-exported
-// from internal/quickstart for use by tests in this package.
-const bootstrapCharset = quickstart.PasswordCharset
-
 // generateBootstrapPassword returns a one-time password using the shared
 // 3270-safe generator (see internal/quickstart.GenPassword).
 func generateBootstrapPassword() (string, error) {
