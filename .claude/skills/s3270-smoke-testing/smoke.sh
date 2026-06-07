@@ -122,7 +122,7 @@ Wait(5,InputField)
 Ascii()
 Quit()
 EOF
-check "2a wrong password shows error line" "Invalid userid or password" "$WORK/t2.out"
+check "2a wrong password shows error line" "Invalid user ID or password" "$WORK/t2.out"
 check "2b login screen re-prompts" "TN3270 GATEWAY LOGIN" "$WORK/t2.out"
 
 # --- 3. correct login → group-filtered menu ---
