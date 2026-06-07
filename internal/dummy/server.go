@@ -86,8 +86,8 @@ func ListenAndServe(addr string) error {
 // keypress until the client disconnects. A recover() keeps one bad client from
 // taking down the listener. No logging, by design.
 func serveConn(conn net.Conn) {
+	defer func() { _ = recover() }() // outermost: catch panics from anything below
 	defer conn.Close()
-	defer func() { _ = recover() }()
 
 	if _, err := go3270.NegotiateTelnet(conn); err != nil {
 		return
