@@ -194,6 +194,34 @@ func TestApplyRejectsTooLongPasswordWithoutPartialWrite(t *testing.T) {
 	}
 }
 
+func TestApplySeedsUserSettingsLocked(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/s.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	data := SeedData{
+		Users: []SeedUser{
+			{Username: "guest", Password: "guestpassword", UserSettingsLocked: true},
+			{Username: "normal", Password: "normalpassword"},
+		},
+	}
+	if err := Apply(ctx, st, data); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	g, _ := st.GetUserByUsername(ctx, "guest")
+	if !g.UserSettingsLocked {
+		t.Error("guest should be locked")
+	}
+	n, _ := st.GetUserByUsername(ctx, "normal")
+	if n.UserSettingsLocked {
+		t.Error("normal user should default unlocked")
+	}
+}
+
 func TestApplyVerifyDefaultsOnWhenOmitted(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.Open(filepath.Join(t.TempDir(), "verify.db"))

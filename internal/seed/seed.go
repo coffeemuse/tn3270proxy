@@ -32,9 +32,10 @@ import (
 
 // SeedUser describes one user to create.
 type SeedUser struct {
-	Username string   `json:"username"`
-	Password string   `json:"password"`
-	Groups   []string `json:"groups"`
+	Username           string   `json:"username"`
+	Password           string   `json:"password"`
+	Groups             []string `json:"groups"`
+	UserSettingsLocked bool     `json:"user_settings_locked"` // omitted → unlocked
 }
 
 // SeedService describes one service to create.
@@ -122,6 +123,11 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 			}
 			if err := st.AddUserToGroup(ctx, uid, gid); err != nil {
 				return fmt.Errorf("add %q to %q: %w", u.Username, g, err)
+			}
+		}
+		if u.UserSettingsLocked {
+			if err := st.SetUserSettingsLocked(ctx, uid, true); err != nil {
+				return fmt.Errorf("lock %q: %w", u.Username, err)
 			}
 		}
 	}
