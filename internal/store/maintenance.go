@@ -28,8 +28,9 @@ import (
 )
 
 // execer is the subset of database/sql handles that can run a statement.
-// *sql.DB, *sql.Conn, and *sql.Tx all satisfy it, so the backup path is shared
-// between Store.Backup (pooled) and the migration runner (dedicated conn).
+// *sql.DB, *sql.Conn, and *sql.Tx all satisfy it. Today both Store.Backup and
+// the migration runner's pre-migration backup run on the pooled *sql.DB; the
+// interface keeps vacuumInto usable from a *sql.Conn or *sql.Tx if ever needed.
 type execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }

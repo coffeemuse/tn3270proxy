@@ -199,7 +199,13 @@ func (s *Store) runMigrations(ctx context.Context) error {
 		return fmt.Errorf("migrate: disable foreign keys: %w", err)
 	}
 	// Restore FK enforcement on the pooled connection regardless of outcome.
-	defer conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON")
+	// (The modernc driver does not re-apply the DSN foreign_keys pragma on conn
+	// reuse, so a conn returned FK-OFF would serve later queries FK-OFF.)
+	defer func() {
+		if _, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys = ON"); err != nil {
+			slog.Default().Error("migrate: failed to restore foreign_keys after migration", "err", err)
+		}
+	}()
 	for _, m := range migrations {
 		if m.version <= cur {
 			continue
