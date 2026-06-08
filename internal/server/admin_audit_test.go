@@ -102,3 +102,20 @@ func TestAuditLogFlow(t *testing.T) {
 		t.Errorf("detail PTR missing; fields=%+v", dv.Fields)
 	}
 }
+
+func TestAuditDetailShowsActor(t *testing.T) {
+	f := &adminFlow{} // auditDetail only needs ctx + the event for the actor field
+	dv := f.auditDetail(context.Background(), store.AuditEvent{
+		Kind: store.AuditMFACleared, SessionID: "s1",
+		Username: "BOB", Actor: "ADMIN"})
+
+	var found bool
+	for _, fld := range dv.Fields {
+		if fld.Label == "Actor" && fld.Value == "ADMIN" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("auditDetail fields missing Actor=ADMIN; got %+v", dv.Fields)
+	}
+}

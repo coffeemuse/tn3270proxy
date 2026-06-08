@@ -674,6 +674,7 @@ func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u sto
 // disconnect audit detail (only meaningful when ok=false); an idle-timeout
 // render error is classified here so the caller audits it distinctly.
 func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *auditTrail) (auth.Identity, bool, string) {
+	aud.setActor("") // returning to the login screen drops any prior principal
 	errMsg := ""
 	// Login info block: SystemID/Release are stable for the session; the
 	// presenter stamps the paint-time clock per render.
@@ -692,6 +693,7 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 		identity, err := s.Authenticate(ctx, s.Store, user, pass)
 		if err == nil {
 			s.Throttle.Reset(user)
+			aud.setActor(identity.Username)
 			aud.record(ctx, store.AuditEvent{Kind: store.AuditAuthOK, Username: identity.Username})
 			return identity, true, ""
 		}

@@ -668,6 +668,11 @@ func TestSessionAuditsDisconnectAfterClientClosed(t *testing.T) {
 	if disc.Username != "alice" {
 		t.Errorf("disconnect username = %q, want %q", disc.Username, "alice")
 	}
+	// A mid-session client drop is attributed to the still-logged-in actor (#73):
+	// doLogin's setActor("") only fires on return-to-login, which never happened here.
+	if disc.Actor != "alice" {
+		t.Errorf("disconnect actor = %q, want %q (still logged in)", disc.Actor, "alice")
+	}
 }
 
 func TestSessionAuditsAuthEvents(t *testing.T) {
@@ -698,7 +703,7 @@ func TestSessionAuditsAuthEvents(t *testing.T) {
 	}
 	// The password must not appear in ANY field of ANY event.
 	for _, ev := range rec.events {
-		for _, field := range []string{ev.SessionID, ev.Kind, ev.Username, ev.RemoteAddr, ev.Service, ev.Detail} {
+		for _, field := range []string{ev.SessionID, ev.Kind, ev.Username, ev.Actor, ev.RemoteAddr, ev.Service, ev.Detail} {
 			if strings.Contains(field, "sw0rdf1sh-wrong") || strings.Contains(field, "good") {
 				t.Errorf("credential leaked into audit event %+v", ev)
 			}
@@ -940,9 +945,11 @@ func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
 			admins = append(admins, ev)
 		}
 	}
+	// GH #73: generic CRUD subject lives in Detail; Username must be empty; actor
+	// is auto-filled by auditTrail.record with the authenticated principal.
 	if len(admins) != 1 || admins[0].Detail != "group create newgrp" ||
-		admins[0].Username != "root" || admins[0].SessionID == "" {
-		t.Errorf("admin events = %+v, want one 'group create newgrp' by root with a session id", admins)
+		admins[0].Username != "" || admins[0].Actor != "root" || admins[0].SessionID == "" {
+		t.Errorf("admin events = %+v, want one 'group create newgrp' with actor=root, empty username, and a session id", admins)
 	}
 }
 
@@ -1348,5 +1355,45 @@ func TestLoginThrottleEnumerationSafe(t *testing.T) {
 	}
 	if delayFor("ghost") != delayFor("alice") {
 		t.Error("unknown vs known username produced different delays")
+	}
+}
+
+func TestSessionAuditActorAttribution(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "sw0rdf1sh-wrong"},
+			{user: "alice", pass: "good"},
+			{quit: true}, // login render after menu logoff
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	want := []string{store.AuditConnect, store.AuditAuthFail, store.AuditAuthOK, store.AuditLogout, store.AuditDisconnect}
+	if !slices.Equal(rec.kinds(), want) {
+		t.Fatalf("kinds = %v, want %v", rec.kinds(), want)
+	}
+	if a := rec.events[0].Actor; a != "" { // connect: pre-auth
+		t.Errorf("connect actor = %q, want empty", a)
+	}
+	if a := rec.events[1].Actor; a != "" { // auth_fail: never authenticated
+		t.Errorf("auth_fail actor = %q, want empty", a)
+	}
+	// authStub returns identity.Username verbatim ("alice"), so actor == "alice".
+	if a := rec.events[2].Actor; a != "alice" { // auth_ok
+		t.Errorf("auth_ok actor = %q, want alice", a)
+	}
+	if a := rec.events[3].Actor; a != "alice" { // logout while still attributed
+		t.Errorf("logout actor = %q, want alice", a)
+	}
+	if a := rec.events[4].Actor; a != "" { // disconnect from the login screen post-logoff
+		t.Errorf("disconnect actor = %q, want empty after logoff", a)
 	}
 }

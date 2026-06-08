@@ -72,14 +72,15 @@ func runAudit(args []string) error {
 func runAuditList(args []string) error {
 	fs := flag.NewFlagSet("audit list", flag.ContinueOnError)
 	dbPath := fs.String("db", "tn3270proxy.db", "path to SQLite database file")
-	user := fs.String("user", "", "filter by username")
+	user := fs.String("user", "", "filter by subject username")
+	actor := fs.String("actor", "", "filter by acting principal (who performed the action)")
 	kind := fs.String("kind", "", "filter by event kind (e.g. auth_fail)")
 	since := fs.String("since", "", "only events newer than this age (e.g. 24h, 7d)")
 	limit := fs.Int("limit", 100, "maximum rows")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	f := store.AuditFilter{Username: *user, Kind: *kind, Limit: *limit}
+	f := store.AuditFilter{Username: *user, Actor: *actor, Kind: *kind, Limit: *limit}
 	if *since != "" {
 		d, err := parseDuration(*since)
 		if err != nil {
@@ -100,17 +101,17 @@ func runAuditList(args []string) error {
 	return nil
 }
 
-// printAuditEvents writes one event per line: time, kind, session, user,
-// remote, service, detail.
+// printAuditEvents writes one event per line: time, kind, session, subject user,
+// actor, remote, service, detail.
 func printAuditEvents(w io.Writer, events []store.AuditEvent) {
 	if len(events) == 0 {
 		fmt.Fprintln(w, "no audit events")
 		return
 	}
 	for _, ev := range events {
-		fmt.Fprintf(w, "%s  %-12s %s  %-12s %-21s %-12s %s\n",
+		fmt.Fprintf(w, "%s  %-12s %s  %-12s %-12s %-21s %-12s %s\n",
 			ev.At.Format(time.RFC3339), ev.Kind, ev.SessionID,
-			ev.Username, ev.RemoteAddr, ev.Service, ev.Detail)
+			ev.Username, ev.Actor, ev.RemoteAddr, ev.Service, ev.Detail)
 	}
 }
 

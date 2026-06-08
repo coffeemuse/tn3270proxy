@@ -54,7 +54,8 @@ type AuditEvent struct {
 	At         time.Time
 	SessionID  string
 	Kind       string
-	Username   string
+	Username   string // the subject — the account this row is about ("" if none)
+	Actor      string // the authenticated principal who performed the action ("" pre-auth)
 	RemoteAddr string
 	Service    string
 	Detail     string
@@ -64,17 +65,18 @@ type AuditEvent struct {
 // the autoincrement id preserves insert order within a second).
 func (s *Store) RecordAudit(ctx context.Context, ev AuditEvent) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO audit (at, session_id, kind, username, remote_addr, service, detail)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO audit (at, session_id, kind, username, actor, remote_addr, service, detail)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		ev.At.UTC().Format(time.RFC3339), ev.SessionID, ev.Kind,
-		ev.Username, ev.RemoteAddr, ev.Service, ev.Detail)
+		ev.Username, ev.Actor, ev.RemoteAddr, ev.Service, ev.Detail)
 	return err
 }
 
 // AuditFilter narrows ListAudit. Zero values mean "no constraint";
 // Limit <= 0 means the default of 100 rows.
 type AuditFilter struct {
-	Username string
+	Username string // subject lens
+	Actor    string // actor lens
 	Kind     string
 	Since    time.Time
 	Limit    int
@@ -88,6 +90,10 @@ func (s *Store) ListAudit(ctx context.Context, f AuditFilter) ([]AuditEvent, err
 		where = append(where, "username = ?")
 		args = append(args, f.Username)
 	}
+	if f.Actor != "" {
+		where = append(where, "actor = ?")
+		args = append(args, f.Actor)
+	}
 	if f.Kind != "" {
 		where = append(where, "kind = ?")
 		args = append(args, f.Kind)
@@ -96,7 +102,7 @@ func (s *Store) ListAudit(ctx context.Context, f AuditFilter) ([]AuditEvent, err
 		where = append(where, "at >= ?")
 		args = append(args, f.Since.UTC().Format(time.RFC3339))
 	}
-	query := `SELECT id, at, session_id, kind, username, remote_addr, service, detail FROM audit`
+	query := `SELECT id, at, session_id, kind, username, actor, remote_addr, service, detail FROM audit`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -117,7 +123,7 @@ func (s *Store) ListAudit(ctx context.Context, f AuditFilter) ([]AuditEvent, err
 		var ev AuditEvent
 		var at string
 		if err := rows.Scan(&ev.ID, &at, &ev.SessionID, &ev.Kind,
-			&ev.Username, &ev.RemoteAddr, &ev.Service, &ev.Detail); err != nil {
+			&ev.Username, &ev.Actor, &ev.RemoteAddr, &ev.Service, &ev.Detail); err != nil {
 			return nil, err
 		}
 		if ev.At, err = time.Parse(time.RFC3339, at); err != nil {

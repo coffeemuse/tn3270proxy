@@ -157,14 +157,16 @@ func (f *adminFlow) storeErr(op string, err error) string {
 	return msgTempError
 }
 
-// recordAdmin emits one admin audit event ("who changed what"). Call it only
-// after the store mutation has succeeded, so the trail reflects reality.
+// recordAdmin emits one generic admin-CRUD audit event. The acting admin is
+// auto-filled as the actor by auditTrail.record (GH #73); Username is left empty
+// because a generic mutation's subject (a user, group, or service) is described
+// in Detail, not necessarily a single user account. Call it only after the store
+// mutation has succeeded, so the trail reflects reality.
 func (f *adminFlow) recordAdmin(ctx context.Context, detail string) {
 	if f.audit == nil {
 		return
 	}
-	f.audit(ctx, store.AuditEvent{
-		Kind: store.AuditAdmin, Username: f.identity.Username, Detail: detail})
+	f.audit(ctx, store.AuditEvent{Kind: store.AuditAdmin, Detail: detail})
 }
 
 // users is implemented in admin_users.go.
