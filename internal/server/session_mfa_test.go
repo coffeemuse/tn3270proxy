@@ -136,3 +136,75 @@ func TestMFAGateSecretFirst(t *testing.T) {
 		})
 	}
 }
+
+// TestMFAGateLockedSkipsEnrollment asserts that a user_settings_locked account
+// never enters the enrollment branch (forced or otherwise), but a stored secret
+// is still verified at login.
+func TestMFAGateLockedSkipsEnrollment(t *testing.T) {
+	const secret = "JBSWY3DPEHPK3PXP"
+	now := time.Unix(1_700_000_000, 0)
+	step := uint64(now.Unix() / 30)
+	good, err := hotp.GenerateCodeCustom(secret, step, hotp.ValidateOpts{
+		Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("locked_required_no_secret_no_enroll", func(t *testing.T) {
+		p := &fakePresenter{
+			termType:  "IBM-3278-2-E",
+			logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+			menuPicks: []menuResult{{quit: true}},
+		}
+		b := &fakeBridger{}
+		s, st := newMFATestSession(t, p, b)
+		ctx := context.Background()
+		uid, _ := st.CreateUser(ctx, "alice", "x")
+		st.SetMFARequired(ctx, uid, true)
+		st.SetUserSettingsLocked(ctx, uid, true)
+
+		client, server := net.Pipe()
+		defer client.Close()
+		defer server.Close()
+		s.Run(client)
+
+		if len(p.enrollErrors) > 0 {
+			t.Error("EnrollMFA must not be called for a locked account")
+		}
+		if len(p.menuPicks) != 0 {
+			t.Error("session should have reached the menu (no MFA prompt)")
+		}
+	})
+
+	t.Run("locked_with_secret_still_verifies", func(t *testing.T) {
+		p := &fakePresenter{
+			termType:  "IBM-3278-2-E",
+			verifies:  []mfaResult{{code: good}},
+			logins:    []loginResult{{user: "alice", pass: "good"}, {quit: true}},
+			menuPicks: []menuResult{{quit: true}},
+		}
+		b := &fakeBridger{}
+		s, st := newMFATestSession(t, p, b)
+		ctx := context.Background()
+		uid, _ := st.CreateUser(ctx, "alice", "x")
+		st.SetUserSettingsLocked(ctx, uid, true)
+		enc, err := s.MFA.Seal([]byte(secret))
+		if err != nil {
+			t.Fatal(err)
+		}
+		st.StoreMFAEnrollment(ctx, uid, enc, "2026-01-01T00:00:00Z", 0)
+
+		client, server := net.Pipe()
+		defer client.Close()
+		defer server.Close()
+		s.Run(client)
+
+		if len(p.verifyErrors) == 0 {
+			t.Error("VerifyMFA must still be called for a locked, enrolled account")
+		}
+		if len(p.menuPicks) != 0 {
+			t.Error("session should have reached the menu after verify")
+		}
+	})
+}

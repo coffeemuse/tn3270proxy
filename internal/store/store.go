@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS users (
 	mfa_required    INTEGER NOT NULL DEFAULT 0,
 	mfa_secret      TEXT NOT NULL DEFAULT '',
 	mfa_enrolled_at TEXT NOT NULL DEFAULT '',
-	mfa_last_step   INTEGER NOT NULL DEFAULT 0
+	mfa_last_step   INTEGER NOT NULL DEFAULT 0,
+	user_settings_locked INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS groups (
 	id   INTEGER PRIMARY KEY,
@@ -158,6 +159,10 @@ func (s *Store) migrate() error {
 		"ALTER TABLE users ADD COLUMN mfa_last_step INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn("users", "user_settings_locked",
+		"ALTER TABLE users ADD COLUMN user_settings_locked INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 	// The reserved admin group always exists; seeding only assigns members.
 	if _, err := s.db.Exec("INSERT OR IGNORE INTO groups (name) VALUES (?)", AdminGroup); err != nil {
 		return fmt.Errorf("ensure %s group: %w", AdminGroup, err)
@@ -210,15 +215,16 @@ func (s *Store) ensureColumn(table, column, alterSQL string) error {
 
 // User is an account record.
 type User struct {
-	ID            int64
-	Username      string
-	PasswordHash  string
-	FullName      string
-	Email         string
-	MFARequired   bool
-	MFASecret     string // AES-GCM ciphertext (base64); "" = not enrolled
-	MFAEnrolledAt string // UTC RFC3339; "" = not set
-	MFALastStep   int64  // replay floor: highest accepted TOTP step
+	ID                 int64
+	Username           string
+	PasswordHash       string
+	FullName           string
+	Email              string
+	MFARequired        bool
+	MFASecret          string // AES-GCM ciphertext (base64); "" = not enrolled
+	MFAEnrolledAt      string // UTC RFC3339; "" = not set
+	MFALastStep        int64  // replay floor: highest accepted TOTP step
+	UserSettingsLocked bool   // admin lock: hides self-service User Settings; freezes MFA as admin-managed
 }
 
 // CreateUser inserts a user, or returns the existing user's id if the
@@ -254,13 +260,13 @@ func (s *Store) AddUserToGroup(ctx context.Context, userID, groupID int64) error
 func (s *Store) GetUserByUsername(ctx context.Context, username string) (User, error) {
 	username = strings.ToUpper(username)
 	var u User
-	var reqInt int
+	var reqInt, lockInt int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, username, password_hash, full_name, email,
-		        mfa_required, mfa_secret, mfa_enrolled_at, mfa_last_step
+		        mfa_required, mfa_secret, mfa_enrolled_at, mfa_last_step, user_settings_locked
 		 FROM users WHERE username = ?`, username).
 		Scan(&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Email,
-			&reqInt, &u.MFASecret, &u.MFAEnrolledAt, &u.MFALastStep)
+			&reqInt, &u.MFASecret, &u.MFAEnrolledAt, &u.MFALastStep, &lockInt)
 	if err == sql.ErrNoRows {
 		return User{}, ErrNotFound
 	}
@@ -268,6 +274,7 @@ func (s *Store) GetUserByUsername(ctx context.Context, username string) (User, e
 		return User{}, err
 	}
 	u.MFARequired = reqInt != 0
+	u.UserSettingsLocked = lockInt != 0
 	return u, nil
 }
 

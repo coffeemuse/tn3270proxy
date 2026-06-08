@@ -44,7 +44,8 @@ func TestSelfChangePassword(t *testing.T) {
 	var slept []time.Duration
 	s.Sleep = func(d time.Duration) { slept = append(slept, d) }
 
-	// Seed ALICE with "oldpass" (bcrypt hashed).
+	// Seed ALICE with "oldpass" (bcrypt hashed). newTestSession pre-creates alice
+	// with a different hash; SetPassword overwrites it so auth.Authenticate works.
 	hash, err := auth.HashPassword("oldpass")
 	if err != nil {
 		t.Fatalf("HashPassword: %v", err)
@@ -52,6 +53,9 @@ func TestSelfChangePassword(t *testing.T) {
 	uid, err := s.Store.CreateUser(ctx, "ALICE", hash)
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := s.Store.SetPassword(ctx, uid, hash); err != nil {
+		t.Fatalf("SetPassword: %v", err)
 	}
 
 	// Wire a fake renderer that returns the change-password form values.
@@ -106,7 +110,8 @@ func TestSelfMFAEnroll(t *testing.T) {
 	// Override MFAGenerate to return the known secret so we can compute the code.
 	s.MFAGenerate = func(_, _ string) (string, error) { return secret, nil }
 
-	// Seed ALICE with a bcrypt password and NO MFA secret.
+	// Seed ALICE with a bcrypt password and NO MFA secret. newTestSession
+	// pre-creates alice; SetPassword overwrites the hash for auth.Authenticate.
 	hash, err := auth.HashPassword("pw")
 	if err != nil {
 		t.Fatalf("HashPassword: %v", err)
@@ -115,7 +120,9 @@ func TestSelfMFAEnroll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	_ = uid
+	if err := s.Store.SetPassword(ctx, uid, hash); err != nil {
+		t.Fatalf("SetPassword: %v", err)
+	}
 
 	// Compute the valid TOTP code for the known secret at s.Now.
 	now := time.Unix(1_700_000_000, 0)
@@ -178,6 +185,7 @@ func TestSelfMFADisableClearsAndAudits(t *testing.T) {
 	s.Throttle = newAuthThrottle()
 
 	// Seed ALICE with a bcrypt password AND a sealed MFA secret, mfa_required=false.
+	// newTestSession pre-creates alice; SetPassword overwrites the hash.
 	hash, err := auth.HashPassword("pw")
 	if err != nil {
 		t.Fatalf("HashPassword: %v", err)
@@ -185,6 +193,9 @@ func TestSelfMFADisableClearsAndAudits(t *testing.T) {
 	uid, err := s.Store.CreateUser(ctx, "ALICE", hash)
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := s.Store.SetPassword(ctx, uid, hash); err != nil {
+		t.Fatalf("SetPassword: %v", err)
 	}
 	enc, err := s.MFA.Seal([]byte(secret))
 	if err != nil {
@@ -265,6 +276,9 @@ func TestSelfMFADisableBlockedWhenRequired(t *testing.T) {
 	uid, err := s.Store.CreateUser(ctx, "ALICE", hash)
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := s.Store.SetPassword(ctx, uid, hash); err != nil {
+		t.Fatalf("SetPassword: %v", err)
 	}
 	enc, err := s.MFA.Seal([]byte(secret))
 	if err != nil {

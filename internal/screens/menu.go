@@ -102,11 +102,11 @@ func MenuPageBounds(geom Geometry, total int, admin bool, page int) (clamped, st
 // on a fixed grid (number col 0, name col 6, description col 17, hard-cut 40) so
 // they never collide with the right-hand status block (StatusBlockCol). status
 // supplies the block's values; an empty MenuStatus renders blank values. The
-// "0 User Settings" meta row (and, when admin, "A Administration") is bottom-
-// anchored on every page. An "ITEMS x TO y OF z" indicator sits on the title
-// row. errMsg, if non-empty, shows on the message line. PF7/PF8 page; out-of-
-// range pages clamp (see MenuPageBounds).
-func MenuScreen(geom Geometry, services []store.Service, admin bool, status MenuStatus, errMsg string, page int) (go3270.Screen, map[string]store.Service, Cursor) {
+// "0 User Settings" meta row (omitted when settingsLocked) and, when admin,
+// "A Administration" are bottom-anchored on every page. An "ITEMS x TO y OF z"
+// indicator sits on the title row. errMsg, if non-empty, shows on the message
+// line. PF7/PF8 page; out-of-range pages clamp (see MenuPageBounds).
+func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLocked bool, status MenuStatus, errMsg string, page int) (go3270.Screen, map[string]store.Service, Cursor) {
 	_, start, end, indicator := MenuPageBounds(geom, len(services), admin, page)
 
 	// Right-align the page indicator so its content ends at the screen's right
@@ -143,18 +143,20 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, status Menu
 		screen = append(screen, go3270.Field{Row: geom.BodyTopRow() + 1, Col: 6, Content: "(no services available for your account)"})
 	}
 
-	// Meta band: bottom-anchored on every page, one blank separator row above the
-	// PF legend (menuBottomRow). Non-admin: "0" on menuBottomRow. Admin: "0" one
-	// row above, "A" on menuBottomRow. The page window is capped at MenuCapacity,
-	// so service rows never reach the meta band.
+	// Meta band: bottom-anchored. Non-admin unlocked: "0" on menuBottomRow.
+	// Admin: "A" on menuBottomRow, "0" one row above. A locked user has no "0"
+	// row at all (self-service is hidden). The page window is capped at
+	// MenuCapacity, so service rows never reach the meta band.
 	metaRow := geom.menuBottomRow()
 	if admin {
 		metaRow-- // leave the bottom row for the "A" entry
 	}
-	screen = append(screen,
-		go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  0"},
-		go3270.Field{Row: metaRow, Col: 17, Color: go3270.Green, Content: "User Settings"},
-	)
+	if !settingsLocked {
+		screen = append(screen,
+			go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  0"},
+			go3270.Field{Row: metaRow, Col: 17, Color: go3270.Green, Content: "User Settings"},
+		)
+	}
 	if admin {
 		adminRow := metaRow + 1
 		screen = append(screen,

@@ -185,6 +185,21 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 			ui3270.FormField{Name: screens.FieldMFAStatus, Label: "MFA status .", Length: 10, Value: status, ReadOnly: true},
 			ui3270.FormField{Name: screens.FieldMFAClear, Label: "Clear MFA Y.", Length: 1, Value: ""},
 		)
+		lock := "N"
+		if u.UserSettingsLocked {
+			lock = "Y"
+		}
+		fields = append(fields,
+			ui3270.FormField{Name: screens.FieldUserSettingsLocked, Label: "Lock self Y.", Length: 1, Value: lock},
+		)
+		// Hint: when MFA is required but no secret is enrolled, locking makes
+		// mfa_required a no-op (a locked account is never force-enrolled).
+		if u.UserSettingsLocked && u.MFARequired && u.MFASecret == "" {
+			fields = append(fields,
+				ui3270.FormField{Name: "lockhint", Label: "Note . . . .", Length: 40,
+					Value: "MFA REQ INERT WHILE LOCKED W/O SECRET", ReadOnly: true},
+			)
+		}
 	}
 	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
 		Title:  title,
@@ -266,6 +281,11 @@ func (f *adminFlow) userSaveEdit(ctx context.Context, u store.User, vals map[str
 	} else if msg != "" {
 		return msg, nil
 	}
+	if msg, err := f.applyLockEdit(ctx, u, vals); err != nil {
+		return f.storeErr("apply lock", err), nil
+	} else if msg != "" {
+		return msg, nil
+	}
 	f.recordAdmin(ctx, "user edit "+u.Username)
 	return "", nil
 }
@@ -299,6 +319,35 @@ func (f *adminFlow) applyMFAEdit(ctx context.Context, u store.User, vals map[str
 		if f.audit != nil {
 			f.audit(ctx, store.AuditEvent{Kind: store.AuditMFACleared, Username: u.Username})
 		}
+	}
+	return "", nil
+}
+
+// applyLockEdit applies the "User Settings Locked" toggle from the edit form. It
+// audits the transition (locked/unlocked) and returns an error-line message ("" on
+// success).
+func (f *adminFlow) applyLockEdit(ctx context.Context, u store.User, vals map[string]string) (string, error) {
+	var locked bool
+	switch strings.ToUpper(strings.TrimSpace(vals[screens.FieldUserSettingsLocked])) {
+	case "Y":
+		locked = true
+	case "N", "":
+		locked = false
+	default:
+		return "LOCK SELF MUST BE Y OR N", nil
+	}
+	if locked == u.UserSettingsLocked {
+		return "", nil
+	}
+	if err := f.store.SetUserSettingsLocked(ctx, u.ID, locked); err != nil {
+		return f.storeErr("set settings lock", err), nil
+	}
+	if f.audit != nil {
+		kind := store.AuditSettingsUnlocked
+		if locked {
+			kind = store.AuditSettingsLocked
+		}
+		f.audit(ctx, store.AuditEvent{Kind: kind, Username: u.Username})
 	}
 	return "", nil
 }

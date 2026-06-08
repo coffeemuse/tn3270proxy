@@ -60,6 +60,7 @@ type AdminStore interface {
 
 	SetMFARequired(ctx context.Context, userID int64, required bool) error
 	ClearMFA(ctx context.Context, userID int64) error
+	SetUserSettingsLocked(ctx context.Context, userID int64, locked bool) error
 
 	GetConfig(ctx context.Context, key string) (string, error)
 	SetConfig(ctx context.Context, key, value string) error

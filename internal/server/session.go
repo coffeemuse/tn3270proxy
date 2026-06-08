@@ -50,7 +50,7 @@ import (
 type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
 	Login(conn net.Conn, term Term, status screens.MenuStatus, errMsg string) (username, password string, quit bool, err error)
-	Menu(conn net.Conn, term Term, services []store.Service, admin bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
+	Menu(conn net.Conn, term Term, services []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
 	// UserSettings renders the self-service settings menu with the given
 	// adaptive rows and returns the typed option key (e.g. "1"); back=true on
 	// PF3 (return to the service menu). It loops internally on invalid input.
@@ -349,6 +349,18 @@ func (s *Session) Run(conn net.Conn) {
 		}
 
 		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
+		// settingsLocked is captured once per login, like isAdmin — live sessions
+		// are not re-evaluated until the next login (repo convention). On a load
+		// error we deliberately fail OPEN (unlocked), unlike mfaGate which fails
+		// closed: a locked+enrolled account is already protected by mfaVerify
+		// (which runs before the menu), so the only residual exposure is one
+		// render of self-service — degrade gracefully rather than disconnect.
+		settingsLocked := false
+		if lu, lerr := s.Store.GetUserByUsername(ctx, identity.Username); lerr != nil {
+			s.log().Warn("load user-settings-lock failed; defaulting unlocked", "error", lerr)
+		} else {
+			settingsLocked = lu.UserSettingsLocked
+		}
 		errMsg := ""
 	menu:
 		for {
@@ -363,7 +375,7 @@ func (s *Session) Run(conn net.Conn) {
 				SystemID: s.systemID(ctx),
 				Release:  s.Release,
 			}
-			selected, choice, err := s.Presenter.Menu(conn, term, services, isAdmin, status, errMsg)
+			selected, choice, err := s.Presenter.Menu(conn, term, services, isAdmin, settingsLocked, status, errMsg)
 			if err != nil {
 				if isTimeoutErr(err) {
 					aud.record(ctx, store.AuditEvent{
@@ -414,6 +426,9 @@ func (s *Session) Run(conn net.Conn) {
 				}
 				continue
 			case menuUserSettings:
+				if settingsLocked {
+					continue // guard: a buggy presenter can't open self-service for a locked user
+				}
 				if uerr := s.userSettings(ctx, conn, term, identity, aud); uerr != nil {
 					if isTimeoutErr(uerr) {
 						aud.record(ctx, store.AuditEvent{
@@ -530,11 +545,13 @@ func (s *Session) mfaGate(ctx context.Context, conn net.Conn, term Term, identit
 		// secret means the user opted into MFA and must be challenged.
 		return s.mfaVerify(ctx, conn, term, u, aud)
 	}
-	if u.MFARequired {
-		// Required but not yet enrolled → force one-time enrollment.
+	if u.MFARequired && !u.UserSettingsLocked {
+		// Required but not yet enrolled → force one-time enrollment. A locked
+		// account is never force-enrolled: its MFA state is admin-managed, so
+		// mfa_required is inert until an admin enrolls a secret pre-lock.
 		return s.mfaEnroll(ctx, conn, term, u, aud)
 	}
-	return true, "", nil // no secret, not required → no MFA
+	return true, "", nil // no secret, or locked-and-unenrolled → no MFA
 }
 
 // confirmEnroll runs the enroll confirm-loop for an already-generated secret:
