@@ -940,9 +940,11 @@ func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
 			admins = append(admins, ev)
 		}
 	}
+	// GH #73: generic CRUD subject lives in Detail; Username must be empty; actor
+	// is auto-filled by auditTrail.record with the authenticated principal.
 	if len(admins) != 1 || admins[0].Detail != "group create newgrp" ||
-		admins[0].Username != "root" || admins[0].SessionID == "" {
-		t.Errorf("admin events = %+v, want one 'group create newgrp' by root with a session id", admins)
+		admins[0].Username != "" || admins[0].Actor != "root" || admins[0].SessionID == "" {
+		t.Errorf("admin events = %+v, want one 'group create newgrp' with actor=root, empty username, and a session id", admins)
 	}
 }
 

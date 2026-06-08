@@ -1138,8 +1138,12 @@ func TestAdminAuditUserCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].Kind != store.AuditAdmin ||
-		got[0].Detail != "user create newbie" || got[0].Username != "root" {
-		t.Errorf("audit = %+v, want one admin 'user create newbie' by root", got)
+		got[0].Detail != "user create newbie" {
+		t.Errorf("audit = %+v, want one admin 'user create newbie' event", got)
+	}
+	// GH #73: generic CRUD subject lives in Detail; Username must be empty.
+	if got[0].Username != "" {
+		t.Errorf("audit Username = %q, want empty (subject described in Detail)", got[0].Username)
 	}
 }
 
@@ -1393,5 +1397,35 @@ func TestAdminNetworkAudit(t *testing.T) {
 	if len(got) != 1 || got[0].Kind != store.AuditAdmin ||
 		!strings.Contains(got[0].Detail, "trust create") {
 		t.Errorf("audit = %+v", got)
+	}
+}
+
+func TestAdminAuditActorSubjectSplit(t *testing.T) {
+	var got []store.AuditEvent
+	// auditFn simulates the auditTrail's auto-fill: the acting admin is the
+	// session principal, stamped onto any actor-less event.
+	const admin = "ADMIN"
+	auditFn := func(_ context.Context, ev store.AuditEvent) {
+		if ev.Actor == "" {
+			ev.Actor = admin
+		}
+		got = append(got, ev)
+	}
+
+	// Generic CRUD: recordAdmin must NOT put the admin in Username.
+	f := &adminFlow{identity: auth.Identity{Username: admin}, audit: auditFn}
+	f.recordAdmin(context.Background(), "created service PROD")
+
+	if len(got) != 1 {
+		t.Fatalf("recordAdmin emitted %d events, want 1", len(got))
+	}
+	if got[0].Username != "" {
+		t.Errorf("generic CRUD username = %q, want empty (subject lives in Detail)", got[0].Username)
+	}
+	if got[0].Actor != admin {
+		t.Errorf("generic CRUD actor = %q, want %q", got[0].Actor, admin)
+	}
+	if got[0].Detail != "created service PROD" {
+		t.Errorf("generic CRUD detail = %q, want the change description", got[0].Detail)
 	}
 }
