@@ -1350,3 +1350,43 @@ func TestLoginThrottleEnumerationSafe(t *testing.T) {
 		t.Error("unknown vs known username produced different delays")
 	}
 }
+
+func TestSessionAuditActorAttribution(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "sw0rdf1sh-wrong"},
+			{user: "alice", pass: "good"},
+			{quit: true}, // login render after menu logoff
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	rec := &recordingAuditor{}
+	s.Auditor = rec
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	want := []string{store.AuditConnect, store.AuditAuthFail, store.AuditAuthOK, store.AuditLogout, store.AuditDisconnect}
+	if !slices.Equal(rec.kinds(), want) {
+		t.Fatalf("kinds = %v, want %v", rec.kinds(), want)
+	}
+	if a := rec.events[0].Actor; a != "" { // connect: pre-auth
+		t.Errorf("connect actor = %q, want empty", a)
+	}
+	if a := rec.events[1].Actor; a != "" { // auth_fail: never authenticated
+		t.Errorf("auth_fail actor = %q, want empty", a)
+	}
+	// authStub returns identity.Username verbatim ("alice"), so actor == "alice".
+	if a := rec.events[2].Actor; a != "alice" { // auth_ok
+		t.Errorf("auth_ok actor = %q, want alice", a)
+	}
+	if a := rec.events[3].Actor; a != "alice" { // logout while still attributed
+		t.Errorf("logout actor = %q, want alice", a)
+	}
+	if a := rec.events[4].Actor; a != "" { // disconnect from the login screen post-logoff
+		t.Errorf("disconnect actor = %q, want empty after logoff", a)
+	}
+}
