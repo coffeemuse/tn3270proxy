@@ -105,6 +105,7 @@ type migration struct {
 // greater than the previous. Append new steps; never edit or reorder shipped ones.
 var migrations = []migration{
 	{1, "baseline schema", migrateV1Baseline},
+	{2, "audit actor column", migrateV2AuditActor},
 }
 
 func maxKnownVersion() int { return migrations[len(migrations)-1].version }
@@ -131,6 +132,26 @@ func migrateV1Baseline(ctx context.Context, tx *sql.Tx) error {
 		if err := ensureColumnTx(ctx, tx, c.table, c.column, c.alter); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// migrateV2AuditActor adds the audit.actor column (actor vs subject split, GH #73):
+// actor = who performed the action, distinct from username = the subject. Existing
+// rows are backfilled actor=username (best available identity for historical rows;
+// the true admin behind a pre-v2 admin-on-other row is unrecoverable). Indexed for
+// the actor-centric query lens. Runs once during the v1->v2 upgrade.
+func migrateV2AuditActor(ctx context.Context, tx *sql.Tx) error {
+	if err := ensureColumnTx(ctx, tx, "audit", "actor",
+		"ALTER TABLE audit ADD COLUMN actor TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE audit SET actor = username"); err != nil {
+		return fmt.Errorf("backfill audit.actor: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		"CREATE INDEX IF NOT EXISTS audit_actor ON audit(actor)"); err != nil {
+		return fmt.Errorf("create audit_actor index: %w", err)
 	}
 	return nil
 }

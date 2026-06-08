@@ -300,6 +300,65 @@ func slicesEqual(a, b []string) bool {
 	return true
 }
 
+// legacyAuditDB creates a user_version=0 DB whose audit table predates the actor
+// column (GH #73), with one row, mimicking a real pre-v2 DB that needs migrating.
+func legacyAuditDB(t *testing.T, path string) {
+	t.Helper()
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.Exec(`CREATE TABLE audit (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		at          TEXT NOT NULL,
+		session_id  TEXT NOT NULL,
+		kind        TEXT NOT NULL,
+		username    TEXT NOT NULL DEFAULT '',
+		remote_addr TEXT NOT NULL DEFAULT '',
+		service     TEXT NOT NULL DEFAULT '',
+		detail      TEXT NOT NULL DEFAULT ''
+	);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(
+		`INSERT INTO audit (at, session_id, kind, username)
+		 VALUES ('2026-06-01T00:00:00Z','s0','mfa_cleared','BOB')`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMigrationAddsAndBackfillsAuditActor(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy-audit.db")
+	legacyAuditDB(t, path)
+
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	if _, ok := columnSet(t, st.db, "audit")["actor"]; !ok {
+		t.Fatal("audit.actor column missing after migrate")
+	}
+	var actor string
+	if err := st.db.QueryRow(
+		"SELECT actor FROM audit WHERE username='BOB'").Scan(&actor); err != nil {
+		t.Fatalf("query actor: %v", err)
+	}
+	if actor != "BOB" {
+		t.Errorf("backfilled actor = %q, want BOB", actor)
+	}
+	var n int
+	if err := st.db.QueryRow(
+		"SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='audit_actor'").Scan(&n); err != nil {
+		t.Fatalf("query index: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("audit_actor index count = %d, want 1", n)
+	}
+}
+
 // TestSecondOpenIsNoOp confirms reopening a current DB neither changes the
 // version nor writes a new backup.
 func TestSecondOpenIsNoOp(t *testing.T) {
