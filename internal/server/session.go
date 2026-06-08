@@ -541,11 +541,13 @@ func (s *Session) mfaGate(ctx context.Context, conn net.Conn, term Term, identit
 		// secret means the user opted into MFA and must be challenged.
 		return s.mfaVerify(ctx, conn, term, u, aud)
 	}
-	if u.MFARequired {
-		// Required but not yet enrolled → force one-time enrollment.
+	if u.MFARequired && !u.UserSettingsLocked {
+		// Required but not yet enrolled → force one-time enrollment. A locked
+		// account is never force-enrolled: its MFA state is admin-managed, so
+		// mfa_required is inert until an admin enrolls a secret pre-lock.
 		return s.mfaEnroll(ctx, conn, term, u, aud)
 	}
-	return true, "", nil // no secret, not required → no MFA
+	return true, "", nil // no secret, or locked-and-unenrolled → no MFA
 }
 
 // confirmEnroll runs the enroll confirm-loop for an already-generated secret:
