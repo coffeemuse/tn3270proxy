@@ -107,8 +107,14 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
                   NAME identifier (A-Z/0-9, ≤8, dedup key — NormalizeServiceName) plus a
                   required mixed-case `description` label (≤40 — ValidateDescription);
                   hosts and passwords are NOT normalized.
-                  Audit trail: `audit` table (UTC RFC3339, session-correlated) +
-                  RecordAudit/ListAudit/PruneAudit.
+                  Audit trail: `audit` table (UTC RFC3339, session-correlated) with
+                  both an `actor` (who performed the action; auto-filled from the
+                  logged-in principal by server's auditTrail) and `username` (the
+                  subject affected, '' when none) column + RecordAudit/ListAudit/
+                  PruneAudit; AuditFilter narrows by either lens (#73). Generic admin
+                  CRUD leaves username empty (subject in detail); the admin-on-other
+                  rows (mfa_enforced/cleared, settings_locked/unlocked) key username
+                  to the subject and let actor auto-fill the admin.
                   MFA: users carry mfa_required/mfa_secret(encrypted base64, ''=not enrolled)/
                   mfa_enrolled_at/mfa_last_step(replay floor); Set/Clear/StoreMFAEnrollment/
                   UpdateMFAStep/CountEnrolledUsers/ResetAllMFA + Get/SetMFASentinel (the
