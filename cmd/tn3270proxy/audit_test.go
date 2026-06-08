@@ -124,6 +124,22 @@ func TestRunAuditPruneRejectsZeroDuration(t *testing.T) {
 	}
 }
 
+func TestPrintAuditEventsIncludesActor(t *testing.T) {
+	var buf bytes.Buffer
+	printAuditEvents(&buf, []store.AuditEvent{
+		{At: time.Date(2026, 6, 8, 9, 0, 0, 0, time.UTC),
+			Kind: store.AuditMFACleared, SessionID: "s1",
+			Username: "BOB", Actor: "ADMIN", RemoteAddr: "10.0.0.5:40000"},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "ADMIN") {
+		t.Errorf("printed output missing actor; got:\n%s", out)
+	}
+	if !strings.Contains(out, "BOB") {
+		t.Errorf("printed output missing subject; got:\n%s", out)
+	}
+}
+
 func TestRunAuditPruneDeletesOldRows(t *testing.T) {
 	db := filepath.Join(t.TempDir(), "p.db")
 	st, err := store.Open(db)
