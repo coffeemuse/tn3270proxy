@@ -25,21 +25,22 @@ import (
 
 // Field-name constants for the admin screens.
 const (
-	FieldOption      = "option"      // admin menu option input
-	FieldRetype      = "retype"      // password confirmation input
-	FieldName        = "name"        // entity name input (group/service forms)
-	FieldDescription = "description" // service form: human label
-	FieldHost        = "host"        // service form inputs
-	FieldPort        = "port"        // service form inputs
-	FieldTLS         = "tls"         // service form inputs
-	FieldVerify      = "verify"      // service form inputs
-	FieldCIDR        = "cidr"        // trusted networks form: network CIDR or bare IP
-	FieldComment     = "comment"     // trusted networks form: operator annotation
-	FieldFullName    = "fullname"    // edit-user form: display name
-	FieldEmail       = "email"       // edit-user form: email address
-	FieldMFARequired = "mfarequired" // edit-user form: MFA enforce toggle (Y/N)
-	FieldMFAStatus   = "mfastatus"   // edit-user form: display-only NONE/PENDING/ENROLLED
-	FieldMFAClear    = "mfaclear"    // edit-user form: Y wipes the secret
+	FieldOption             = "option"          // admin menu option input
+	FieldRetype             = "retype"          // password confirmation input
+	FieldName               = "name"            // entity name input (group/service forms)
+	FieldDescription        = "description"     // service form: human label
+	FieldHost               = "host"            // service form inputs
+	FieldPort               = "port"            // service form inputs
+	FieldTLS                = "tls"             // service form inputs
+	FieldVerify             = "verify"          // service form inputs
+	FieldCIDR               = "cidr"            // trusted networks form: network CIDR or bare IP
+	FieldComment            = "comment"         // trusted networks form: operator annotation
+	FieldFullName           = "fullname"        // edit-user form: display name
+	FieldEmail              = "email"           // edit-user form: email address
+	FieldMFARequired        = "mfarequired"     // edit-user form: MFA enforce toggle (Y/N)
+	FieldMFAStatus          = "mfastatus"       // edit-user form: display-only NONE/PENDING/ENROLLED
+	FieldMFAClear           = "mfaclear"        // edit-user form: Y wipes the secret
+	FieldUserSettingsLocked = "usettingslocked" // edit-user form: Y locks self-service
 )
 
 // AdminMenuScreen renders the top-level admin menu sized for geom. The caller

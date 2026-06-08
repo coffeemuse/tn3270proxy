@@ -80,3 +80,72 @@ func TestApplyMFAEditRejectsBadToggle(t *testing.T) {
 		t.Fatalf("bad toggle should return a non-empty errMsg, got msg=%q err=%v", msg, err)
 	}
 }
+
+func TestApplyLockEditTogglesAndAudits(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/s.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	st.CreateUser(ctx, "guest", "h")
+	u, _ := st.GetUserByUsername(ctx, "guest")
+
+	var kinds []string
+	f := &adminFlow{
+		store:    st,
+		identity: auth.Identity{UserID: 99, Username: "admin"},
+		audit:    func(_ context.Context, e store.AuditEvent) { kinds = append(kinds, e.Kind) },
+	}
+
+	// Lock.
+	if msg, err := f.applyLockEdit(ctx, u, map[string]string{
+		screens.FieldUserSettingsLocked: "Y",
+	}); err != nil || msg != "" {
+		t.Fatalf("lock: msg=%q err=%v", msg, err)
+	}
+	u, _ = st.GetUserByUsername(ctx, "guest")
+	if !u.UserSettingsLocked {
+		t.Fatal("expected locked")
+	}
+
+	// Unlock.
+	if msg, err := f.applyLockEdit(ctx, u, map[string]string{
+		screens.FieldUserSettingsLocked: "N",
+	}); err != nil || msg != "" {
+		t.Fatalf("unlock: msg=%q err=%v", msg, err)
+	}
+	u, _ = st.GetUserByUsername(ctx, "guest")
+	if u.UserSettingsLocked {
+		t.Fatal("expected unlocked")
+	}
+
+	if len(kinds) != 2 || kinds[0] != store.AuditSettingsLocked || kinds[1] != store.AuditSettingsUnlocked {
+		t.Fatalf("audit kinds = %v", kinds)
+	}
+
+	// No-op: submitting the current value (already unlocked) writes nothing and
+	// emits no audit event.
+	if msg, err := f.applyLockEdit(ctx, u, map[string]string{
+		screens.FieldUserSettingsLocked: "N",
+	}); err != nil || msg != "" {
+		t.Fatalf("no-op: msg=%q err=%v", msg, err)
+	}
+	if len(kinds) != 2 {
+		t.Fatalf("no-op must not audit; kinds = %v", kinds)
+	}
+}
+
+func TestApplyLockEditRejectsBadValue(t *testing.T) {
+	st, _ := store.Open(t.TempDir() + "/s.db")
+	defer st.Close()
+	ctx := context.Background()
+	st.CreateUser(ctx, "guest", "h")
+	u, _ := st.GetUserByUsername(ctx, "guest")
+	f := &adminFlow{store: st, identity: auth.Identity{UserID: 99, Username: "admin"}}
+	if msg, err := f.applyLockEdit(ctx, u, map[string]string{
+		screens.FieldUserSettingsLocked: "x",
+	}); err != nil || msg == "" {
+		t.Fatalf("want rejection message, got msg=%q err=%v", msg, err)
+	}
+}
