@@ -57,7 +57,7 @@ func TestClassifyMenuSubmit(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotChoice, gotSvc := classifyMenuSubmit(tc.key, tc.mapping, tc.admin)
+			gotChoice, gotSvc := classifyMenuSubmit(tc.key, tc.mapping, tc.admin, false)
 			if gotChoice != tc.wantChoice {
 				t.Errorf("choice = %v, want %v", gotChoice, tc.wantChoice)
 			}
@@ -70,14 +70,31 @@ func TestClassifyMenuSubmit(t *testing.T) {
 
 func TestClassifyMenuSubmitUserSettings(t *testing.T) {
 	mapping := map[string]store.Service{"1": {Name: "SVC"}}
-	if c, _ := classifyMenuSubmit("0", mapping, false); c != menuUserSettings {
+	if c, _ := classifyMenuSubmit("0", mapping, false, false); c != menuUserSettings {
 		t.Errorf(`classify "0" (non-admin) = %v, want menuUserSettings`, c)
 	}
-	if c, _ := classifyMenuSubmit("0", mapping, true); c != menuUserSettings {
+	if c, _ := classifyMenuSubmit("0", mapping, true, false); c != menuUserSettings {
 		t.Errorf(`classify "0" (admin) = %v, want menuUserSettings`, c)
 	}
-	if c, _ := classifyMenuSubmit("0", map[string]store.Service{}, false); c != menuUserSettings {
+	if c, _ := classifyMenuSubmit("0", map[string]store.Service{}, false, false); c != menuUserSettings {
 		t.Errorf(`classify "0" (empty mapping) = %v, want menuUserSettings`, c)
+	}
+}
+
+func TestClassifyMenuSubmitLockedRejectsZero(t *testing.T) {
+	mapping := map[string]store.Service{"1": {Name: "DEMO"}}
+
+	// Unlocked: "0" → user settings.
+	if ch, _ := classifyMenuSubmit("0", mapping, false, false); ch != menuUserSettings {
+		t.Errorf("unlocked '0' = %v, want menuUserSettings", ch)
+	}
+	// Locked: "0" is not special — it falls through to a normal (invalid) key.
+	if ch, _ := classifyMenuSubmit("0", mapping, false, true); ch != menuReprompt {
+		t.Errorf("locked '0' = %v, want menuReprompt", ch)
+	}
+	// Locked admin still reaches admin on "A".
+	if ch, _ := classifyMenuSubmit("A", mapping, true, true); ch != menuAdmin {
+		t.Errorf("locked admin 'A' = %v, want menuAdmin", ch)
 	}
 }
 

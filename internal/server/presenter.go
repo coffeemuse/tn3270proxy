@@ -47,11 +47,11 @@ const (
 // (post-filter) service mapping and whether the admin entry is shown.
 // Admin check is evaluated first so "A" with admin=true routes correctly
 // even when the service list is empty.
-func classifyMenuSubmit(key string, mapping map[string]store.Service, admin bool) (menuChoice, store.Service) {
+func classifyMenuSubmit(key string, mapping map[string]store.Service, admin bool, settingsLocked bool) (menuChoice, store.Service) {
 	if admin && key == "A" {
 		return menuAdmin, store.Service{}
 	}
-	if key == "0" {
+	if !settingsLocked && key == "0" {
 		return menuUserSettings, store.Service{}
 	}
 	if svc, ok := mapping[key]; ok {
@@ -98,7 +98,7 @@ func (go3270Presenter) Login(conn net.Conn, term Term, status screens.MenuStatus
 		resp.Values[screens.FieldPassword], false, nil
 }
 
-func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, status screens.MenuStatus, errMsg string) (*store.Service, menuChoice, error) {
+func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string) (*store.Service, menuChoice, error) {
 	geom := term.Geometry()
 	status.TermType = term.Type // presenter owns the terminal-derived field
 	page := 0
@@ -107,7 +107,7 @@ func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admi
 		// re-present the same page (no drift, no error) — see MenuPageBounds.
 		page, _, _, _ = screens.MenuPageBounds(geom, len(svcs), admin, page)
 		status.Now = time.Now() // paint-time clock, refreshed every render
-		screen, mapping, cur := screens.MenuScreen(geom, svcs, admin, status, errMsg, page)
+		screen, mapping, cur := screens.MenuScreen(geom, svcs, admin, settingsLocked, status, errMsg, page)
 		resp, err := handleScreen(func() (go3270.Response, error) {
 			return go3270.HandleScreenAlt(
 				screen, nil, map[string]string{},
@@ -130,7 +130,7 @@ func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admi
 			continue
 		}
 		key := strings.ToUpper(strings.TrimSpace(resp.Values[screens.FieldSelection]))
-		switch choice, svc := classifyMenuSubmit(key, mapping, admin); choice {
+		switch choice, svc := classifyMenuSubmit(key, mapping, admin, settingsLocked); choice {
 		case menuAdmin:
 			return nil, menuAdmin, nil
 		case menuUserSettings:

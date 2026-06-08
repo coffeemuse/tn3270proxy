@@ -50,7 +50,7 @@ import (
 type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
 	Login(conn net.Conn, term Term, status screens.MenuStatus, errMsg string) (username, password string, quit bool, err error)
-	Menu(conn net.Conn, term Term, services []store.Service, admin bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
+	Menu(conn net.Conn, term Term, services []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
 	// UserSettings renders the self-service settings menu with the given
 	// adaptive rows and returns the typed option key (e.g. "1"); back=true on
 	// PF3 (return to the service menu). It loops internally on invalid input.
@@ -349,6 +349,12 @@ func (s *Session) Run(conn net.Conn) {
 		}
 
 		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
+		settingsLocked := false
+		if lu, lerr := s.Store.GetUserByUsername(ctx, identity.Username); lerr != nil {
+			s.log().Warn("load user-settings-lock failed; defaulting unlocked", "error", lerr)
+		} else {
+			settingsLocked = lu.UserSettingsLocked
+		}
 		errMsg := ""
 	menu:
 		for {
@@ -363,7 +369,7 @@ func (s *Session) Run(conn net.Conn) {
 				SystemID: s.systemID(ctx),
 				Release:  s.Release,
 			}
-			selected, choice, err := s.Presenter.Menu(conn, term, services, isAdmin, status, errMsg)
+			selected, choice, err := s.Presenter.Menu(conn, term, services, isAdmin, settingsLocked, status, errMsg)
 			if err != nil {
 				if isTimeoutErr(err) {
 					aud.record(ctx, store.AuditEvent{
@@ -414,6 +420,9 @@ func (s *Session) Run(conn net.Conn) {
 				}
 				continue
 			case menuUserSettings:
+				if settingsLocked {
+					continue // guard: a buggy presenter can't open self-service for a locked user
+				}
 				if uerr := s.userSettings(ctx, conn, term, identity, aud); uerr != nil {
 					if isTimeoutErr(uerr) {
 						aud.record(ctx, store.AuditEvent{
