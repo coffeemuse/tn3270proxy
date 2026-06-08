@@ -247,8 +247,7 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   uppercase in the store layer (the single choke point) so case-insensitive compares done
   Go-side (`slices.Contains(identity.Groups, store.AdminGroup)`) are correct as written.
   Service NAMEs are validated (A-Z/0-9, ≤8); `description` is the user-facing label.
-  Passwords and service hosts are never normalized. Pre-prod: schema edited directly, no
-  data migration (closed GH #9).
+  Passwords and service hosts are never normalized.
 - **No credential logging, ever.** Lifecycle logging uses stdlib `log`; usernames are OK to
   log, passwords/Login() contents are not; `auth.HashPassword` is the single bcrypt path
   (seed + admin UI). Never log the MFA master key, a TOTP secret, or an entered code.

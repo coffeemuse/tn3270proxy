@@ -7,6 +7,13 @@
 service model (uppercase `NAME` identifier + mixed-case `Description` label);
 an ISPF-style end-user service menu.
 
+> **Amended 2026-06-08:** the original "pre-production, no data migration" details
+> in this document have been removed. Schema is now versioned via the forward-only
+> migration framework ([#88](https://github.com/coffeemuse/TN3270Proxy/issues/88));
+> see `docs/superpowers/specs/2026-06-08-schema-migration-framework-design.md`. The
+> superseded details are omitted here — git history and issues #9/#88 preserve the
+> record.
+
 ## 1. Purpose
 
 Two related problems, addressed together because they touch the same files
@@ -24,9 +31,6 @@ Two related problems, addressed together because they touch the same files
    column is both the dedup key and the string shown to users. Making it a clean
    uppercase identifier would produce ugly menus; keeping it human-friendly
    leaves the duplicate-row bug open.
-
-The project is **pre-production**, so we change the schema directly and reseed —
-**no data migration is written**.
 
 ## 2. Decisions
 
@@ -51,7 +55,7 @@ The project is **pre-production**, so we change the schema directly and reseed �
 The store is the single choke point — no normalization or validation leaks into
 other packages (per the "store owns all SQL" convention).
 
-### Schema (edited directly; pre-prod, no migration)
+### Schema
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -143,4 +147,3 @@ against `store.AdminGroup` (`ZZADMIN`) become correct as-is. The
 - No audit-username folding (best-effort audit strings left as-is).
 - No per-service description uniqueness.
 - No NAME rename history or aliasing.
-- No data migration (pre-production; reseed dev DBs).
