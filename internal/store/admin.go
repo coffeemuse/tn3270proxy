@@ -41,7 +41,7 @@ type Group struct {
 func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	return s.queryUsers(ctx,
 		`SELECT id, username, password_hash, full_name, email,
-		        mfa_required, mfa_secret, mfa_enrolled_at, mfa_last_step
+		        mfa_required, mfa_secret, mfa_enrolled_at, mfa_last_step, user_settings_locked
 		 FROM users ORDER BY username`)
 }
 
@@ -49,7 +49,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 func (s *Store) ListUsersInGroup(ctx context.Context, groupID int64) ([]User, error) {
 	return s.queryUsers(ctx,
 		`SELECT u.id, u.username, u.password_hash, u.full_name, u.email,
-		        u.mfa_required, u.mfa_secret, u.mfa_enrolled_at, u.mfa_last_step
+		        u.mfa_required, u.mfa_secret, u.mfa_enrolled_at, u.mfa_last_step, u.user_settings_locked
 		 FROM users u
 		 JOIN user_groups ug ON ug.user_id = u.id
 		 WHERE ug.group_id = ? ORDER BY u.username`, groupID)
@@ -64,12 +64,13 @@ func (s *Store) queryUsers(ctx context.Context, query string, args ...any) ([]Us
 	var out []User
 	for rows.Next() {
 		var u User
-		var reqInt int
+		var reqInt, lockInt int
 		if err := rows.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.FullName, &u.Email,
-			&reqInt, &u.MFASecret, &u.MFAEnrolledAt, &u.MFALastStep); err != nil {
+			&reqInt, &u.MFASecret, &u.MFAEnrolledAt, &u.MFALastStep, &lockInt); err != nil {
 			return nil, err
 		}
 		u.MFARequired = reqInt != 0
+		u.UserSettingsLocked = lockInt != 0
 		out = append(out, u)
 	}
 	return out, rows.Err()
@@ -167,6 +168,14 @@ func (s *Store) queryServices(ctx context.Context, query string, args ...any) ([
 func (s *Store) SetPassword(ctx context.Context, userID int64, passwordHash string) error {
 	return s.execExpectingRow(ctx,
 		"UPDATE users SET password_hash = ? WHERE id = ?", passwordHash, userID)
+}
+
+// SetUserSettingsLocked toggles the admin lock that hides a user's self-service
+// User Settings and freezes their MFA state as admin-managed. Returns
+// ErrNotFound for an unknown user id.
+func (s *Store) SetUserSettingsLocked(ctx context.Context, userID int64, locked bool) error {
+	return s.execExpectingRow(ctx,
+		"UPDATE users SET user_settings_locked = ? WHERE id = ?", boolToInt(locked), userID)
 }
 
 // UpdateUserDetails replaces the user's optional display name and email.
