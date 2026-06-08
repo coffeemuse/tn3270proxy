@@ -153,3 +153,34 @@ func TestSettingsLockAuditKindValues(t *testing.T) {
 		t.Fatalf("kinds = %q/%q", AuditSettingsLocked, AuditSettingsUnlocked)
 	}
 }
+
+func TestAuditActorRoundTripAndFilter(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	t0 := time.Date(2026, 6, 8, 9, 0, 0, 0, time.UTC)
+	events := []AuditEvent{
+		{At: t0, SessionID: "s1", Kind: AuditMFACleared, Username: "BOB", Actor: "ADMIN"},
+		{At: t0.Add(time.Second), SessionID: "s2", Kind: AuditAuthOK, Username: "ALICE", Actor: "ALICE"},
+	}
+	for _, ev := range events {
+		if err := st.RecordAudit(ctx, ev); err != nil {
+			t.Fatalf("RecordAudit(%s): %v", ev.Kind, err)
+		}
+	}
+	// Subject lens still works AND actor round-trips.
+	bySubject, err := st.ListAudit(ctx, AuditFilter{Username: "BOB"})
+	if err != nil {
+		t.Fatalf("ListAudit subject: %v", err)
+	}
+	if len(bySubject) != 1 || bySubject[0].Actor != "ADMIN" {
+		t.Fatalf("subject lens BOB: got %+v, want one row actor=ADMIN", bySubject)
+	}
+	// Actor-centric lens.
+	byActor, err := st.ListAudit(ctx, AuditFilter{Actor: "ADMIN"})
+	if err != nil {
+		t.Fatalf("ListAudit actor: %v", err)
+	}
+	if len(byActor) != 1 || byActor[0].Username != "BOB" {
+		t.Fatalf("actor lens ADMIN: got %+v, want one row username=BOB", byActor)
+	}
+}
