@@ -187,3 +187,143 @@ func TestFreshDBMakesNoBackup(t *testing.T) {
 		t.Fatalf("fresh DB created backups: %v", baks)
 	}
 }
+
+// colInfo is the order-independent shape of a column (cid is intentionally
+// excluded: ALTER ADD COLUMN appends, so positions differ from a fresh CREATE).
+type colInfo struct {
+	ctype   string
+	notnull int
+	dflt    string
+	pk      int
+}
+
+func columnSet(t *testing.T, db *sql.DB, table string) map[string]colInfo {
+	t.Helper()
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		t.Fatalf("table_info(%s): %v", table, err)
+	}
+	defer rows.Close()
+	out := map[string]colInfo{}
+	for rows.Next() {
+		var (
+			cid  int
+			name string
+			ci   colInfo
+			dflt sql.NullString
+		)
+		if err := rows.Scan(&cid, &name, &ci.ctype, &ci.notnull, &dflt, &ci.pk); err != nil {
+			t.Fatalf("scan table_info(%s): %v", table, err)
+		}
+		ci.dflt = dflt.String
+		out[name] = ci
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("table_info(%s): %v", table, err)
+	}
+	return out
+}
+
+func tableNames(t *testing.T, db *sql.DB) []string {
+	t.Helper()
+	rows, err := db.Query(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	if err != nil {
+		t.Fatalf("list tables: %v", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			t.Fatalf("scan table name: %v", err)
+		}
+		out = append(out, n)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("list tables: %v", err)
+	}
+	return out
+}
+
+// TestLegacyConvergesToFreshSchema is the headline guarantee: a migrated legacy
+// DB has the same tables and the same per-column shape (type/notnull/default/pk)
+// as a freshly created one. Column ORDER and COLLATE are not compared — additive
+// ALTER cannot reproduce them, and they do not affect correctness here.
+func TestLegacyConvergesToFreshSchema(t *testing.T) {
+	freshPath := filepath.Join(t.TempDir(), "fresh.db")
+	fresh, err := Open(freshPath)
+	if err != nil {
+		t.Fatalf("Open fresh: %v", err)
+	}
+	defer fresh.Close()
+
+	legacyPath := filepath.Join(t.TempDir(), "legacy.db")
+	legacyServicesDB(t, legacyPath) // user_version 0, services-only, missing columns
+	migrated, err := Open(legacyPath)
+	if err != nil {
+		t.Fatalf("Open legacy: %v", err)
+	}
+	defer migrated.Close()
+
+	freshTables := tableNames(t, fresh.db)
+	if got := tableNames(t, migrated.db); !slicesEqual(got, freshTables) {
+		t.Fatalf("tables differ:\n fresh    = %v\n migrated = %v", freshTables, got)
+	}
+	for _, tbl := range freshTables {
+		want := columnSet(t, fresh.db, tbl)
+		got := columnSet(t, migrated.db, tbl)
+		if len(want) != len(got) {
+			t.Fatalf("%s: column count fresh=%d migrated=%d", tbl, len(want), len(got))
+		}
+		for col, w := range want {
+			g, ok := got[col]
+			if !ok {
+				t.Fatalf("%s: migrated missing column %q", tbl, col)
+			}
+			if g != w {
+				t.Fatalf("%s.%s: fresh=%+v migrated=%+v", tbl, col, w, g)
+			}
+		}
+	}
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestSecondOpenIsNoOp confirms reopening a current DB neither changes the
+// version nor writes a new backup.
+func TestSecondOpenIsNoOp(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "twice.db")
+	st1, err := Open(path)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	st1.Close()
+
+	st2, err := Open(path)
+	if err != nil {
+		t.Fatalf("second Open: %v", err)
+	}
+	defer st2.Close()
+
+	var v int
+	if err := st2.db.QueryRow("PRAGMA user_version").Scan(&v); err != nil {
+		t.Fatalf("read user_version: %v", err)
+	}
+	if v != maxKnownVersion() {
+		t.Fatalf("user_version = %d, want %d", v, maxKnownVersion())
+	}
+	if baks := bakFiles(t, path); len(baks) != 0 {
+		t.Fatalf("no-op reopen wrote backups: %v", baks)
+	}
+}

@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS user_groups (
 CREATE TABLE IF NOT EXISTS services (
 	id          INTEGER PRIMARY KEY,
 	name        TEXT UNIQUE COLLATE NOCASE NOT NULL,
-	description TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
 	host        TEXT NOT NULL,
 	port        INTEGER NOT NULL,
 	tls         INTEGER NOT NULL DEFAULT 0,
