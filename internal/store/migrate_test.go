@@ -21,6 +21,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -102,5 +103,87 @@ func TestOpenRefusesNewerSchema(t *testing.T) {
 	_, err = Open(path)
 	if !errors.Is(err, ErrSchemaNewer) {
 		t.Fatalf("Open newer db: err = %v, want ErrSchemaNewer", err)
+	}
+}
+
+// legacyServicesDB creates a pre-tls_verify services-only database (user_version 0)
+// with one row, mimicking a real legacy DB that needs migrating.
+func legacyServicesDB(t *testing.T, path string) {
+	t.Helper()
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.Exec(`CREATE TABLE services (
+		id   INTEGER PRIMARY KEY,
+		name TEXT UNIQUE NOT NULL,
+		host TEXT NOT NULL,
+		port INTEGER NOT NULL,
+		tls  INTEGER NOT NULL DEFAULT 0
+	);`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(
+		"INSERT INTO services (name, host, port) VALUES ('OLD','old.example',23)"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func bakFiles(t *testing.T, dbPath string) []string {
+	t.Helper()
+	matches, err := filepath.Glob(dbPath + ".pre-migrate-*.bak")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return matches
+}
+
+func TestMigrationBacksUpLegacyDB(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	legacyServicesDB(t, path)
+
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	baks := bakFiles(t, path)
+	if len(baks) != 1 {
+		t.Fatalf("got %d backup files, want 1: %v", len(baks), baks)
+	}
+
+	// The backup is a real pre-migration snapshot: it still has the OLD row and
+	// (being v0) lacks tls_verify, proving it predates the migration.
+	snap, err := sql.Open("sqlite", baks[0])
+	if err != nil {
+		t.Fatalf("open backup: %v", err)
+	}
+	defer snap.Close()
+	var n int
+	if err := snap.QueryRow("SELECT COUNT(*) FROM services WHERE name='OLD'").Scan(&n); err != nil {
+		t.Fatalf("query backup: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("backup OLD rows = %d, want 1", n)
+	}
+	// The snapshot predates the migration: the v0 services table lacks tls_verify.
+	var dummy int
+	if err := snap.QueryRow("SELECT tls_verify FROM services LIMIT 1").Scan(&dummy); err == nil {
+		t.Fatal("backup has tls_verify column — it was taken post-migration, not before")
+	}
+}
+
+func TestFreshDBMakesNoBackup(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fresh-nobak.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer st.Close()
+
+	if baks := bakFiles(t, path); len(baks) != 0 {
+		t.Fatalf("fresh DB created backups: %v", baks)
 	}
 }

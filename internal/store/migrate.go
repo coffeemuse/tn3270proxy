@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
 )
@@ -157,8 +158,10 @@ func isFresh(ctx context.Context, db *sql.DB) (bool, error) {
 	return n == 0, nil
 }
 
-// runMigrations brings the schema up to maxKnownVersion. Backup wiring is added
-// in a later task; this version performs the stepped migration only.
+// runMigrations brings the schema up to maxKnownVersion. It refuses a database
+// newer than this build, writes a pre-migration backup (unless the database is
+// fresh), then applies each pending step on a dedicated connection with foreign
+// keys disabled, re-checking referential integrity at the end.
 func (s *Store) runMigrations(ctx context.Context) error {
 	cur, err := schemaVersion(ctx, s.db)
 	if err != nil {
@@ -170,6 +173,17 @@ func (s *Store) runMigrations(ctx context.Context) error {
 	}
 	if cur == max {
 		return nil
+	}
+	fresh, err := isFresh(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	if !fresh {
+		dest := fmt.Sprintf("%s.pre-migrate-v%d-%d.bak", s.path, cur, time.Now().Unix())
+		if err := vacuumInto(ctx, s.db, dest); err != nil {
+			return fmt.Errorf("migrate: backup before migrating: %w", err)
+		}
+		slog.Default().Info("migration backup written", "path", dest)
 	}
 	slog.Default().Info("migrating database schema", "from", cur, "to", max)
 
