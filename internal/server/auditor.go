@@ -63,6 +63,7 @@ type auditTrail struct {
 	auditor    Auditor
 	sessionID  string
 	remoteAddr string
+	actor      string // authenticated principal; stamped onto actor-less events
 }
 
 // newAuditTrail builds the connection's trail. A nil Session.Auditor yields a
@@ -75,12 +76,20 @@ func (s *Session) newAuditTrail(conn net.Conn) *auditTrail {
 	return &auditTrail{auditor: s.Auditor, sessionID: newSessionID(), remoteAddr: addr}
 }
 
+// setActor records the authenticated principal whose actions this connection's
+// events should be attributed to; record() stamps it onto any event the caller
+// left actor-less. Pass "" to clear it (logout / return to the login screen).
+func (a *auditTrail) setActor(name string) { a.actor = name }
+
 func (a *auditTrail) record(ctx context.Context, ev store.AuditEvent) {
 	if a.auditor == nil {
 		return
 	}
 	ev.SessionID = a.sessionID
 	ev.RemoteAddr = a.remoteAddr
+	if ev.Actor == "" {
+		ev.Actor = a.actor
+	}
 	a.auditor.Record(ctx, ev)
 }
 

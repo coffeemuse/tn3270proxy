@@ -26,6 +26,32 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
 )
 
+func TestAuditTrailAutoFillsActor(t *testing.T) {
+	rec := &recordingAuditor{}
+	tr := &auditTrail{auditor: rec, sessionID: "sid", remoteAddr: "1.2.3.4:5"}
+	ctx := context.Background()
+
+	tr.record(ctx, store.AuditEvent{Kind: store.AuditConnect})                // pre-auth: no actor
+	tr.setActor("ALICE")                                                       // login success
+	tr.record(ctx, store.AuditEvent{Kind: store.AuditAuthOK, Username: "ALICE"})
+	tr.record(ctx, store.AuditEvent{Kind: store.AuditAdmin, Actor: "ADMIN"})   // explicit override kept
+	tr.setActor("")                                                            // logout / back to login
+	tr.record(ctx, store.AuditEvent{Kind: store.AuditDisconnect})
+
+	if got := rec.events[0].Actor; got != "" {
+		t.Errorf("connect actor = %q, want empty", got)
+	}
+	if got := rec.events[1].Actor; got != "ALICE" {
+		t.Errorf("auth_ok actor = %q, want ALICE", got)
+	}
+	if got := rec.events[2].Actor; got != "ADMIN" {
+		t.Errorf("admin actor = %q, want ADMIN (explicit, not clobbered)", got)
+	}
+	if got := rec.events[3].Actor; got != "" {
+		t.Errorf("disconnect actor = %q, want empty after clear", got)
+	}
+}
+
 func TestStoreAuditorRecordsAndStampsTime(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/a.db")
 	if err != nil {
