@@ -148,6 +148,7 @@ func (f *adminFlow) auditDetail(ctx context.Context, ev store.AuditEvent) ui3270
 		{Label: "Date/Time", Value: julianStamp(at) + " " + at.Format("15:04:05") + " UTC"},
 		{Label: "Session", Value: ev.SessionID},
 		{Label: "Username", Value: ev.Username},
+		{Label: "Actor", Value: ev.Actor},
 		{Label: "Event", Value: strings.ToUpper(ev.Kind), Color: auditEventColor(ev.Kind)},
 	}
 	if ev.RemoteAddr != "" {
