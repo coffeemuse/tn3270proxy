@@ -21,6 +21,8 @@ package store
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 )
@@ -79,5 +81,26 @@ func TestForeignKeyCheckCleanAfterMigrate(t *testing.T) {
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("foreign_key_check iteration: %v", err)
+	}
+}
+
+func TestOpenRefusesNewerSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "newer.db")
+
+	// First open creates a current DB.
+	st, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	// Stamp a version one beyond what this build knows.
+	if _, err := st.db.Exec(fmt.Sprintf("PRAGMA user_version = %d", maxKnownVersion()+1)); err != nil {
+		t.Fatalf("bump user_version: %v", err)
+	}
+	st.Close()
+
+	// Reopen: must refuse.
+	_, err = Open(path)
+	if !errors.Is(err, ErrSchemaNewer) {
+		t.Fatalf("Open newer db: err = %v, want ErrSchemaNewer", err)
 	}
 }

@@ -165,6 +165,9 @@ func (s *Store) runMigrations(ctx context.Context) error {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	max := maxKnownVersion()
+	if cur > max {
+		return fmt.Errorf("%w: db is v%d, this build supports up to v%d; upgrade the binary or restore a backup", ErrSchemaNewer, cur, max)
+	}
 	if cur == max {
 		return nil
 	}
