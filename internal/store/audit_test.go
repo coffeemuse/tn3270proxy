@@ -147,3 +147,9 @@ func TestPruneAudit(t *testing.T) {
 		t.Errorf("second prune = (%d, %v), want (0, nil)", n, err)
 	}
 }
+
+func TestSettingsLockAuditKindValues(t *testing.T) {
+	if AuditSettingsLocked != "settings_locked" || AuditSettingsUnlocked != "settings_unlocked" {
+		t.Fatalf("kinds = %q/%q", AuditSettingsLocked, AuditSettingsUnlocked)
+	}
+}
