@@ -668,6 +668,11 @@ func TestSessionAuditsDisconnectAfterClientClosed(t *testing.T) {
 	if disc.Username != "alice" {
 		t.Errorf("disconnect username = %q, want %q", disc.Username, "alice")
 	}
+	// A mid-session client drop is attributed to the still-logged-in actor (#73):
+	// doLogin's setActor("") only fires on return-to-login, which never happened here.
+	if disc.Actor != "alice" {
+		t.Errorf("disconnect actor = %q, want %q (still logged in)", disc.Actor, "alice")
+	}
 }
 
 func TestSessionAuditsAuthEvents(t *testing.T) {
@@ -698,7 +703,7 @@ func TestSessionAuditsAuthEvents(t *testing.T) {
 	}
 	// The password must not appear in ANY field of ANY event.
 	for _, ev := range rec.events {
-		for _, field := range []string{ev.SessionID, ev.Kind, ev.Username, ev.RemoteAddr, ev.Service, ev.Detail} {
+		for _, field := range []string{ev.SessionID, ev.Kind, ev.Username, ev.Actor, ev.RemoteAddr, ev.Service, ev.Detail} {
 			if strings.Contains(field, "sw0rdf1sh-wrong") || strings.Contains(field, "good") {
 				t.Errorf("credential leaked into audit event %+v", ev)
 			}
