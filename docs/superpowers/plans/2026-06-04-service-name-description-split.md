@@ -4,7 +4,9 @@
 
 **Goal:** Make user/group names canonical uppercase, split the service `name` into an uppercase `NAME` identifier plus a required mixed-case `Description`, and render an ISPF-style end-user menu that hides host/port — closing GH issue #9.
 
-**Architecture:** All normalization and validation live in the `store` layer (the single choke point per the "store owns all SQL" convention). The schema is edited directly and dev DBs are reseeded — this is pre-production, so **no data migration is written**. Screens/admin/seed consume the new store API; the admin form surfaces friendly validation errors by reusing the store's `NormalizeServiceName`.
+> **Amended 2026-06-08:** the original "pre-production, no data migration" detail in this plan has been removed. Schema is now versioned via the forward-only migration framework ([#88](https://github.com/coffeemuse/TN3270Proxy/issues/88)); see `docs/superpowers/plans/2026-06-08-schema-migration-framework.md`. The superseded detail is omitted here — git history and issues #9/#88 preserve the record.
+
+**Architecture:** All normalization and validation live in the `store` layer (the single choke point per the "store owns all SQL" convention). Screens/admin/seed consume the new store API; the admin form surfaces friendly validation errors by reusing the store's `NormalizeServiceName`.
 
 **Tech Stack:** Go, `modernc.org/sqlite` (pure-Go), `go3270`, stdlib `testing`.
 

@@ -91,6 +91,16 @@ internal/logging  slog setup: New(level, file) → (*slog.Logger, io.Closer) wri
 internal/listen   Build(cfg) → []net.Listener (plaintext + tls.NewListener, immediate TLS).
 internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + group-gated
                   ListServicesForGroups. All Create* are idempotent (INSERT OR IGNORE).
+                  Schema is versioned via PRAGMA user_version: migrate.go holds an
+                  append-only `migrations` ledger run forward-only on Open (v1 = the
+                  pre-versioning baseline), each step in its own transaction that stamps
+                  the version; Open refuses a DB newer than the binary (ErrSchemaNewer)
+                  and auto-backs-up (VACUUM INTO `<db>.pre-migrate-*.bak`) before
+                  applying anything. Code-defined seed rows (ZZADMIN group,
+                  sysconfig.Catalog defaults) live in `reconcileDefaults`, run every
+                  Open OUTSIDE the ledger so new catalog entries reach existing DBs.
+                  maintenance.go owns the reusable Backup primitive (future home of
+                  Vacuum/IntegrityCheck/SchemaVersion).
                   Names are canonical UPPERCASE: usernames, group names, and service
                   NAMEs fold to upper on create/lookup (the single choke point) and the
                   UNIQUE columns are COLLATE NOCASE. A service has a short uppercase
@@ -247,8 +257,15 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   uppercase in the store layer (the single choke point) so case-insensitive compares done
   Go-side (`slices.Contains(identity.Groups, store.AdminGroup)`) are correct as written.
   Service NAMEs are validated (A-Z/0-9, ≤8); `description` is the user-facing label.
-  Passwords and service hosts are never normalized. Pre-prod: schema edited directly, no
-  data migration (closed GH #9).
+  Passwords and service hosts are never normalized.
+- **Schema changes go through the migration ledger.** A structural change or a
+  data transform = append a new `{N, name, fn}` to `migrations` in
+  `internal/store/migrate.go` (version exactly one above the last; never edit or
+  reorder shipped steps); table rebuilds work because the runner disables foreign
+  keys for the run and re-checks them. A new code-defined default (e.g. a
+  `sysconfig.Catalog` entry) goes in `reconcileDefaults`, NOT a migration, so it
+  reaches already-migrated DBs. Forward-only: rollback = restore the
+  auto-written `*.bak` and run the old binary.
 - **No credential logging, ever.** Lifecycle logging uses stdlib `log`; usernames are OK to
   log, passwords/Login() contents are not; `auth.HashPassword` is the single bcrypt path
   (seed + admin UI). Never log the MFA master key, a TOTP secret, or an entered code.

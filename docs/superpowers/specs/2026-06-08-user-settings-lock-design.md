@@ -92,8 +92,7 @@ PA3/PF3 semantics are unchanged.
 ### 1. Store (`internal/store`)
 
 - New column on `users`: `user_settings_locked INTEGER NOT NULL DEFAULT 0`, alongside
-  `mfa_required`. Pre-prod → schema edited directly, no data migration (repo convention,
-  closed #9).
+  `mfa_required`.
 - `User` struct gains `UserSettingsLocked bool`; `scanUser` and the list query in
   `admin.go` read the column (same pattern as `mfa_required`).
 - New setter `SetUserSettingsLocked(ctx, userID int64, locked bool) error`, mirroring

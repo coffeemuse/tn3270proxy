@@ -27,7 +27,7 @@ The issue left three things open. The settled answers:
    (a 3270 field's width is bounded by the next attribute byte — see
    `internal/ui3270/screen.go`), so the operator cannot type more than 7 chars.
    A length check is *also* kept in validation as defense-in-depth (the value
-   could be set through other paths, e.g. seed/direct DB in pre-prod).
+   could be set through other paths, e.g. seed or direct DB writes).
 
 2. **Normalization + charset.** The stored value is canonical: **trim whitespace,
    uppercase regardless of input**, then validate the character set. Allowed:

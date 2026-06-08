@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
 	_ "modernc.org/sqlite"
 )
 
@@ -35,7 +34,8 @@ var ErrNotFound = errors.New("store: not found")
 
 // Store wraps the SQLite database connection.
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	path string
 }
 
 // Open opens (creating if necessary) the SQLite database at path and applies
@@ -48,7 +48,7 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 	db.SetMaxOpenConns(4) // WAL allows concurrent readers + one writer; 4 bounds pool without serializing.
-	st := &Store{db: db}
+	st := &Store{db: db, path: path}
 	if err := st.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -59,158 +59,14 @@ func Open(path string) (*Store, error) {
 // Close closes the underlying database.
 func (s *Store) Close() error { return s.db.Close() }
 
-const schema = `
-CREATE TABLE IF NOT EXISTS users (
-	id              INTEGER PRIMARY KEY,
-	username        TEXT UNIQUE COLLATE NOCASE NOT NULL,
-	password_hash   TEXT NOT NULL,
-	full_name       TEXT NOT NULL DEFAULT '',
-	email           TEXT NOT NULL DEFAULT '',
-	mfa_required    INTEGER NOT NULL DEFAULT 0,
-	mfa_secret      TEXT NOT NULL DEFAULT '',
-	mfa_enrolled_at TEXT NOT NULL DEFAULT '',
-	mfa_last_step   INTEGER NOT NULL DEFAULT 0,
-	user_settings_locked INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS groups (
-	id   INTEGER PRIMARY KEY,
-	name TEXT UNIQUE COLLATE NOCASE NOT NULL
-);
-CREATE TABLE IF NOT EXISTS user_groups (
-	user_id  INTEGER NOT NULL REFERENCES users(id),
-	group_id INTEGER NOT NULL REFERENCES groups(id),
-	PRIMARY KEY (user_id, group_id)
-);
-CREATE TABLE IF NOT EXISTS services (
-	id          INTEGER PRIMARY KEY,
-	name        TEXT UNIQUE COLLATE NOCASE NOT NULL,
-	description TEXT NOT NULL,
-	host        TEXT NOT NULL,
-	port        INTEGER NOT NULL,
-	tls         INTEGER NOT NULL DEFAULT 0,
-	tls_verify  INTEGER NOT NULL DEFAULT 1
-);
-CREATE TABLE IF NOT EXISTS group_services (
-	group_id   INTEGER NOT NULL REFERENCES groups(id),
-	service_id INTEGER NOT NULL REFERENCES services(id),
-	PRIMARY KEY (group_id, service_id)
-);
-CREATE TABLE IF NOT EXISTS audit (
-	id          INTEGER PRIMARY KEY AUTOINCREMENT,
-	at          TEXT NOT NULL,
-	session_id  TEXT NOT NULL,
-	kind        TEXT NOT NULL,
-	username    TEXT NOT NULL DEFAULT '',
-	remote_addr TEXT NOT NULL DEFAULT '',
-	service     TEXT NOT NULL DEFAULT '',
-	detail      TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS audit_at ON audit(at);
-CREATE INDEX IF NOT EXISTS audit_username ON audit(username);
-CREATE TABLE IF NOT EXISTS system_config (
-	key   TEXT PRIMARY KEY COLLATE NOCASE NOT NULL,
-	value TEXT NOT NULL DEFAULT ''
-);
-CREATE TABLE IF NOT EXISTS trusted_networks (
-	id      INTEGER PRIMARY KEY AUTOINCREMENT,
-	cidr    TEXT UNIQUE NOT NULL,
-	comment TEXT NOT NULL
-);
-`
-
+// migrate brings the schema to the latest version, then reconciles code-defined
+// default rows. See internal/store/migrate.go.
 func (s *Store) migrate() error {
-	if _, err := s.db.Exec(schema); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	}
-	// Existing DBs predating tls_verify won't get it from CREATE TABLE IF NOT
-	// EXISTS, so add it explicitly (idempotent: skipped when already present).
-	if err := s.ensureColumn("services", "tls_verify",
-		"ALTER TABLE services ADD COLUMN tls_verify INTEGER NOT NULL DEFAULT 1"); err != nil {
+	ctx := context.Background()
+	if err := s.runMigrations(ctx); err != nil {
 		return err
 	}
-	// Existing DBs predating description won't get it from CREATE TABLE IF NOT
-	// EXISTS, so add it explicitly (idempotent: skipped when already present).
-	// Default '' is acceptable for legacy rows; new rows require non-empty via CreateService.
-	if err := s.ensureColumn("services", "description",
-		"ALTER TABLE services ADD COLUMN description TEXT NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn("users", "full_name",
-		"ALTER TABLE users ADD COLUMN full_name TEXT NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn("users", "email",
-		"ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn("users", "mfa_required",
-		"ALTER TABLE users ADD COLUMN mfa_required INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn("users", "mfa_secret",
-		"ALTER TABLE users ADD COLUMN mfa_secret TEXT NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn("users", "mfa_enrolled_at",
-		"ALTER TABLE users ADD COLUMN mfa_enrolled_at TEXT NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn("users", "mfa_last_step",
-		"ALTER TABLE users ADD COLUMN mfa_last_step INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return err
-	}
-	if err := s.ensureColumn("users", "user_settings_locked",
-		"ALTER TABLE users ADD COLUMN user_settings_locked INTEGER NOT NULL DEFAULT 0"); err != nil {
-		return err
-	}
-	// The reserved admin group always exists; seeding only assigns members.
-	if _, err := s.db.Exec("INSERT OR IGNORE INTO groups (name) VALUES (?)", AdminGroup); err != nil {
-		return fmt.Errorf("ensure %s group: %w", AdminGroup, err)
-	}
-	// Seed sysconfig catalog defaults (idempotent: INSERT OR IGNORE).
-	for _, e := range sysconfig.Catalog {
-		if _, err := s.db.Exec(
-			"INSERT OR IGNORE INTO system_config (key, value) VALUES (?, ?)",
-			e.Key, e.Default,
-		); err != nil {
-			return fmt.Errorf("seed system_config %s: %w", e.Key, err)
-		}
-	}
-	return nil
-}
-
-// ensureColumn runs alterSQL only if table lacks column. SQLite's
-// ALTER TABLE ADD COLUMN errors if the column already exists, so we probe
-// PRAGMA table_info first to keep migrate() idempotent.
-func (s *Store) ensureColumn(table, column, alterSQL string) error {
-	rows, err := s.db.Query("PRAGMA table_info(" + table + ")")
-	if err != nil {
-		return fmt.Errorf("inspect %s: %w", table, err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var (
-			cid     int
-			name    string
-			ctype   string
-			notnull int
-			dflt    sql.NullString
-			pk      int
-		)
-		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
-			return fmt.Errorf("inspect %s: %w", table, err)
-		}
-		if name == column {
-			return nil // already present; defer rows.Close() handles cleanup
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("inspect %s: %w", table, err)
-	}
-	if _, err := s.db.Exec(alterSQL); err != nil {
-		return fmt.Errorf("add column %s.%s: %w", table, column, err)
-	}
-	return nil
+	return s.reconcileDefaults(ctx)
 }
 
 // User is an account record.
