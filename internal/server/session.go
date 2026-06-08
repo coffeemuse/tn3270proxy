@@ -349,6 +349,8 @@ func (s *Session) Run(conn net.Conn) {
 		}
 
 		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
+		// settingsLocked is captured once per login, like isAdmin — live sessions
+		// are not re-evaluated until the next login (repo convention).
 		settingsLocked := false
 		if lu, lerr := s.Store.GetUserByUsername(ctx, identity.Username); lerr != nil {
 			s.log().Warn("load user-settings-lock failed; defaulting unlocked", "error", lerr)

@@ -49,6 +49,7 @@ type fakePresenter struct {
 	menuErrors        []string
 	loginErrors       []string
 	gotAdminFlag      []bool
+	gotSettingsLocked []bool
 	gotTerms          []Term               // every term passed to Login/Menu, in call order
 	gotStatus         []screens.MenuStatus // every status passed to Menu, in call order
 	loginStatuses     []screens.MenuStatus // every status passed to Login, in call order
@@ -109,6 +110,7 @@ func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, adm
 	f.gotTerms = append(f.gotTerms, term)
 	f.menuErrors = append(f.menuErrors, errMsg)
 	f.gotAdminFlag = append(f.gotAdminFlag, admin)
+	f.gotSettingsLocked = append(f.gotSettingsLocked, settingsLocked)
 	f.gotStatus = append(f.gotStatus, status)
 	r := f.menuPicks[0]
 	f.menuPicks = f.menuPicks[1:]
@@ -194,6 +196,16 @@ func newTestSession(t *testing.T, p *fakePresenter, b *fakeBridger) *Session {
 	gid, _ := st.CreateGroup(ctx, "ops")
 	sid, _ := st.CreateService(ctx, "PROD", "Production", "10.0.0.1", 23, false, true)
 	st.LinkGroupService(ctx, gid, sid)
+	// Create "alice" and "root" so GetUserByUsername in the menu lock-load always
+	// succeeds for both authStub users. The stored password hashes here are never
+	// bcrypt-checked in tests that use authStub; tests using auth.Authenticate
+	// (usersettings_test.go) overwrite alice's hash via SetPassword.
+	aliceHash, err := auth.HashPassword("good")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.CreateUser(ctx, "alice", aliceHash)
+	st.CreateUser(ctx, "root", "x") // authStub users; hash not bcrypt-verified here
 
 	return &Session{
 		Store:        st,
@@ -456,6 +468,48 @@ func TestSessionNonAdminAdminSelIgnored(t *testing.T) {
 	s.Run(client)
 	if len(ap.gotMenuErrs) != 0 {
 		t.Errorf("admin flow ran for non-admin user")
+	}
+}
+
+func TestSessionLockedSettingsGuard(t *testing.T) {
+	// Even if a (buggy) presenter reports menuUserSettings for a locked user,
+	// the session's settingsLocked guard must not run the user-settings flow.
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "good"}, // alice exists; lock is set below
+			{quit: true},                  // second login render after menu logoff
+		},
+		menuPicks: []menuResult{{choice: menuUserSettings}, {quit: true}},
+		// userSettingsPicks is empty: any real call would use the default back path
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	ctx := context.Background()
+	// alice is already in the store (created by newTestSession); look up her ID
+	// and set the lock so the menu-loop snapshot captures it.
+	u, err := s.Store.GetUserByUsername(ctx, "alice")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+	if err := s.Store.SetUserSettingsLocked(ctx, u.ID, true); err != nil {
+		t.Fatalf("SetUserSettingsLocked: %v", err)
+	}
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	// The guard must have blocked the flow: userSettings must NOT have been called.
+	if p.userSettingsCalls != 0 {
+		t.Errorf("userSettingsCalls = %d, want 0 (locked user must not enter settings)", p.userSettingsCalls)
+	}
+	// Both menu picks must have been consumed (re-prompted after the guard, then logged off).
+	if len(p.menuPicks) != 0 {
+		t.Errorf("expected both menu picks consumed; %d left", len(p.menuPicks))
+	}
+	// The flag must have propagated into the Menu call.
+	if len(p.gotSettingsLocked) == 0 || !p.gotSettingsLocked[0] {
+		t.Errorf("gotSettingsLocked = %v, want [true ...]", p.gotSettingsLocked)
 	}
 }
 
