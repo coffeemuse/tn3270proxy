@@ -64,8 +64,9 @@ func (g Geometry) menuBottomRow() int { return g.BodyBottomRow() - 1 }
 
 // MenuCapacity is how many service lines fit on one menu page: body rows
 // BodyTopRow+1 .. menuBottomRow (row BodyTopRow is the instruction line), minus
-// one for the always-present "0 User Settings" row and one more for the admin
-// "A" row. The blank separator above the PF legend is excluded via menuBottomRow.
+// one for the "0 User Settings" meta row (reserved even when hidden by
+// settingsLocked, so paging math is stable) and one more for the admin "A" row.
+// The blank separator above the PF legend is excluded via menuBottomRow.
 func (g Geometry) MenuCapacity(admin bool) int {
 	n := g.menuBottomRow() - (g.BodyTopRow() + 1) + 1 - 1 // body rows minus the "0" meta row
 	if admin {
