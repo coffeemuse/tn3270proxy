@@ -13,6 +13,11 @@ sub-screen → admin menu → service menu → login screen → disconnect; PF3 
 service menu is a logoff, and re-login re-evaluates groups.
 Members of the reserved `ZZADMIN` group get an extra `A` menu entry opening a full-CRUD admin screen set (users / groups / services).
 Every user gets a `0` menu entry opening **User Settings** (self change-password + self MFA enroll/re-enroll/disable); MFA is opt-in, and login enforcement is secret-first (any stored secret is verified regardless of the admin `mfa_required` flag).
+An admin can set a per-user **User Settings Locked** flag (`user_settings_locked`) on a
+user (e.g. a shared/guest account): it hides the `0` self-service entry and freezes the
+account's MFA as admin-managed — a stored secret is still verified at login, but the
+account is never force-enrolled (so a shared login can't be hijacked into holding the only
+TOTP).
 
 The connect → login → menu → bridge core loop (the MVP) is **complete and on `main`**.
 Remaining work is in `docs/superpowers/ROADMAP.md`.
@@ -98,6 +103,8 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
                   mfa_enrolled_at/mfa_last_step(replay floor); Set/Clear/StoreMFAEnrollment/
                   UpdateMFAStep/CountEnrolledUsers/ResetAllMFA + Get/SetMFASentinel (the
                   MFA_KEY_CHECK row; not a sysconfig.Catalog entry, hidden from the admin form).
+                  users also carry user_settings_locked (admin lock on self-service);
+                  SetUserSettingsLocked toggles it.
 internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,Username,Groups}.
                   bcrypt; uniform ErrInvalidCredentials (no username-enumeration leak).
 internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, svcs,
@@ -106,7 +113,8 @@ internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, s
                   services; only the current page's window renders, each row keeping its
                   global number), an `ITEMS x TO y OF z` indicator right-aligned on the
                   title row, and the `0`/`A` meta band bottom-anchored on every page above a
-                  blank separator row (menuBottomRow = BodyBottomRow-1). It renders an
+                  blank separator row (menuBottomRow = BodyBottomRow-1; `0` is omitted for
+                  settings-locked users, `A` unaffected). It renders an
                   ISPF-style fixed grid (number col 0 / name col 6 / description col 17,
                   hard-cut 40) plus a
                   right-hand status block (MenuStatus: User ID / Date / Time / Terminal /
@@ -121,8 +129,9 @@ internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, s
                   MFA screens: EnrollMFAScreen (issuer/account/chunked key + confirm code; the
                   otpauth URI is deliberately NOT shown — manual entry is the 3270 path) and
                   VerifyMFAScreen; FieldMFACode plus admin FieldMFARequired/Status/Clear.
-                  Self-service: MenuScreen renders an always-present `0 User Settings`
-                  meta-row (beside the admin-only `A`); UserSettingsScreen renders the
+                  Self-service: MenuScreen takes a settingsLocked param — when set, the
+                  `0 User Settings` meta-row is omitted (the `A` admin row is unaffected);
+                  unlocked users always see the `0` row. UserSettingsScreen renders the
                   self-scoped settings sub-menu (FieldUSOption); FieldCurrentPassword is
                   the step-up / change-password input.
 internal/ui3270   Generic 3270 driver layer behind a Renderer seam (NewGo3270Renderer):
@@ -177,6 +186,9 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   in tests. Login enforcement is secret-first: any stored secret is verified at
                   login regardless of mfa_required (so opt-in MFA is enforced; demoting
                   required=false on an enrolled user keeps verifying until the secret is cleared).
+                  A user_settings_locked account skips the enrollment branch entirely (forced or
+                  self-service); the verify branch is unchanged, and the menu/dispatch hide and
+                  reject `0`.
                   adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go)
                   behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
                   userSettings flow (session.go, behind the UserSettings Presenter method)
