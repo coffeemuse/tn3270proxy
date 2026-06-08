@@ -3,7 +3,8 @@
   "users": [
     { "username": "admin", "password": "changeme", "groups": ["ZZADMIN"] },
     { "username": "alice", "password": "changeme", "groups": ["ops"] },
-    { "username": "bob",   "password": "changeme", "groups": ["dev"] }
+    { "username": "bob",   "password": "changeme", "groups": ["dev"] },
+    { "username": "guest", "password": "changeme", "groups": ["ops"], "user_settings_locked": true }
   ],
   "services": [
     { "name": "PUBTSO",  "description": "Public TSO",             "host": "localhost",         "port": 3270, "groups": ["ops"] },

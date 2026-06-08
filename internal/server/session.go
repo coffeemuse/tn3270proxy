@@ -350,7 +350,11 @@ func (s *Session) Run(conn net.Conn) {
 
 		isAdmin := s.AdminPresenter != nil && slices.Contains(identity.Groups, store.AdminGroup)
 		// settingsLocked is captured once per login, like isAdmin — live sessions
-		// are not re-evaluated until the next login (repo convention).
+		// are not re-evaluated until the next login (repo convention). On a load
+		// error we deliberately fail OPEN (unlocked), unlike mfaGate which fails
+		// closed: a locked+enrolled account is already protected by mfaVerify
+		// (which runs before the menu), so the only residual exposure is one
+		// render of self-service — degrade gracefully rather than disconnect.
 		settingsLocked := false
 		if lu, lerr := s.Store.GetUserByUsername(ctx, identity.Username); lerr != nil {
 			s.log().Warn("load user-settings-lock failed; defaulting unlocked", "error", lerr)
