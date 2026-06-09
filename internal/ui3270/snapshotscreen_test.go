@@ -127,6 +127,44 @@ func TestBuildDetailScreen(t *testing.T) {
 	}
 }
 
+func TestBuildSnapshotScreen_WideRendersFullWidthRows(t *testing.T) {
+	v := SnapshotView{
+		Title: "ACTIVE SESSIONS",
+		AsOf:  "AS OF X",
+		Wide:  true,
+		Head:  SnapshotRow{Left: "ID    CLIENT"},
+		Rows:  []SnapshotRow{{Left: "12    1.2.3.4:5"}},
+	}
+	screen, _ := buildSnapshotScreen(24, v)
+
+	var sawWide, sawMid bool
+	for _, f := range screen {
+		if f.Row == 4 && f.Col == snapLeftAttr && f.Content == "12    1.2.3.4:5" {
+			sawWide = true
+		}
+		if f.Row == 4 && f.Col == snapMidAttr {
+			sawMid = true
+		}
+	}
+	if !sawWide {
+		t.Error("wide data row not rendered as a single left-anchored field")
+	}
+	if sawMid {
+		t.Error("wide mode must not emit a Mid-segment field (it would chop the row)")
+	}
+
+	// The heading row (bodyTopRow) must also be a single full-width field, with
+	// no Mid/Right segment fields that would chop the packed columns.
+	if f, ok := fieldAt(screen, bodyTopRow(), snapLeftAttr); !ok || f.Content != "ID    CLIENT" {
+		t.Errorf("wide heading not rendered as a single left-anchored field: %+v ok=%v", f, ok)
+	}
+	for _, f := range screen {
+		if f.Row == bodyTopRow() && (f.Col == snapMidAttr || f.Col == snapRightAttr) {
+			t.Error("wide mode must not emit Mid/Right heading fields")
+		}
+	}
+}
+
 func TestBuildDetailScreen_DotLeader(t *testing.T) {
 	v := DetailView{
 		Title:     "AUDIT DETAIL",

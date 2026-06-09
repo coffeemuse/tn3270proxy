@@ -140,6 +140,11 @@ type Session struct {
 	// Sleep delays the next prompt after a failed attempt; nil → time.Sleep.
 	// Tests inject a recorder to assert the computed delay without waiting.
 	Sleep func(time.Duration)
+	// Registry tracks this connection in the process-wide live-session set
+	// (GH #91); nil disables tracking (unit tests that build a Session directly).
+	// SessionID is this connection's registry id, assigned by the handler.
+	Registry  *sessionRegistry
+	SessionID uint64
 }
 
 func (s *Session) now() time.Time {
@@ -147,6 +152,33 @@ func (s *Session) now() time.Time {
 		return s.Now()
 	}
 	return time.Now()
+}
+
+// reg* helpers mirror the session's lifecycle into the live-session registry.
+// They are nil-safe so a Session built without a Registry (unit tests) is a no-op.
+
+func (s *Session) regSetLogin(username string) {
+	if s.Registry != nil {
+		s.Registry.setLogin(s.SessionID, username, s.now())
+	}
+}
+
+func (s *Session) regClearLogin() {
+	if s.Registry != nil {
+		s.Registry.clearLogin(s.SessionID)
+	}
+}
+
+func (s *Session) regSetService(name string) {
+	if s.Registry != nil {
+		s.Registry.setService(s.SessionID, name)
+	}
+}
+
+func (s *Session) regClearService() {
+	if s.Registry != nil {
+		s.Registry.clearService(s.SessionID)
+	}
 }
 
 func (s *Session) generateSecret(issuer, account string) (string, error) {
@@ -315,12 +347,14 @@ func (s *Session) Run(conn net.Conn) {
 	// Re-login re-evaluates groups, so a demoted admin loses the A entry at
 	// logoff.
 	for {
+		s.regClearLogin() // returning to the login screen drops any prior login
 		identity, ok, loginDetail := s.doLogin(ctx, conn, term, aud)
 		if !ok {
 			endDetail = loginDetail
 			return
 		}
 		currentUser = identity.Username
+		s.regSetLogin(identity.Username)
 		s.Logger = baseLog.With("user", identity.Username) // enrich with user
 		s.armPostAuth(conn)                                // authenticated: post-auth idle window
 
@@ -411,6 +445,10 @@ func (s *Session) Run(conn net.Conn) {
 					renderer: renderer,
 					identity: identity, term: term, audit: aud.record,
 					logger: s.log(), now: s.now}
+				if s.Registry != nil {
+					flow.sessions = s.Registry
+					flow.selfSessionID = s.SessionID
+				}
 				if aerr := flow.Run(ctx, conn); aerr != nil {
 					if isTimeoutErr(aerr) {
 						aud.record(ctx, store.AuditEvent{
@@ -456,6 +494,7 @@ func (s *Session) Run(conn net.Conn) {
 			btls := BackendTLS{Enabled: selected.TLS, Verify: selected.TLSVerify}
 			aud.record(ctx, store.AuditEvent{
 				Kind: store.AuditBridgeStart, Username: identity.Username, Service: selected.Name})
+			s.regSetService(selected.Name)
 			s.armBridge(conn)
 			cause, berr := s.Bridger.Bridge(conn, addr, term.Type, s.EscapeAID, btls)
 			aud.record(ctx, store.AuditEvent{
@@ -474,6 +513,7 @@ func (s *Session) Run(conn net.Conn) {
 			default:
 				// CauseBackendClosed or CauseUserEscaped → back to the menu.
 			}
+			s.regClearService()
 			s.armPostAuth(conn) // back to the menu: restore the post-auth window
 		}
 	}

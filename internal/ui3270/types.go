@@ -129,6 +129,10 @@ type SnapshotView struct {
 	Title, RowInfo, AsOf, Legend, ErrMsg, PFHelp, Empty string
 	Head                                                SnapshotRow
 	Rows                                                []SnapshotRow
+	// Wide renders each row (and the heading) as one full-width field spanning
+	// cols 8–79 instead of the three colour-segmented fields. Used by screens
+	// with many plain columns and no per-segment colour (GH #91 active sessions).
+	Wide bool
 }
 
 // DetailField is one label/value line on the detail screen. Color tints the

@@ -26,6 +26,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
 	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
@@ -1427,5 +1428,56 @@ func TestAdminAuditActorSubjectSplit(t *testing.T) {
 	}
 	if got[0].Detail != "created service PROD" {
 		t.Errorf("generic CRUD detail = %q, want the change description", got[0].Detail)
+	}
+}
+
+// TestSessionAdminOption7ThreadsRegistry verifies that when Session.Registry is
+// set, the live-session registry (and selfSessionID) are threaded into the
+// adminFlow so that option 7 (Active Sessions) renders the registry's sessions
+// and marks the admin's own row *YOU*.
+func TestSessionAdminOption7ThreadsRegistry(t *testing.T) {
+	// Register the admin's session in a real registry.
+	reg := newSessionRegistry()
+	selfID := reg.register("127.0.0.1:9999", time.Now(), func() {})
+	reg.setLogin(selfID, "ROOT", time.Now())
+
+	// sessRenderer scripted to immediately PF3 back from the sessions screen.
+	sr := &sessRenderer{acts: []ui3270.ListAction{{PF: 3}}}
+
+	// fakePresenter: login as root, pick menuAdmin once, then quit.
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "root", pass: "good"},
+			{quit: true},
+		},
+		menuPicks: []menuResult{{choice: menuAdmin}, {quit: true}},
+	}
+
+	// fakeAdminPresenter: choose option 7 once, then back.
+	ap := &fakeAdminPresenter{menu: []adminMenuStep{{choice: 7}, {back: true}}}
+
+	s := newTestSession(t, p, &fakeBridger{})
+	s.AdminPresenter = ap
+	s.AdminRenderer = func(_ net.Conn, _ Term) ui3270.Renderer { return sr }
+	s.Registry = reg
+	s.SessionID = selfID
+
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+	s.Run(client)
+
+	// After the fix: the sessRenderer must have been called exactly once
+	// (activeSessions ran and rendered) and the row for the admin must say *YOU*.
+	if len(sr.views) != 1 {
+		t.Fatalf("sessRenderer views = %d, want 1 (registry was not threaded into adminFlow)", len(sr.views))
+	}
+	rows := sr.views[0].Rows
+	if len(rows) != 1 {
+		t.Fatalf("snapshot rows = %d, want 1", len(rows))
+	}
+	if !strings.Contains(rows[0].Left, "*YOU*") {
+		t.Errorf("admin row = %q, want *YOU* (selfSessionID was not threaded)", rows[0].Left)
 	}
 }

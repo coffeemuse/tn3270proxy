@@ -55,6 +55,7 @@ func AdminMenuScreen(geom Geometry, errMsg string) (go3270.Screen, Cursor) {
 		{"4", "Sysparms", "Runtime system parameters"},
 		{"5", "Networks", "Trusted networks (DoS allow-list)"},
 		{"6", "Audit", "Browse the audit trail"},
+		{"7", "Sessions", "Active client sessions"},
 	}
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},

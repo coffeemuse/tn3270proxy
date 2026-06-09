@@ -106,3 +106,19 @@ func TestAdminMenuScreenCursor(t *testing.T) {
 	}
 }
 
+func TestAdminMenuScreen_HasSessionsOption(t *testing.T) {
+	screen, _ := AdminMenuScreen(Geometry{Rows: 24, Cols: 80}, "")
+	var sawKey, sawName bool
+	for _, f := range screen {
+		if f.Content == "  7" {
+			sawKey = true
+		}
+		if f.Content == "Sessions" {
+			sawName = true
+		}
+	}
+	if !sawKey || !sawName {
+		t.Errorf("admin menu missing option 7 Sessions (key=%v name=%v)", sawKey, sawName)
+	}
+}
+

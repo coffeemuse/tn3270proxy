@@ -40,7 +40,7 @@ func auditEventColor(kind string) go3270.Color {
 	switch kind {
 	case store.AuditAuthFail, store.AuditAuthError, store.AuditMFAFailed:
 		return go3270.Red
-	case store.AuditAdmin, store.AuditMFACleared, store.AuditMFAEnforced, store.AuditMFAEnrolled:
+	case store.AuditAdmin, store.AuditMFACleared, store.AuditMFAEnforced, store.AuditMFAEnrolled, store.AuditSessionDisconnect:
 		return go3270.Yellow
 	default:
 		return go3270.DefaultColor

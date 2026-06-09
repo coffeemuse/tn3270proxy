@@ -185,7 +185,7 @@ func authStub(ctx context.Context, st auth.UserStore, user, pass string) (auth.I
 	return auth.Identity{}, auth.ErrInvalidCredentials
 }
 
-func newTestSession(t *testing.T, p *fakePresenter, b *fakeBridger) *Session {
+func newTestSession(t *testing.T, p *fakePresenter, b Bridger) *Session {
 	t.Helper()
 	st, err := store.Open(t.TempDir() + "/s.db")
 	if err != nil {

@@ -125,6 +125,27 @@ func TestHostOnly(t *testing.T) {
 	}
 }
 
+func TestSessionHandler_RegistersAndDeregisters(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/h.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	h := NewSessionHandler(st, 0x6B, Limits{}, nil, "v-test", nil).(sessionHandler)
+	if h.registry == nil {
+		t.Fatal("NewSessionHandler must create a registry")
+	}
+
+	c1, c2 := net.Pipe()
+	c2.Close() // peer closed → Negotiate fails fast, Run returns immediately
+	h.Handle(c1)
+
+	if got := len(h.registry.Snapshot()); got != 0 {
+		t.Fatalf("expected 0 sessions after Handle returns, got %d (deregister missing?)", got)
+	}
+}
+
 func TestHandlerSharesThrottleAcrossSessions(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/s.db")
 	if err != nil {
