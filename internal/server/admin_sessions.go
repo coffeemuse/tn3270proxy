@@ -23,6 +23,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -30,14 +31,17 @@ import (
 )
 
 // Active-sessions column widths (full-width row, cols 8–79 = 72 chars):
-// ID 5 + CLIENT 21 + CONNECTED 9 + SESSION 9 + USER 8 + SERVICE 15, single
-// spaces between (5+1+21+1+9+1+9+1+8+1+15 = 72). SESSION is 9 wide so the
+// ID 7 + CLIENT 21 + CONNECTED 9 + SESSION 9 + USER 8 + SERVICE 13, single
+// spaces between (7+1+21+1+9+1+9+1+8+1+13 = 72). SESSION is 9 wide so the
 // HH:MM:SS elapsed clock has room for 3-digit hours (a session held open for
-// 100+ hours via bridge_idle=exempt) without shifting USER/SERVICE.
-const sessionRowFmt = "%-5d %-21s %-9s %-9s %-8s %-15s"
+// 100+ hours via bridge_idle=exempt) without shifting USER/SERVICE. ID is a
+// process-lifetime monotonic serial (NOT bounded by max_conns, which caps only
+// concurrent sessions) — 7 digits cover ~10M connections, and every column
+// (ID included) is clip-guarded so an extreme value can never shift the row.
+const sessionRowFmt = "%-7s %-21s %-9s %-9s %-8s %-13s"
 
 func sessionHeader() string {
-	return fmt.Sprintf("%-5s %-21s %-9s %-9s %-8s %-15s",
+	return fmt.Sprintf("%-7s %-21s %-9s %-9s %-8s %-13s",
 		"ID", "CLIENT", "CONNECTED", "SESSION", "USER", "SERVICE")
 }
 
@@ -77,12 +81,12 @@ func fmtSessionRow(v SessionView, now time.Time, selfID uint64) ui3270.SnapshotR
 		service = "-"
 	}
 	left := fmt.Sprintf(sessionRowFmt,
-		v.ID,
+		clipField(strconv.FormatUint(v.ID, 10), 7),
 		clipField(v.RemoteAddr, 21),
 		v.ConnectedAt.UTC().Format("15:04:05"),
 		hhmmss(now.Sub(v.ConnectedAt)),
 		clipField(user, 8),
-		clipField(service, 15),
+		clipField(service, 13),
 	)
 	return ui3270.SnapshotRow{Left: left}
 }

@@ -268,12 +268,16 @@ packed by the `server`-layer formatter to this column budget:
 
 | Column | Cols (within 8–79) | Width | Notes |
 |--------|--------------------|-------|-------|
-| ID | 8–12 | 5 | per-process monotonic session id |
-| CLIENT | 14–34 | 21 | remote `IP:port`, truncated to fit — see below |
-| CONNECTED | 36–43 | 8 | wall-clock `HH:MM:SS` of TCP accept, UTC |
-| SESSION | 45–52 | 8 | elapsed `HH:MM:SS` since `connectedAt` |
-| USER | 54–61 | 8 | logged-in username; `(login)` pre-auth; own row `*YOU*` |
-| SERVICE | 63–79 | 17 | bridged service NAME (≤8 in practice); `-` when not bridged |
+| ID | 8–14 | 7 | process-lifetime monotonic serial (NOT bounded by `max_conns`, which caps concurrent sessions); 7 digits ≈ 10M connections, clip-guarded beyond |
+| CLIENT | 16–36 | 21 | remote `IP:port`, truncated to fit — see below |
+| CONNECTED | 38–46 | 9 | wall-clock `HH:MM:SS` of TCP accept, UTC |
+| SESSION | 48–56 | 9 | elapsed `HH:MM:SS` since `connectedAt` (9 wide for 3-digit hours) |
+| USER | 58–65 | 8 | logged-in username; `(login)` pre-auth; own row `*YOU*` |
+| SERVICE | 67–79 | 13 | bridged service NAME (≤8 in practice); `-` when not bridged |
+
+Every column (ID included) is clip-guarded so no value can shift the row past
+column 79; the `D` disconnect keys on the row's real `uint64` id, never the
+displayed text, so a clipped id never affects function.
 
 - **CLIENT formatting & truncation.** The address is the connection's
   `RemoteAddr().String()` — `1.2.3.4:5678` for IPv4, bracketed `[2001:db8::1]:5678`

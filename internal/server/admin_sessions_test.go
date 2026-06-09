@@ -146,6 +146,29 @@ func TestActiveSessions_RowFormatting(t *testing.T) {
 	}
 }
 
+// TestFmtSessionRow_RowWidthBounded asserts the packed row never exceeds the
+// 72-char content budget (cols 8–79), even for an extreme session id and a long
+// IPv6 client address — the id is a process-lifetime monotonic serial, NOT
+// bounded by max_conns, so a multi-digit id must clip rather than shift columns.
+func TestFmtSessionRow_RowWidthBounded(t *testing.T) {
+	now := time.Unix(2_000_000, 0)
+	cases := []SessionView{
+		{ID: 7, RemoteAddr: "10.0.0.9:5050", ConnectedAt: time.Unix(1_999_000, 0), LoggedInAt: time.Unix(1, 0), Username: "BOB", Service: "PROD"},
+		{ID: 123456789, RemoteAddr: "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:65535", ConnectedAt: time.Unix(1_000_000, 0), LoggedInAt: time.Unix(1, 0), Username: "VERYLONGNAME", Service: "SERVICELONG"},
+	}
+	for _, v := range cases {
+		row := fmtSessionRow(v, now, 0).Left
+		if n := len([]rune(row)); n > 72 {
+			t.Errorf("row width = %d (>72) for id=%d: %q", n, v.ID, row)
+		}
+	}
+	// The 9-digit id (123456789) exceeds the 7-char ID column and must clip with '>'.
+	big := fmtSessionRow(cases[1], now, 0).Left
+	if !strings.HasPrefix(big, "123456>") {
+		t.Errorf("large id not clipped to 7 chars with '>': %q", big)
+	}
+}
+
 // TestActiveSessions_DisconnectAlreadyGone covers the race where the target
 // session ends naturally between the snapshot and the D-confirm: Disconnect
 // returns ok=false, so no audit is emitted and the message line says so.
