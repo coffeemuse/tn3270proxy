@@ -42,6 +42,11 @@ type Entry struct {
 // MOTD/NEWS file shown after login. Empty disables the feature.
 const KeyMOTDFile = "MOTD_FILE"
 
+// KeyBrandingFile is the system_config key whose value is the absolute path to
+// the login branding/art file rendered in the login screen body. Empty disables
+// the feature (blank region). Mirrors KeyMOTDFile.
+const KeyBrandingFile = "BRANDING_FILE"
+
 // KeyMFAIssuer is the system_config key holding the TOTP issuer label shown in
 // users' authenticator apps (and on the enrollment screen).
 const KeyMFAIssuer = "MFA_ISSUER"
@@ -103,6 +108,14 @@ var Catalog = []Entry{
 		Default: "",
 		// Empty value disables the feature; any non-empty path is accepted.
 		// Existence/readability of the file is checked at read time, not here.
+		Validate: func(_ string) string { return "" },
+	},
+	{
+		Key:     KeyBrandingFile,
+		Label:   "Branding File:",
+		Default: "",
+		// Empty disables (blank region); any non-empty path is accepted.
+		// Existence/readability is checked at read time, not here (matches MOTD).
 		Validate: func(_ string) string { return "" },
 	},
 	{

@@ -48,6 +48,25 @@ func TestCatalogHasMOTDFILE(t *testing.T) {
 	}
 }
 
+func TestCatalogHasBrandingFile(t *testing.T) {
+	var e *Entry
+	for i := range Catalog {
+		if Catalog[i].Key == KeyBrandingFile {
+			e = &Catalog[i]
+			break
+		}
+	}
+	if e == nil {
+		t.Fatalf("Catalog missing %q entry", KeyBrandingFile)
+	}
+	if e.Default != "" {
+		t.Errorf("BRANDING_FILE default = %q, want empty (disabled)", e.Default)
+	}
+	if e.Validate == nil || e.Validate("/any/path") != "" || e.Validate("") != "" {
+		t.Errorf("BRANDING_FILE validator should accept any value")
+	}
+}
+
 func TestCatalogKeysAreUppercase(t *testing.T) {
 	for _, e := range Catalog {
 		if e.Key == "" {
