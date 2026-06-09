@@ -95,6 +95,25 @@ func TestRunDetail_PF3WithoutActionDoesNotRefresh(t *testing.T) {
 	}
 }
 
+func TestRunDetail_StatusPersistsAfterCommitOnEnter(t *testing.T) {
+	acted := false
+	cfg := baseDetailCfg("DISCONNECTED", true, &acted)
+	// After commit, a plain Enter (zero action) must NOT wipe the status — it
+	// stays on screen until PF3. Sequence: PF11, PF11 (commit), Enter, PF3.
+	r := &scriptRenderer{detActs: []ListAction{{PF: 11}, {PF: 11}, {}, {PF: 3}}}
+	refresh, err := RunDetail(context.Background(), r, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !refresh {
+		t.Error("refresh should remain true after the post-commit Enter")
+	}
+	// The render captured after the post-commit Enter still shows the status.
+	if r.dets[3].Message != "DISCONNECTED" {
+		t.Errorf("status after Enter = %q, want DISCONNECTED persisted", r.dets[3].Message)
+	}
+}
+
 func TestRunDetail_ActionDisarmsAfterCommit(t *testing.T) {
 	acted := false
 	cfg := baseDetailCfg("DISCONNECTED", true, &acted)

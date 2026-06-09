@@ -62,7 +62,11 @@ func RunDetail(ctx context.Context, r Renderer, cfg DetailConfig) (bool, error) 
 			}
 		default:
 			armed = false
-			v.Message = ""
+			if !acted {
+				// Post-commit the status (e.g. "DISCONNECTED") must persist until
+				// PF3 — a plain Enter cancels a pending confirm but never wipes it.
+				v.Message = ""
+			}
 		}
 	}
 }
