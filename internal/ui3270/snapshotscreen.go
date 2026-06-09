@@ -141,13 +141,19 @@ func wrapText(s string, width int) []string {
 	return lines
 }
 
-// buildDetailScreen renders a read-only record: title on row 0, label/value
-// fields from row 2, then BodyLabel and the wrapped Body. Cursor homes ({0,0}).
+// buildDetailScreen renders a read-only record: title on row 0, an optional red
+// message on row 2 (messageRow), label/value fields from row 3 (bodyTopRow),
+// then BodyLabel and the wrapped Body. Cursor homes ({0,0}).
 func buildDetailScreen(rows int, v DetailView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
 		{Row: 0, Col: centerCol(len(v.Title)), Color: go3270.White, Intense: true, Content: v.Title},
 	}
-	row := 2
+	if v.Message != "" {
+		screen = append(screen, go3270.Field{
+			Row: messageRow(), Col: labelAttrCol, Color: go3270.Red, Intense: true, Content: v.Message,
+		})
+	}
+	row := bodyTopRow()
 	// Dot-leadered labels right-align their colon just before the value column
 	// (col detailValueCol), matching the form view's geometry.
 	labelMax := formLabelMax(detailValueCol)

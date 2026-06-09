@@ -70,6 +70,10 @@ type Renderer interface {
 	Form(FormView) (FormAction, error)
 	Snapshot(SnapshotView) (ListAction, error) // paged read-only list
 	Detail(DetailView) error                   // read-only screen; returns on PF3
+	// DetailAct renders a detail screen that exits on PF3 or the action PF
+	// (actPF; 0 ⇒ PF3 only). Returns the action so a driver can run a
+	// confirm-gated PF-key command (e.g. PF11=Disconnect).
+	DetailAct(v DetailView, actPF int) (ListAction, error)
 }
 
 // Row pairs a pre-formatted display string with its domain payload. The driver
@@ -145,9 +149,32 @@ type DetailField struct {
 // DetailView is what to paint for a read-only detail screen: a column of
 // label/value fields, then a full-width wrapped free-text block under BodyLabel.
 // DotLeader renders the field labels with right-aligned colons and ISPF-style
-// dot leaders (matching the form view); off leaves them plain.
+// dot leaders (matching the form view); off leaves them plain. Message, when
+// non-empty, renders a red line on the message row (row 2) — used by RunDetail
+// for the confirm prompt and the post-action status.
 type DetailView struct {
 	Title, BodyLabel, Body, PFHelp string
+	Message                        string
 	Fields                         []DetailField
 	DotLeader                      bool
+}
+
+// DetailConfig parameterizes RunDetail: a read-only detail screen carrying at
+// most one confirm-gated PF-key action. ActPF is the action key (e.g. 11 for
+// PF11=Disconnect); 0 ⇒ pure read-only (PF3 only). Confirm and OnAct must both
+// be non-nil when ActPF != 0 — the action is always confirm-gated (no
+// immediate-commit path), mirroring RunSnapshotList's ActCmd contract.
+//
+// First ActPF press consults Confirm: blocked != "" vetoes with that message;
+// otherwise prompt is shown and the action arms. Second ActPF press commits via
+// OnAct, which returns (status, refresh): status replaces the message line, the
+// action disarms (ActPF goes inert, PFHelp becomes DonePFHelp), and the screen
+// stays up until PF3. refresh is returned from RunDetail so the caller re-fetches
+// its list.
+type DetailConfig struct {
+	View       DetailView
+	ActPF      int
+	DonePFHelp string
+	Confirm    func() (prompt, blocked string)
+	OnAct      func(ctx context.Context) (status string, refresh bool)
 }

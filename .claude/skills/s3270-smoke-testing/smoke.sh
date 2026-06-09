@@ -729,6 +729,7 @@ check "17b CLIENT column heading present"          "CLIENT"          "$WORK/t17.
 check "17c CONNECTED column heading present"        "CONNECTED"       "$WORK/t17.out"
 check "17d admin's own session marked *YOU*"        "\*YOU\*"         "$WORK/t17.out"
 check "17e cursor on first command field (4,3)"     "I 2 24 80 4 3 "  "$WORK/t17.out"
+check "17g legend shows 'S = detail' (D removed from list)" "S = detail"    "$WORK/t17.out"
 # PF3 returns to the admin menu: ACTIVE SESSIONS first, then GATEWAY ADMIN again.
 if awk '/ACTIVE SESSIONS/{seen=1} seen && /TN3270 GATEWAY ADMIN/{ok=1} END{exit !ok}' "$WORK/t17.out"; then
   PASS=$((PASS+1)); echo "PASS: 17f PF3 on Active Sessions returns to admin menu"
@@ -736,12 +737,14 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 17f PF3 on Active Sessions did not return to admin menu"
 fi
 
-# --- 18. Disconnect from the Active Sessions screen (GH #91). A second client
+# --- 18. Disconnect from the SESSION DETAIL screen (GH #93). A second client
 # (alice) connects and sits at the menu, holding its connection open via
-# Wait(Disconnect). The admin opens A -> 7 (alice has the lower session id, so it
-# is row 0), issues D then D again to confirm, and the proxy hard-closes alice's
-# connection — her Wait(Disconnect) then completes WITHOUT a timeout 'error'.
-# The admin's own session (*YOU*, row 1) is never the target. ---
+# Wait(Disconnect). The admin opens A -> 7, presses S on alice's row (alice has
+# the lower session id, so it is row 0) to open the read-only SESSION DETAIL
+# screen, then PF11 twice (arm + confirm) to disconnect her; the proxy
+# hard-closes alice's connection so her Wait(Disconnect) completes WITHOUT a
+# timeout 'error'. PF3 returns to the list. The admin's own session is never the
+# target (self-disconnect is vetoed on the detail). ---
 sleep 1  # let scenario 17's admin connection fully deregister
 s3270 -model 3279-2 > "$WORK/t18alice.out" 2>&1 <<EOF &
 Connect(127.0.0.1:$FRONT_PORT)
@@ -772,25 +775,38 @@ String(7)
 Enter()
 Wait(5,InputField)
 Ascii()
-String(D)
+String(S)
 Enter()
-Wait(5,InputField)
+Wait(5,Output)
 Ascii()
-String(D)
-Enter()
-Wait(5,InputField)
+PF(11)
+Wait(5,Output)
+Ascii()
+PF(11)
+Wait(5,Output)
 Ascii()
 PF(3)
 Wait(5,InputField)
+Ascii()
 Quit()
 EOF
 wait "$ALICE18_PID" 2>/dev/null
 check  "18a active sessions reached with second client" "ACTIVE SESSIONS"    "$WORK/t18admin.out"
-check  "18b disconnect confirm prompt on a non-self row" "CONFIRM DISCONNECT" "$WORK/t18admin.out"
-check  "18c admin's own row still marked *YOU*"          "\*YOU\*"            "$WORK/t18admin.out"
+check  "18b session detail screen reached via S"        "SESSION DETAIL"     "$WORK/t18admin.out"
+check  "18c detail shows the PF11=Disconnect key"       "PF11=Disconnect"    "$WORK/t18admin.out"
+check  "18d disconnect confirm prompt on the detail"    "CONFIRM DISCONNECT" "$WORK/t18admin.out"
+check  "18e detail shows DISCONNECTED status"           "DISCONNECTED"       "$WORK/t18admin.out"
+check  "18f admin's own row still marked *YOU* on list" "\*YOU\*"            "$WORK/t18admin.out"
 # The authoritative proof: alice's held connection was dropped by the admin's
-# Disconnect (Wait(Disconnect) returns cleanly; a timeout would emit '^error').
-ncheck "18d alice connection dropped by admin disconnect" "^error"            "$WORK/t18alice.out"
+# Disconnect-from-detail (Wait(Disconnect) returns cleanly; a timeout emits '^error').
+ncheck "18g alice connection dropped by admin disconnect" "^error"           "$WORK/t18alice.out"
+# PF3 from the detail returns to the (refreshed) list: DISCONNECTED renders on the
+# detail, then ACTIVE SESSIONS appears again after it (ordering proves the return).
+if awk '/DISCONNECTED/{seen=1} seen && /ACTIVE SESSIONS/{ok=1} END{exit !ok}' "$WORK/t18admin.out"; then
+  PASS=$((PASS+1)); echo "PASS: 18h PF3 from detail returns to the active-sessions list"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 18h PF3 from detail did not return to the list"
+fi
 
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="

@@ -30,11 +30,22 @@ type scriptRenderer struct {
 	acts      []ListAction
 	views     []SnapshotView
 	detailHit int
+	detActs   []ListAction
+	dets      []DetailView
 }
 
 func (s *scriptRenderer) List(ListView) (ListAction, error) { panic("unused") }
 func (s *scriptRenderer) Form(FormView) (FormAction, error) { panic("unused") }
 func (s *scriptRenderer) Detail(DetailView) error           { s.detailHit++; return nil }
+func (s *scriptRenderer) DetailAct(v DetailView, _ int) (ListAction, error) {
+	s.dets = append(s.dets, v)
+	if len(s.detActs) == 0 {
+		panic("unexpected DetailAct call")
+	}
+	a := s.detActs[0]
+	s.detActs = s.detActs[1:]
+	return a, nil
+}
 func (s *scriptRenderer) Snapshot(v SnapshotView) (ListAction, error) {
 	s.views = append(s.views, v)
 	if len(s.acts) == 0 {
@@ -91,9 +102,9 @@ func TestRunSnapshotList_SelectInvokesOnSelect(t *testing.T) {
 	cfg := SnapshotConfig[int]{
 		Rows:  24,
 		Fetch: func(context.Context) ([]SnapshotEntry[int], string, string) { return entries(3), "X", "" },
-		OnSelect: func(_ context.Context, r Renderer, item int) error {
+		OnSelect: func(_ context.Context, r Renderer, item int) (bool, error) {
 			picked = item
-			return r.Detail(DetailView{})
+			return false, r.Detail(DetailView{})
 		},
 	}
 	r := &scriptRenderer{acts: []ListAction{{Cmd: 'S', Row: 1}, {PF: 3}}}
@@ -105,6 +116,26 @@ func TestRunSnapshotList_SelectInvokesOnSelect(t *testing.T) {
 	}
 	if r.detailHit != 1 {
 		t.Errorf("Detail calls = %d, want 1", r.detailHit)
+	}
+}
+
+func TestRunSnapshotList_SelectRefreshRefetches(t *testing.T) {
+	fetches := 0
+	cfg := SnapshotConfig[int]{
+		Rows: 24,
+		Fetch: func(context.Context) ([]SnapshotEntry[int], string, string) {
+			fetches++
+			return entries(3), "X", ""
+		},
+		OnSelect: func(context.Context, Renderer, int) (bool, error) { return true, nil },
+	}
+	// S drills in (OnSelect asks for refresh), then PF3 exits.
+	r := &scriptRenderer{acts: []ListAction{{Cmd: 'S', Row: 0}, {PF: 3}}}
+	if err := RunSnapshotList(context.Background(), r, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if fetches != 2 {
+		t.Errorf("fetches = %d, want 2 (initial + refresh after select)", fetches)
 	}
 }
 

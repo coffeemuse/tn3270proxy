@@ -112,8 +112,8 @@ func (f *adminFlow) auditLog(ctx context.Context, conn net.Conn) error {
 			}
 			return rows, asOf, ""
 		},
-		OnSelect: func(ctx context.Context, r ui3270.Renderer, ev store.AuditEvent) error {
-			return r.Detail(f.auditDetail(ctx, ev))
+		OnSelect: func(ctx context.Context, r ui3270.Renderer, ev store.AuditEvent) (bool, error) {
+			return false, r.Detail(f.auditDetail(ctx, ev))
 		},
 	}
 	return ui3270.RunSnapshotList(ctx, r, cfg)

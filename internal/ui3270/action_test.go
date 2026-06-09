@@ -57,3 +57,18 @@ func TestFormActionCancel(t *testing.T) {
 		t.Error("PF3 should map to Cancel")
 	}
 }
+
+func TestDetailAction(t *testing.T) {
+	if got := detailAction(go3270.Response{AID: go3270.AIDPF3}, 11); got != (ListAction{PF: 3}) {
+		t.Errorf("PF3 → %+v, want {PF:3}", got)
+	}
+	if got := detailAction(go3270.Response{AID: go3270.AIDPF11}, 11); got != (ListAction{PF: 11}) {
+		t.Errorf("PF11 with actPF=11 → %+v, want {PF:11}", got)
+	}
+	if got := detailAction(go3270.Response{AID: go3270.AIDPF11}, 0); got != (ListAction{}) {
+		t.Errorf("PF11 with actPF=0 → %+v, want {}", got)
+	}
+	if got := detailAction(go3270.Response{AID: go3270.AIDEnter}, 11); got != (ListAction{}) {
+		t.Errorf("Enter → %+v, want {}", got)
+	}
+}

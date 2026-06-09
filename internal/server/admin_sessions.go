@@ -91,9 +91,9 @@ func fmtSessionRow(v SessionView, now time.Time, selfID uint64) ui3270.SnapshotR
 	return ui3270.SnapshotRow{Left: left}
 }
 
-// activeSessions drives the read-only live-session viewer with a confirm-gated
-// Disconnect ('D'). PF3 returns to the admin menu. The acting admin's own
-// session is marked *YOU* and cannot be disconnected.
+// activeSessions drives the read-only live-session viewer. The list is pure
+// read-only nav: S opens a SESSION DETAIL screen where disconnect lives as a
+// confirm-gated PF11 action. PF3 returns to the admin menu.
 func (f *adminFlow) activeSessions(ctx context.Context, conn net.Conn) error {
 	if f.sessions == nil {
 		return nil // no registry wired (direct unit tests without one)
@@ -103,7 +103,7 @@ func (f *adminFlow) activeSessions(ctx context.Context, conn net.Conn) error {
 		Title:  "ACTIVE SESSIONS",
 		Wide:   true,
 		Head:   ui3270.SnapshotRow{Left: sessionHeader()},
-		Legend: "D=Disconnect",
+		Legend: "S = detail",
 		PFHelp: "PF3=Admin Menu  PF7=Up  PF8=Down  Enter=Refresh",
 		Empty:  "(no active sessions)",
 		Rows:   f.term.Rows,
@@ -117,31 +117,84 @@ func (f *adminFlow) activeSessions(ctx context.Context, conn net.Conn) error {
 			asOf := "AS OF " + julianStamp(now) + "  " + now.Format("15:04") + " UTC"
 			return rows, asOf, ""
 		},
-		ActCmd: 'D',
-		Confirm: func(v SessionView) (string, string) {
-			if v.ID == f.selfSessionID {
-				return "", "CANNOT DISCONNECT YOUR OWN SESSION"
-			}
-			who := v.Username
-			if who == "" {
-				who = v.RemoteAddr
-			}
-			return "CONFIRM DISCONNECT " + who + " - PRESS D AGAIN", ""
-		},
-		OnAct: func(ctx context.Context, v SessionView) (bool, string) {
-			booted, ok := f.sessions.Disconnect(v.ID)
-			if !ok {
-				return true, "SESSION ALREADY ENDED"
-			}
-			if f.audit != nil {
-				f.audit(ctx, store.AuditEvent{
-					Kind:     store.AuditSessionDisconnect,
-					Username: booted.Username,
-					Detail:   fmt.Sprintf("disconnected session %d (%s)", booted.ID, booted.RemoteAddr),
-				})
-			}
-			return true, ""
+		OnSelect: func(ctx context.Context, r ui3270.Renderer, v SessionView) (bool, error) {
+			return ui3270.RunDetail(ctx, r, ui3270.DetailConfig{
+				View:       f.sessionDetail(ctx, v),
+				ActPF:      11,
+				DonePFHelp: "PF3=Back",
+				Confirm: func() (string, string) {
+					if v.ID == f.selfSessionID {
+						return "", "CANNOT DISCONNECT YOUR OWN SESSION"
+					}
+					who := v.Username
+					if who == "" {
+						who = v.RemoteAddr
+					}
+					return "CONFIRM DISCONNECT " + who + " - PRESS PF11 AGAIN", ""
+				},
+				OnAct: func(ctx context.Context) (string, bool) {
+					booted, ok := f.sessions.Disconnect(v.ID)
+					if !ok {
+						return "SESSION ALREADY ENDED", true
+					}
+					if f.audit != nil {
+						f.audit(ctx, store.AuditEvent{
+							Kind:     store.AuditSessionDisconnect,
+							Username: booted.Username,
+							Detail:   fmt.Sprintf("disconnected session %d (%s)", booted.ID, booted.RemoteAddr),
+						})
+					}
+					return "DISCONNECTED", true
+				},
+			})
 		},
 	}
 	return ui3270.RunSnapshotList(ctx, r, cfg)
+}
+
+// sessionDetail builds the read-only detail view for one live session: the full
+// (untruncated) client address, an optional reverse-DNS PTR (when AUDIT_REVERSE_DNS
+// is on — the same flag the audit detail uses), both timestamps with a Julian
+// stamp and elapsed age, the user, and the bridged service.
+func (f *adminFlow) sessionDetail(ctx context.Context, v SessionView) ui3270.DetailView {
+	now := f.clock()
+	connAt := v.ConnectedAt.UTC()
+
+	loggedIn := "(not logged in)"
+	user := "(login)"
+	if !v.LoggedInAt.IsZero() {
+		at := v.LoggedInAt.UTC()
+		loggedIn = julianStamp(at) + " " + at.Format("15:04:05") + " UTC   (" + hhmmss(now.Sub(v.LoggedInAt)) + ")"
+		user = v.Username
+	}
+	service := v.Service
+	if service == "" {
+		service = "-"
+	}
+
+	fields := []ui3270.DetailField{
+		{Label: "Session", Value: strconv.FormatUint(v.ID, 10)},
+		{Label: "Client", Value: v.RemoteAddr},
+	}
+	if f.auditReverseDNS(ctx) {
+		res := f.resolver
+		if res == nil {
+			res = net.DefaultResolver
+		}
+		if name := ptr(ctx, res, v.RemoteAddr); name != "" {
+			fields = append(fields, ui3270.DetailField{Label: "PTR", Value: name})
+		}
+	}
+	fields = append(fields,
+		ui3270.DetailField{Label: "Connected", Value: julianStamp(connAt) + " " + connAt.Format("15:04:05") + " UTC   (" + hhmmss(now.Sub(v.ConnectedAt)) + ")"},
+		ui3270.DetailField{Label: "Logged in", Value: loggedIn},
+		ui3270.DetailField{Label: "User", Value: user},
+		ui3270.DetailField{Label: "Service", Value: service},
+	)
+	return ui3270.DetailView{
+		Title:     "SESSION DETAIL",
+		Fields:    fields,
+		PFHelp:    "PF3=Back   PF11=Disconnect",
+		DotLeader: true,
+	}
 }

@@ -55,6 +55,7 @@ type fakeAdminPresenter struct {
 	snaps    []ui3270.ListAction
 	gotSnaps []ui3270.SnapshotView
 	gotDets  []ui3270.DetailView
+	detActs  []ui3270.ListAction
 }
 
 func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, _ Term, errMsg string) (int, bool, error) {
@@ -103,6 +104,16 @@ func (f *fakeAdminPresenter) Snapshot(v ui3270.SnapshotView) (ui3270.ListAction,
 func (f *fakeAdminPresenter) Detail(v ui3270.DetailView) error {
 	f.gotDets = append(f.gotDets, v)
 	return nil
+}
+
+func (f *fakeAdminPresenter) DetailAct(v ui3270.DetailView, _ int) (ui3270.ListAction, error) {
+	f.gotDets = append(f.gotDets, v)
+	if len(f.detActs) == 0 {
+		panic("unexpected DetailAct call")
+	}
+	a := f.detActs[0]
+	f.detActs = f.detActs[1:]
+	return a, nil
 }
 
 // newAdminFixture opens a real temp store seeded with: admin user "root"

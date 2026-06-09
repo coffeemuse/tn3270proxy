@@ -39,7 +39,10 @@ type SnapshotConfig[T any] struct {
 	Rows                         int // terminal row count → page-size math
 	Wide                         bool
 	Fetch                        func(ctx context.Context) (rows []SnapshotEntry[T], asOf, errMsg string)
-	OnSelect                     func(ctx context.Context, r Renderer, item T) error
+	// OnSelect handles the 'S' line command (nil ⇒ 'S' is inert). It returns
+	// (refresh, fatal): refresh re-fetches the snapshot on return (used when the
+	// detail screen mutated state, e.g. a disconnect); fatal is a dead connection.
+	OnSelect func(ctx context.Context, r Renderer, item T) (refresh bool, fatal error)
 	// ActCmd is a confirm-gated mutating line command (e.g. 'D'). 0 disables it.
 	// Confirm is consulted on first keypress (blocked != "" vetoes with that
 	// message; otherwise prompt is shown and the action is held pending). The
@@ -142,8 +145,13 @@ func RunSnapshotList[T any](ctx context.Context, r Renderer, cfg SnapshotConfig[
 		case act.Cmd == 'S':
 			pending = nil
 			if cfg.OnSelect != nil && act.Row < len(pageRows) {
-				if ferr := cfg.OnSelect(ctx, r, pageRows[act.Row].Item); ferr != nil {
+				refresh, ferr := cfg.OnSelect(ctx, r, pageRows[act.Row].Item)
+				if ferr != nil {
 					return ferr
+				}
+				if refresh {
+					loaded = false
+					page = 0
 				}
 			}
 		case act.Cmd == 0 && act.PF == 0: // plain Enter = refresh

@@ -103,7 +103,8 @@ func TestWrapText(t *testing.T) {
 
 func TestBuildDetailScreen(t *testing.T) {
 	v := DetailView{
-		Title: "AUDIT DETAIL",
+		Title:   "AUDIT DETAIL",
+		Message: "CONFIRM DISCONNECT BOB - PRESS PF11 AGAIN",
 		Fields: []DetailField{
 			{Label: "Date/Time", Value: "2026-06-06 (2026.157) 14:28:07 UTC"},
 			{Label: "Event", Value: "AUTH_FAIL", Color: go3270.Red},
@@ -116,10 +117,15 @@ func TestBuildDetailScreen(t *testing.T) {
 	if f, ok := fieldAt(screen, 0, centerCol(len("AUDIT DETAIL"))); !ok || f.Content != "AUDIT DETAIL" || f.Color != go3270.White || !f.Intense {
 		t.Errorf("title not centered-white: %+v ok=%v", f, ok)
 	}
-	if f, ok := fieldAt(screen, 2, 2); !ok || f.Content != "Date/Time" {
+	// Message on row 2 (messageRow), red.
+	if f, ok := fieldAt(screen, 2, labelAttrCol); !ok || f.Content != v.Message || f.Color != go3270.Red {
+		t.Errorf("message line wrong: %+v ok=%v", f, ok)
+	}
+	// Fields now begin at row 3 (bodyTopRow), not row 2.
+	if f, ok := fieldAt(screen, 3, 2); !ok || f.Content != "Date/Time" {
 		t.Errorf("first label wrong: %+v ok=%v", f, ok)
 	}
-	if f, ok := fieldAt(screen, 3, detailValueCol); !ok || f.Content != "AUTH_FAIL" || f.Color != go3270.Red {
+	if f, ok := fieldAt(screen, 4, detailValueCol); !ok || f.Content != "AUTH_FAIL" || f.Color != go3270.Red {
 		t.Errorf("event value wrong/uncoloured: %+v ok=%v", f, ok)
 	}
 	if cur != (Cursor{Row: 0, Col: 0}) {
@@ -177,7 +183,20 @@ func TestBuildDetailScreen_DotLeader(t *testing.T) {
 	// Label is dot-leadered to the form width (colon right-aligned just before
 	// the value column) instead of the plain "PTR".
 	want := dotLeaderLabel("PTR", formLabelMax(detailValueCol))
-	if f, ok := fieldAt(screen, 2, labelAttrCol); !ok || f.Content != want {
+	if f, ok := fieldAt(screen, 3, labelAttrCol); !ok || f.Content != want {
 		t.Errorf("dot-leader label = %q ok=%v, want %q", f.Content, ok, want)
+	}
+}
+
+func TestBuildDetailScreen_NoMessageLeavesRow2Empty(t *testing.T) {
+	v := DetailView{Title: "X", Fields: []DetailField{{Label: "A", Value: "b"}}, PFHelp: "PF3=Back"}
+	screen, _ := buildDetailScreen(24, v)
+	for _, f := range screen {
+		if f.Row == 2 {
+			t.Errorf("row 2 must be empty without a Message; got %+v", f)
+		}
+	}
+	if f, ok := fieldAt(screen, 3, labelAttrCol); !ok || f.Content != "A" {
+		t.Errorf("first field should be on row 3: %+v ok=%v", f, ok)
 	}
 }
