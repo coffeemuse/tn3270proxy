@@ -20,8 +20,10 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
@@ -73,4 +75,21 @@ func TestLoginBranding(t *testing.T) {
 			t.Errorf("got %v, want [ALPHA BETA]", got)
 		}
 	})
+}
+
+// TestReadBrandingCapped exercises the real default reader (not the injected
+// BrandingRead seam, which bypasses the cap): an over-cap file is truncated to
+// brandingReadCap bytes, not rejected.
+func TestReadBrandingCapped(t *testing.T) {
+	path := t.TempDir() + "/big.txt"
+	if err := os.WriteFile(path, bytes.Repeat([]byte("X"), brandingReadCap+4096), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data, err := readBrandingCapped(path)
+	if err != nil {
+		t.Fatalf("readBrandingCapped: %v", err)
+	}
+	if len(data) != brandingReadCap {
+		t.Errorf("read %d bytes, want cap %d", len(data), brandingReadCap)
+	}
 }

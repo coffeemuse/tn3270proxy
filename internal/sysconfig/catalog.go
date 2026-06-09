@@ -91,8 +91,8 @@ const (
 // seeds every key with its Default via INSERT OR IGNORE; admins may change the
 // values through the admin UI. Keys are canonical uppercase.
 // Order is grouped for the System Parameters form: identity (System ID, MOTD
-// File), then the four auth parameters (the three failed-auth throttle knobs
-// plus the MFA issuer), then the audit parameters.
+// File, Branding File), then the four auth parameters (the three failed-auth
+// throttle knobs plus the MFA issuer), then the audit parameters.
 var Catalog = []Entry{
 	{
 		Key:       KeySystemID,
