@@ -13,5 +13,5 @@ func DefaultBranding() string {
 		"           |            QUICK-START DEMO HOST           |           \n" +
 		"           |____________________________________________|           \n" +
 		"\n" +
-		"                  Edit BRANDING_FILE to customize this art.\n"
+		"              Edit BRANDING_FILE to customize this art.\n"
 }
