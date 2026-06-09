@@ -70,6 +70,10 @@ type Renderer interface {
 	Form(FormView) (FormAction, error)
 	Snapshot(SnapshotView) (ListAction, error) // paged read-only list
 	Detail(DetailView) error                   // read-only screen; returns on PF3
+	// DetailAct renders a detail screen that exits on PF3 or the action PF
+	// (actPF; 0 ⇒ PF3 only). Returns the action so a driver can run a
+	// confirm-gated PF-key command (e.g. PF11=Disconnect).
+	DetailAct(v DetailView, actPF int) (ListAction, error)
 }
 
 // Row pairs a pre-formatted display string with its domain payload. The driver

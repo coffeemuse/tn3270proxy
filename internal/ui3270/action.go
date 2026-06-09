@@ -48,6 +48,30 @@ func listAction(resp go3270.Response, nRows int) ListAction {
 	return ListAction{}
 }
 
+// pfAID maps a PF number to its go3270 AID for the keys a detail action
+// supports. Intentionally minimal — only the action keys RunDetail uses. ok is
+// false for an unsupported or zero number.
+func pfAID(n int) (go3270.AID, bool) {
+	switch n {
+	case 11:
+		return go3270.AIDPF11, true
+	}
+	return 0, false
+}
+
+// detailAction maps a detail-screen response to a ListAction. PF3 is always the
+// back key; actPF (when supported and pressed) returns {PF: actPF}; everything
+// else is the zero action (re-present).
+func detailAction(resp go3270.Response, actPF int) ListAction {
+	if resp.AID == go3270.AIDPF3 {
+		return ListAction{PF: 3}
+	}
+	if a, ok := pfAID(actPF); ok && resp.AID == a {
+		return ListAction{PF: actPF}
+	}
+	return ListAction{}
+}
+
 // formAction maps a HandleScreen response to a FormAction. Hidden (password)
 // fields are never trimmed — whitespace may be significant.
 func formAction(resp go3270.Response, fields []FormField) FormAction {

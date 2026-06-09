@@ -30,11 +30,22 @@ type scriptRenderer struct {
 	acts      []ListAction
 	views     []SnapshotView
 	detailHit int
+	detActs   []ListAction
+	dets      []DetailView
 }
 
 func (s *scriptRenderer) List(ListView) (ListAction, error) { panic("unused") }
 func (s *scriptRenderer) Form(FormView) (FormAction, error) { panic("unused") }
 func (s *scriptRenderer) Detail(DetailView) error           { s.detailHit++; return nil }
+func (s *scriptRenderer) DetailAct(v DetailView, _ int) (ListAction, error) {
+	s.dets = append(s.dets, v)
+	if len(s.detActs) == 0 {
+		panic("unexpected DetailAct call")
+	}
+	a := s.detActs[0]
+	s.detActs = s.detActs[1:]
+	return a, nil
+}
 func (s *scriptRenderer) Snapshot(v SnapshotView) (ListAction, error) {
 	s.views = append(s.views, v)
 	if len(s.acts) == 0 {

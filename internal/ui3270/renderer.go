@@ -114,3 +114,16 @@ func (g *go3270Renderer) Detail(v DetailView) error {
 	_, err := g.call(screen, []go3270.AID{go3270.AIDPF3}, cur)
 	return err
 }
+
+func (g *go3270Renderer) DetailAct(v DetailView, actPF int) (ListAction, error) {
+	screen, cur := buildDetailScreen(g.rows, v)
+	exit := []go3270.AID{go3270.AIDPF3}
+	if a, ok := pfAID(actPF); ok {
+		exit = append(exit, a)
+	}
+	resp, err := g.call(screen, exit, cur)
+	if err != nil {
+		return ListAction{}, err
+	}
+	return detailAction(resp, actPF), nil
+}

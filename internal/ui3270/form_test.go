@@ -53,6 +53,7 @@ func (f *fakeRenderer) Snapshot(SnapshotView) (ListAction, error) {
 }
 
 func (f *fakeRenderer) Detail(DetailView) error { return nil }
+func (f *fakeRenderer) DetailAct(DetailView, int) (ListAction, error) { return ListAction{}, nil }
 
 func TestRunFormCancel(t *testing.T) {
 	r := &fakeRenderer{forms: []FormAction{{Cancel: true}}}
