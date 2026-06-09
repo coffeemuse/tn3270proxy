@@ -108,6 +108,69 @@ func TestRunSnapshotList_SelectInvokesOnSelect(t *testing.T) {
 	}
 }
 
+func TestRunSnapshotList_ActCmdConfirmThenCommit(t *testing.T) {
+	acted := -1
+	cfg := SnapshotConfig[int]{
+		Rows:    24,
+		Fetch:   func(context.Context) ([]SnapshotEntry[int], string, string) { return entries(3), "X", "" },
+		ActCmd:  'D',
+		Confirm: func(item int) (string, string) { return "CONFIRM - PRESS D AGAIN", "" },
+		OnAct: func(_ context.Context, item int) (bool, string) {
+			acted = item
+			return true, ""
+		},
+	}
+	r := &scriptRenderer{acts: []ListAction{{Cmd: 'D', Row: 1}, {Cmd: 'D', Row: 1}, {PF: 3}}}
+	if err := RunSnapshotList(context.Background(), r, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if acted != 1 {
+		t.Errorf("OnAct item = %d, want 1", acted)
+	}
+	if got := r.views[1].ErrMsg; got != "CONFIRM - PRESS D AGAIN" {
+		t.Errorf("confirm prompt = %q, want the prompt on the message line", got)
+	}
+}
+
+func TestRunSnapshotList_ActCmdBlockedVetoes(t *testing.T) {
+	acted := false
+	cfg := SnapshotConfig[int]{
+		Rows:    24,
+		Fetch:   func(context.Context) ([]SnapshotEntry[int], string, string) { return entries(2), "X", "" },
+		ActCmd:  'D',
+		Confirm: func(item int) (string, string) { return "", "BLOCKED" },
+		OnAct:   func(_ context.Context, item int) (bool, string) { acted = true; return true, "" },
+	}
+	r := &scriptRenderer{acts: []ListAction{{Cmd: 'D', Row: 0}, {Cmd: 'D', Row: 0}, {PF: 3}}}
+	if err := RunSnapshotList(context.Background(), r, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if acted {
+		t.Error("a blocked Confirm must veto: OnAct must not run")
+	}
+	if got := r.views[1].ErrMsg; got != "BLOCKED" {
+		t.Errorf("veto message = %q, want BLOCKED on the message line", got)
+	}
+}
+
+func TestRunSnapshotList_OtherKeyCancelsPendingConfirm(t *testing.T) {
+	acted := false
+	cfg := SnapshotConfig[int]{
+		Rows:    24,
+		Fetch:   func(context.Context) ([]SnapshotEntry[int], string, string) { return entries(2), "X", "" },
+		ActCmd:  'D',
+		Confirm: func(item int) (string, string) { return "CONFIRM", "" },
+		OnAct:   func(_ context.Context, item int) (bool, string) { acted = true; return true, "" },
+	}
+	r := &scriptRenderer{acts: []ListAction{{Cmd: 'D', Row: 0}, {PF: 8}, {PF: 3}}}
+	if err := RunSnapshotList(context.Background(), r, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if acted {
+		t.Error("a non-D action must cancel the pending confirm")
+	}
+}
+
 func TestRunSnapshotList_EmptyShowsMarker(t *testing.T) {
 	cfg := SnapshotConfig[int]{
 		Rows: 24, Empty: "(none)",

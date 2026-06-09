@@ -37,21 +37,35 @@ type SnapshotConfig[T any] struct {
 	Title, Legend, PFHelp, Empty string
 	Head                         SnapshotRow
 	Rows                         int // terminal row count → page-size math
+	Wide                         bool
 	Fetch                        func(ctx context.Context) (rows []SnapshotEntry[T], asOf, errMsg string)
 	OnSelect                     func(ctx context.Context, r Renderer, item T) error
+	// ActCmd is a confirm-gated mutating line command (e.g. 'D'). 0 disables it.
+	// Confirm is consulted on first keypress (blocked != "" vetoes with that
+	// message; otherwise prompt is shown and the action is held pending). The
+	// pending action commits via OnAct when ActCmd is re-issued, and is cancelled
+	// by any other action. OnAct returns (refresh, errMsg): refresh re-fetches the
+	// snapshot. All messages render on the row-2 message line.
+	ActCmd  byte
+	Confirm func(item T) (prompt, blocked string)
+	OnAct   func(ctx context.Context, item T) (refresh bool, errMsg string)
 }
 
 // RunSnapshotList drives a read-only paged viewer until PF3. It fetches a
 // snapshot once and pages the held slice; PF7/PF8 page, plain Enter re-fetches
 // (and returns to the newest page), 'S' opens a detail via OnSelect and resumes
-// the same snapshot. A non-nil error is a dead connection.
+// the same snapshot. ActCmd (when non-zero) is a confirm-gated mutating command:
+// first keypress consults Confirm (blocked vetoes; prompt held pending), second
+// keypress commits via OnAct, any other action cancels. A non-nil error is a
+// dead connection.
 func RunSnapshotList[T any](ctx context.Context, r Renderer, cfg SnapshotConfig[T]) error {
 	var (
-		rows   []SnapshotEntry[T]
-		asOf   string
-		errMsg string
-		page   int
-		loaded bool
+		rows    []SnapshotEntry[T]
+		asOf    string
+		errMsg  string
+		page    int
+		loaded  bool
+		pending *T // ActCmd target awaiting confirmation
 	)
 	for {
 		if !loaded {
@@ -69,7 +83,8 @@ func RunSnapshotList[T any](ctx context.Context, r Renderer, cfg SnapshotConfig[
 		}
 		act, err := r.Snapshot(SnapshotView{
 			Title: cfg.Title, RowInfo: rowInfo, AsOf: asOf, Head: cfg.Head,
-			Rows: display, Legend: cfg.Legend, ErrMsg: errMsg, PFHelp: cfg.PFHelp, Empty: cfg.Empty,
+			Rows: display, Legend: cfg.Legend, ErrMsg: errMsg, PFHelp: cfg.PFHelp,
+			Empty: cfg.Empty, Wide: cfg.Wide,
 		})
 		if err != nil {
 			return err
@@ -80,20 +95,52 @@ func RunSnapshotList[T any](ctx context.Context, r Renderer, cfg SnapshotConfig[
 		case act.PF == 3:
 			return nil
 		case act.PF == 7:
+			pending = nil
 			page--
 		case act.PF == 8:
+			pending = nil
 			if end < len(rows) {
 				page++
 			}
+		case cfg.ActCmd != 0 && act.Cmd == cfg.ActCmd:
+			if act.Row >= len(pageRows) {
+				pending = nil
+				break
+			}
+			if pending != nil { // second ActCmd = confirm
+				target := *pending
+				pending = nil
+				if cfg.OnAct != nil {
+					refresh, msg := cfg.OnAct(ctx, target)
+					errMsg = msg
+					if refresh {
+						loaded = false
+						page = 0
+					}
+				}
+			} else if cfg.Confirm != nil { // first ActCmd = consult Confirm
+				item := pageRows[act.Row].Item
+				prompt, blocked := cfg.Confirm(item)
+				if blocked != "" {
+					errMsg = blocked
+				} else {
+					pending = &item
+					errMsg = prompt
+				}
+			}
 		case act.Cmd == 'S':
+			pending = nil
 			if cfg.OnSelect != nil && act.Row < len(pageRows) {
 				if ferr := cfg.OnSelect(ctx, r, pageRows[act.Row].Item); ferr != nil {
 					return ferr
 				}
 			}
 		case act.Cmd == 0 && act.PF == 0: // plain Enter = refresh
+			pending = nil
 			loaded = false
 			page = 0
+		default:
+			pending = nil
 		}
 	}
 }
