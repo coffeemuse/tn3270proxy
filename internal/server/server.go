@@ -117,6 +117,7 @@ type sessionHandler struct {
 	release   string
 	mfaCipher *mfa.Cipher
 	throttle  *authThrottle
+	registry  *sessionRegistry
 }
 
 // wrapIdle installs the idle-deadline wrapper when an idle window is set.
@@ -170,6 +171,15 @@ func (h sessionHandler) sessionFor(addr net.Addr, connLog *slog.Logger) *Session
 func (h sessionHandler) Handle(conn net.Conn) {
 	connLog := h.logger.With("remote", conn.RemoteAddr().String())
 	s := h.sessionFor(conn.RemoteAddr(), connLog)
+	if h.registry != nil {
+		var once sync.Once
+		id := h.registry.register(conn.RemoteAddr().String(), time.Now(), func() {
+			once.Do(func() { _ = conn.Close() }) // hard close, idempotent; unblocks the session's Read
+		})
+		s.Registry = h.registry
+		s.SessionID = id
+		defer h.registry.deregister(id)
+	}
 	s.Run(wrapIdle(conn, h.limits.PreAuthIdle))
 }
 
@@ -184,7 +194,7 @@ func NewSessionHandler(st *store.Store, escapeAID byte, limits Limits, logger *s
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits, logger: logger, release: release, mfaCipher: mfaCipher, throttle: newAuthThrottle()}
+	return sessionHandler{store: st, escapeAID: escapeAID, limits: limits, logger: logger, release: release, mfaCipher: mfaCipher, throttle: newAuthThrottle(), registry: newSessionRegistry()}
 }
 
 // newServers builds one Server per listener, all sharing handler and one
