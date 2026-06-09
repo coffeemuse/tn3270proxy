@@ -54,8 +54,9 @@ func LoginScreen(geom Geometry, status MenuStatus, branding []string, errMsg str
 	username := go3270.Field{Row: row, Col: 15, Name: FieldUsername, Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},
-		// Error on row 1; truncated to cols 2..57 so it never overlaps the
-		// Time block at StatusBlockCol (60). Generic errors are far shorter.
+		// Error on row 1: attribute at col 2, content cols 3..58 (truncated to
+		// 56 runes), leaving col 59 free before the Time block at StatusBlockCol
+		// (60). Generic errors are far shorter.
 		{Row: 1, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: truncateRunes(errMsg, 56)},
 		// Credential row: both fields share one line.
 		{Row: row, Col: 2, Color: go3270.Turquoise, Content: "User ID . . :"},

@@ -85,20 +85,19 @@ func TestLoginScreenBands(t *testing.T) {
 	} {
 		screen, _, _ := LoginScreen(g, MenuStatus{}, nil, "err")
 		f, ok := fieldByName(screen, FieldError)
-		if !ok || f.Row != 1 {
+		if !ok {
+			t.Errorf("%+v: missing error field", g)
+		} else if f.Row != 1 {
 			t.Errorf("%+v: error row = %d, want row 1", g, f.Row)
 		}
-		foundHelp := false
 		for _, fl := range screen {
-			if fl.Row == g.HelpRow() && fl.Content != "" {
-				foundHelp = true
-			}
 			if fl.Row > g.HelpRow() {
 				t.Errorf("%+v: field %+v beyond last row %d", g, fl, g.HelpRow())
 			}
 		}
-		if !foundHelp {
-			t.Errorf("%+v: no help line on last row %d", g, g.HelpRow())
+		help, ok := fieldByContent(screen, "PF3=Disconnect")
+		if !ok || help.Row != g.HelpRow() {
+			t.Errorf("%+v: PF3=Disconnect help = (found %v) row %d, want row %d", g, ok, help.Row, g.HelpRow())
 		}
 	}
 }
