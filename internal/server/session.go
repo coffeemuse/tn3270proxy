@@ -445,6 +445,10 @@ func (s *Session) Run(conn net.Conn) {
 					renderer: renderer,
 					identity: identity, term: term, audit: aud.record,
 					logger: s.log(), now: s.now}
+				if s.Registry != nil {
+					flow.sessions = s.Registry
+					flow.selfSessionID = s.SessionID
+				}
 				if aerr := flow.Run(ctx, conn); aerr != nil {
 					if isTimeoutErr(aerr) {
 						aud.record(ctx, store.AuditEvent{
