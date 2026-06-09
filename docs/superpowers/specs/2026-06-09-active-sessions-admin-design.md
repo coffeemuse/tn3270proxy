@@ -268,12 +268,27 @@ packed by the `server`-layer formatter to this column budget:
 | Column | Cols (within 8–79) | Width | Notes |
 |--------|--------------------|-------|-------|
 | ID | 8–12 | 5 | per-process monotonic session id |
-| CLIENT | 14–34 | 21 | remote `IP:port`; IPv6 clips at 21 (full value in a future detail view) |
+| CLIENT | 14–34 | 21 | remote `IP:port`, truncated to fit — see below |
 | CONNECTED | 36–43 | 8 | wall-clock `HH:MM:SS` of TCP accept, UTC |
 | SESSION | 45–52 | 8 | elapsed `HH:MM:SS` since `connectedAt` |
 | USER | 54–61 | 8 | logged-in username; `(login)` pre-auth; own row `*YOU*` |
 | SERVICE | 63–79 | 17 | bridged service NAME (≤8 in practice); `-` when not bridged |
 
+- **CLIENT formatting & truncation.** The address is the connection's
+  `RemoteAddr().String()` — `1.2.3.4:5678` for IPv4, bracketed `[2001:db8::1]:5678`
+  for IPv6 (Go's `net` form). IPv4 `IP:port` is at most 21 chars and always fits.
+  A full IPv6 `[addr]:port` can run ~45 chars, so when the string exceeds the
+  21-char column it is **hard-clipped to 20 chars plus a trailing `>`** (ASCII
+  truncation marker; `…` is not safe on a 3270/EBCDIC screen) — e.g.
+  `[2001:db8:85a3:8d3:>`. The clip favours the *leading* bytes (the network
+  prefix), which is what an operator scans first.
+  - **Truncation is display-only and never affects correctness.** The
+    **untruncated** address lives in `SessionView.remoteAddr`, is written verbatim
+    to the disconnect audit `Detail`, and the short, unique **session ID is the
+    disconnect key** (the `D` command and `registry.Disconnect` act on the id, not
+    the displayed text). So two IPv6 clients whose displayed prefixes collide are
+    still unambiguous by ID, and the audit trail records exactly who was dropped.
+    A future detail drill-down (`S`) can show the full address; not in v1.
 - **SESSION** is `now - connectedAt`, formatted `HH:MM:SS` (the requested session
   length). Because it is computed at snapshot time, plain Enter advances the
   clock. `loggedInAt` is carried in `SessionView` for a possible future "login
@@ -366,6 +381,10 @@ audit viewer's `auditEventColor` (a security-state action, like `admin`).
     (`(login)`, `*YOU*`, `-`, `HH:MM:SS` session length with an injected clock),
     self-disconnect veto, confirm → disconnect → audit emission (actor/subject),
     `ok=false` benign path.
+  - **CLIENT formatting:** IPv4 `IP:port` renders in full; a long IPv6
+    `[addr]:port` clips to 20 chars + `>`; the audit `Detail` and
+    `registry.Disconnect` use the **full** untruncated address (assert the
+    displayed clip and the audited full value diverge as intended).
 - **Unit (`internal/ui3270`):** the extended `RunSnapshotList` — `ActCmd` confirm
   dance (prompt held, re-issue confirms, other key cancels), `blocked` veto shows
   the error and does nothing, `OnAct` refresh re-fetches. Existing `OnSelect`/PF/
