@@ -173,6 +173,9 @@ func TestActiveSessions_DisconnectAlreadyGone(t *testing.T) {
 	if len(audits) != 0 {
 		t.Errorf("no audit expected for an already-ended session; got %+v", audits)
 	}
+	if r.dets[1].Message != "CONFIRM DISCONNECT GONE - PRESS PF11 AGAIN" {
+		t.Errorf("confirm prompt = %q", r.dets[1].Message)
+	}
 	if r.dets[2].Message != "SESSION ALREADY ENDED" {
 		t.Errorf("status = %q, want SESSION ALREADY ENDED", r.dets[2].Message)
 	}
@@ -259,6 +262,9 @@ func TestSessionDetail_Fields(t *testing.T) {
 	}
 	if !strings.Contains(got["Connected"], "00:16:40") { // 1_000_000-999_000 = 1000s
 		t.Errorf("Connected = %q, want elapsed 00:16:40", got["Connected"])
+	}
+	if !strings.Contains(got["Logged in"], "00:08:20") { // 1_000_000-999_500 = 500s
+		t.Errorf("Logged in = %q, want elapsed 00:08:20", got["Logged in"])
 	}
 	if dv.PFHelp != "PF11=Disconnect   PF3=Back" {
 		t.Errorf("PFHelp = %q", dv.PFHelp)
