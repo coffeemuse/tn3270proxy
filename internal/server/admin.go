@@ -94,6 +94,11 @@ type adminFlow struct {
 	resolver Resolver
 	// now returns the current time (72h window + as-of stamp); nil → time.Now.
 	now func() time.Time
+	// sessions is the live-session registry seam (GH #91); nil disables the
+	// Active Sessions screen. selfSessionID is the acting admin's own session id,
+	// guarded against self-disconnect.
+	sessions      SessionRegistry
+	selfSessionID uint64
 }
 
 // Run loops on the admin menu until the user leaves via PF3 (back to the
@@ -123,6 +128,8 @@ func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 			err = f.networks(ctx, conn)
 		case 6:
 			err = f.auditLog(ctx, conn)
+		case 7:
+			err = f.activeSessions(ctx, conn)
 		}
 		if err != nil {
 			return err
