@@ -118,7 +118,7 @@ func TestBuildDetailScreen(t *testing.T) {
 		t.Errorf("title not centered-white: %+v ok=%v", f, ok)
 	}
 	// Message on row 2 (messageRow), red.
-	if f, ok := fieldAt(screen, 2, 2); !ok || f.Content != v.Message || f.Color != go3270.Red {
+	if f, ok := fieldAt(screen, 2, labelAttrCol); !ok || f.Content != v.Message || f.Color != go3270.Red {
 		t.Errorf("message line wrong: %+v ok=%v", f, ok)
 	}
 	// Fields now begin at row 3 (bodyTopRow), not row 2.
