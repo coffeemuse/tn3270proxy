@@ -347,12 +347,14 @@ func (s *Session) Run(conn net.Conn) {
 	// Re-login re-evaluates groups, so a demoted admin loses the A entry at
 	// logoff.
 	for {
+		s.regClearLogin() // returning to the login screen drops any prior login
 		identity, ok, loginDetail := s.doLogin(ctx, conn, term, aud)
 		if !ok {
 			endDetail = loginDetail
 			return
 		}
 		currentUser = identity.Username
+		s.regSetLogin(identity.Username)
 		s.Logger = baseLog.With("user", identity.Username) // enrich with user
 		s.armPostAuth(conn)                                // authenticated: post-auth idle window
 
@@ -488,6 +490,7 @@ func (s *Session) Run(conn net.Conn) {
 			btls := BackendTLS{Enabled: selected.TLS, Verify: selected.TLSVerify}
 			aud.record(ctx, store.AuditEvent{
 				Kind: store.AuditBridgeStart, Username: identity.Username, Service: selected.Name})
+			s.regSetService(selected.Name)
 			s.armBridge(conn)
 			cause, berr := s.Bridger.Bridge(conn, addr, term.Type, s.EscapeAID, btls)
 			aud.record(ctx, store.AuditEvent{
@@ -506,6 +509,7 @@ func (s *Session) Run(conn net.Conn) {
 			default:
 				// CauseBackendClosed or CauseUserEscaped → back to the menu.
 			}
+			s.regClearService()
 			s.armPostAuth(conn) // back to the menu: restore the post-auth window
 		}
 	}
