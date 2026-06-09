@@ -95,6 +95,41 @@ IDLE_PID=$!
 sleep 1
 grep -q listening "$WORK/idle.log" || { echo "FAIL: idle proxy did not start"; cat "$WORK/idle.log"; exit 1; }
 
+# --- branding setup: write a known branding file and configure BRANDING_FILE via
+# the System Parameters admin form. The Branding File field is the 3rd catalog
+# entry (System ID, MOTD File, Branding File), so two Tabs reach it from the
+# System ID cursor home. This must run before scenario 1 so the login screen
+# shows branding art. ---
+printf '%s\n' "*** SMOKE TEST BRANDING ***" > "$WORK/branding.txt"
+s3 t0brand <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+String(A)
+Enter()
+Wait(5,InputField)
+String(4)
+Enter()
+Wait(5,InputField)
+Tab()
+Tab()
+EraseEOF()
+String($WORK/branding.txt)
+Enter()
+Wait(5,InputField)
+PF(3)
+Wait(5,InputField)
+PF(3)
+Wait(5,InputField)
+PF(3)
+Wait(5,Disconnect)
+Quit()
+EOF
+
 # --- 1. login screen renders; password non-display; cursor on userid field ---
 s3 t1 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
@@ -106,9 +141,15 @@ EOF
 check "1a login screen renders" "TN3270 GATEWAY LOGIN" "$WORK/t1.out"
 # c0=cd = unprotected + non-display (c0 & 0x0C == 0x0C); userid is c0=c1.
 check "1b password field is non-display" "SF(c0=cd" "$WORK/t1.out"
-# Status line: ... rows cols CURSOR-ROW CURSOR-COL ... — input starts at (3,17),
-# one right of the attribute byte (the go3270 field.Col+1 rule).
-check "1c cursor lands on userid input" "^U F U C(127.0.0.1) I 2 24 80 3 17 " "$WORK/t1.out"
+# Status line: ... rows cols CURSOR-ROW CURSOR-COL ... — input starts at
+# (Rows-2=22, 16) after the branding-forward layout rework: BodyBottomRow()=22,
+# userid attr col=15 so input col=16 (the go3270 field.Col+1 rule).
+check "1c cursor lands on userid input" "^U F U C(127.0.0.1) I 2 24 80 22 16 " "$WORK/t1.out"
+# Branding line set in t0brand must appear on the login screen body.
+check "1d branding line appears on login screen" "SMOKE TEST BRANDING" "$WORK/t1.out"
+# Status block: Date and Time labels in the right-hand column (rows 0-1 col 60).
+check "1e login status block Date label" "Date . . :" "$WORK/t1.out"
+check "1f login status block Time label" "Time . . :" "$WORK/t1.out"
 
 # --- 2. wrong password: error line, re-prompt, no crash ---
 s3 t2 <<EOF
@@ -147,8 +188,8 @@ check "3g status block Terminal row" "Terminal :" "$WORK/t3.out"
 check "3h wide description renders"        "1234567890123456789012345678901234567890" "$WORK/t3.out"
 check "3i status block coexists with wide desc" "User ID. :" "$WORK/t3.out"
 # Cursor on the selection input (top "Option ===>" command line, row 1 col 15 on
-# a MOD 2 after the #65 band rework); login is the only other screen and it
-# reports 3 17, so 1 15 is the menu.
+# a MOD 2 after the #65 band rework); login now reports 22 16 (branding-forward
+# layout), so 1 15 unambiguously identifies the menu.
 check "3j menu cursor on selection input (1,15)" "I 2 24 80 1 15 " "$WORK/t3.out"
 
 # --- 4. select 1 + ENTER bridges to the dummy backend ---
@@ -289,9 +330,9 @@ check "9a admin menu renders" "TN3270 GATEWAY ADMIN" "$WORK/t9.out"
 check "9b admin/menu cursor on option field (1,15)" "I 2 24 80 1 15 " "$WORK/t9.out"
 # Users list: first CMD field at row 4 col 3 — produced only by the list.
 check "9c users list cursor on first CMD field (4,3)" "I 2 24 80 4 3 " "$WORK/t9.out"
-# Add-user form: first input at row 3 col 17. Login also reports 3 17, so assert
-# a 3 17 cursor line that appears AFTER the list's 4 3 line — that one is the
-# form, not the earlier login screen.
+# Add-user form: first input at row 3 col 17. Login now reports 22 16 (branding-
+# forward layout), so 3 17 unambiguously identifies the add-user form; assert it
+# AFTER the list's 4 3 line to prove ordering.
 if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' "$WORK/t9.out"; then
   PASS=$((PASS+1)); echo "PASS: 9d add-user form cursor (3,17) after users list"
 else
@@ -326,11 +367,12 @@ if awk '/TN3270 GATEWAY MENU/{seen=1} seen && /TN3270 GATEWAY LOGIN/{ok=1} END{e
 else
   FAIL=$((FAIL+1)); echo "FAIL: 10b post-auth idle did not return to login screen"
 fi
-# Cursor homed: menu cursor (1 15) then the re-rendered login cursor (3 17) after.
-if awk '/I 2 24 80 1 15 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' "$WORK/t10.out"; then
+# Cursor homed: menu cursor (1 15) then the re-rendered login cursor (22 16) after
+# (branding-forward layout: BodyBottomRow()=22, userid input col=16).
+if awk '/I 2 24 80 1 15 /{seen=1} seen && /I 2 24 80 22 16 /{ok=1} END{exit !ok}' "$WORK/t10.out"; then
   PASS=$((PASS+1)); echo "PASS: 10c login cursor homes to userid after idle-logout"
 else
-  FAIL=$((FAIL+1)); echo "FAIL: 10c cursor not homed to (3,17) after idle-logout"
+  FAIL=$((FAIL+1)); echo "FAIL: 10c cursor not homed to (22,16) after idle-logout"
 fi
 
 # --- 11. System Parameters admin form (GH #44): render, cursor on the form

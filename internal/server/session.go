@@ -49,7 +49,7 @@ import (
 // at the client's negotiated size and codepage.
 type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
-	Login(conn net.Conn, term Term, status screens.MenuStatus, errMsg string) (username, password string, quit bool, err error)
+	Login(conn net.Conn, term Term, status screens.MenuStatus, branding []string, errMsg string) (username, password string, quit bool, err error)
 	Menu(conn net.Conn, term Term, services []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
 	// UserSettings renders the self-service settings menu with the given
 	// adaptive rows and returns the typed option key (e.g. "1"); back=true on
@@ -119,6 +119,9 @@ type Session struct {
 	// MOTDRead reads the MOTD file for maybeShowNews; nil selects the capped
 	// os.ReadFile default (readMOTDCapped). Tests inject a fake.
 	MOTDRead func(path string) ([]byte, error)
+	// BrandingRead reads the login branding file for loginBranding; nil selects
+	// the capped os.ReadFile default (readBrandingCapped). Tests inject a fake.
+	BrandingRead func(path string) ([]byte, error)
 	// Logger is the per-connection structured logger. nil falls back to
 	// slog.Default(). The session enriches it with "user" after authentication.
 	Logger *slog.Logger
@@ -247,6 +250,53 @@ func readMOTDCapped(path string) ([]byte, error) {
 	}
 	defer f.Close()
 	return io.ReadAll(io.LimitReader(f, motdReadCap))
+}
+
+// brandingReadCap bounds how much of the branding file is read (a few screens of
+// art); an over-cap file is truncated, not rejected.
+const brandingReadCap = 8 << 10 // 8 KiB
+
+// readBrandingCapped is the default BrandingRead: it reads at most
+// brandingReadCap bytes.
+func readBrandingCapped(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(io.LimitReader(f, brandingReadCap))
+}
+
+// loginBranding resolves the login branding lines fresh for one paint: it reads
+// the BRANDING_FILE path, applies the same guards as the MOTD reader (missing
+// key, empty, relative path, or unreadable -> nil + warn), and splits the file
+// into lines (SplitBranding). nil means "render a blank body". Called once per
+// login render so live file edits take effect without a restart.
+func (s *Session) loginBranding(ctx context.Context) []string {
+	path, err := s.Store.GetConfig(ctx, sysconfig.KeyBrandingFile)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			s.log().Warn("branding config key unreadable; skipping", "error", err)
+		}
+		return nil
+	}
+	if strings.TrimSpace(path) == "" {
+		return nil // disabled
+	}
+	if !filepath.IsAbs(path) {
+		s.log().Warn("branding path not absolute; skipping", "path", path)
+		return nil
+	}
+	read := s.BrandingRead
+	if read == nil {
+		read = readBrandingCapped
+	}
+	data, err := read(path)
+	if err != nil {
+		s.log().Warn("branding file unreadable; skipping", "path", path, "error", err)
+		return nil
+	}
+	return screens.SplitBranding(string(data))
 }
 
 // idleRegime is implemented by *idleConn (and test fakes); the session switches
@@ -720,7 +770,8 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 	// presenter stamps the paint-time clock per render.
 	status := screens.MenuStatus{SystemID: s.systemID(ctx), Release: s.Release}
 	for {
-		user, pass, quit, err := s.Presenter.Login(conn, term, status, errMsg)
+		branding := s.loginBranding(ctx)
+		user, pass, quit, err := s.Presenter.Login(conn, term, status, branding, errMsg)
 		if err != nil {
 			if isTimeoutErr(err) {
 				return auth.Identity{}, false, "idle timeout"

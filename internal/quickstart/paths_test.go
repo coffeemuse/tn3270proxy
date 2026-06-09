@@ -14,6 +14,7 @@ func TestNewLayout(t *testing.T) {
 		"cert":      l.Cert,
 		"key":       l.Key,
 		"motd":      l.MOTD,
+		"branding":  l.Branding,
 		"setupfile": l.SetupFile,
 	}
 	want := map[string]string{
@@ -23,6 +24,7 @@ func TestNewLayout(t *testing.T) {
 		"cert":      "/data/tls/cert.pem",
 		"key":       "/data/tls/key.pem",
 		"motd":      "/data/motd.txt",
+		"branding":  "/data/branding.txt",
 		"setupfile": "/data/SETUP-DEFAULTS.TXT",
 	}
 	for k, got := range cases {

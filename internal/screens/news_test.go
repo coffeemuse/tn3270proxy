@@ -162,3 +162,31 @@ func TestNewsScreenGateRowFixedOnShortPage(t *testing.T) {
 		t.Errorf("gate row on short page = %d, want 23 (always last row)", gate.Row)
 	}
 }
+
+func TestSplitBranding(t *testing.T) {
+	if got := SplitBranding(""); got != nil {
+		t.Errorf("empty input = %v, want nil", got)
+	}
+	if got := SplitBranding("  \n\t\n"); got != nil {
+		t.Errorf("whitespace-only = %v, want nil", got)
+	}
+	got := SplitBranding("ALPHA\r\nBETA\n\n")
+	want := []string{"ALPHA", "BETA"} // trailing blank lines trimmed, \r stripped
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("line %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+	// Lines hard-cut at column 79 (80 runes -> 79).
+	long := SplitBranding(strings.Repeat("X", 100))
+	if len(long) != 1 || len([]rune(long[0])) != 79 {
+		t.Errorf("long line len = %d, want 79", len([]rune(long[0])))
+	}
+	// Interior blank lines are preserved (author owns vertical spacing).
+	if got := SplitBranding("A\n\nB"); len(got) != 3 || got[1] != "" {
+		t.Errorf("interior blank not preserved: %v", got)
+	}
+}

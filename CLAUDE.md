@@ -123,7 +123,16 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
                   SetUserSettingsLocked toggles it.
 internal/auth     Authenticate(ctx, UserStore, user, pass) → Identity{UserID,Username,Groups}.
                   bcrypt; uniform ErrInvalidCredentials (no username-enumeration leak).
-internal/screens  Pure go3270 screen builders: LoginScreen(), MenuScreen(geom, svcs,
+internal/screens  Pure go3270 screen builders: LoginScreen(geom, status, branding []string, errMsg)
+                  uses a branding-forward layout (not the three-band ISPF convention): rows 0–3
+                  are a status header (centered title + Date/Time/System ID/Release block at
+                  StatusBlockCol()); row 1 col 2 holds the red error field (truncated to avoid
+                  the Time block); rows 4..BodyBottomRow()-1 render BRANDING_FILE lines verbatim
+                  at col 0 (vertically centered when shorter, top-aligned/clipped when taller);
+                  BodyBottomRow() holds the User ID and Password credential fields (password
+                  input reaches col 78); HelpRow() shows PF3=Disconnect. Cursor homes to
+                  (BodyBottomRow(), 16). Deliberate exception — see docs/ispf-style-guide.md §6.8.
+                  MenuScreen(geom, svcs,
                   admin, status, errMsg, page). The menu paginates (PF7/PF8) via
                   MenuPageBounds: global/stable numbering (the returned mapping covers ALL
                   services; only the current page's window renders, each row keeping its
@@ -155,7 +164,7 @@ internal/ui3270   Generic 3270 driver layer behind a Renderer seam (NewGo3270Ren
                   helpers, so the admin and self-service flows share one paging/line-command
                   engine. ui3270 row helpers are the non-screens-pkg way to place rows.
 internal/sysconfig Catalog of runtime system parameters operators edit via the admin UI
-                  (MOTD file path, MFA issuer, System ID, #48 auth-throttle params). One
+                  (MOTD file path, BRANDING_FILE path, MFA issuer, System ID, #48 auth-throttle params). One
                   Entry declaration per param; the store seeds the default and the admin
                   form builds from the labels. The MFA_KEY_CHECK sentinel is deliberately
                   NOT a Catalog entry (hidden from the form).
@@ -177,7 +186,7 @@ internal/dummy    Throwaway TN3270 server: pure go3270 screen builders (3 random
 internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative, idempotent seeding.
 internal/quickstart First-run provisioning for the Docker quick-start. Provision(ctx,dir)
                   generates the data dir (proxy.db via store + seed, mfa.key, self-signed
-                  cert, motd.txt, SETUP-DEFAULTS.TXT) and writes tn3270proxy.json LAST as
+                  cert, motd.txt, branding.txt, SETUP-DEFAULTS.TXT) and writes tn3270proxy.json LAST as
                   the "provisioned" marker. Detection: config present → no-op
                   (ErrAlreadyProvisioned); proxy.db without config → partial-dir error;
                   else fresh. Pure-Go cert (no openssl); shares GenPassword with bootstrap.
@@ -205,6 +214,9 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   A user_settings_locked account skips the enrollment branch entirely (forced or
                   self-service); the verify branch is unchanged, and the menu/dispatch hide and
                   reject `0`.
+                  loginBranding/BrandingRead reads BRANDING_FILE fresh on each login paint
+                  (8 KiB cap, absolute-path guard), mirroring the MOTD reader; the branding
+                  lines are threaded through Presenter.Login and passed to LoginScreen.
                   adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go)
                   behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
                   userSettings flow (session.go, behind the UserSettings Presenter method)
@@ -312,8 +324,9 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   taller layouts, content stays within columns 0–79. Unit tests assert field *names/content/
   color*, not row numbers — verify positioning in a real emulator. **The full CUA palette,
   three-band layout, PF-key map, and conscious deviations are specified in
-  `docs/ispf-style-guide.md` — all ISPF-layer screens follow it.** (MOTD/NEWS is the one
-  documented exception — chrome-less pre-ISPF TSO/READY layer.)
+  `docs/ispf-style-guide.md` — all ISPF-layer screens follow it.** Two documented exceptions:
+  MOTD/NEWS (chrome-less pre-ISPF TSO/READY layer) and the **login screen** (branding-forward
+  layout, rows 0–3 status header, branding body, credential row at BodyBottomRow — see §6.8).
 - **`go3270.NegotiateTelnet`** ends with a ~10ms read-drain loop that can discard early or
   fragmented client bytes (it runs before app data is expected). `HandleScreen` itself is
   safe (byte-by-byte, stops at IAC EOR). Watch for lost first keystrokes in emulator testing.

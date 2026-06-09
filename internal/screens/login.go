@@ -30,38 +30,65 @@ const (
 	FieldError    = "errormsg"
 )
 
-// LoginScreen returns the login screen, its validation rules, and the initial
-// cursor position (on the username field), sized for geom (bottom rows
-// anchored to the last screen rows). errMsg, if non-empty, is shown on the
-// error line (e.g. a generic "invalid credentials" message after a failed
-// sign-on). status supplies the right-hand info block (Date / Time / System ID
-// / Release); the presenter stamps status.Now at paint time so the clock is
-// live (Username/TermType are unset pre-login and not shown). The caller drives
-// it with go3270.HandleScreenAlt using AIDEnter to submit and AIDPF3 to quit,
-// with errorField = FieldError.
-func LoginScreen(geom Geometry, status MenuStatus, errMsg string) (go3270.Screen, go3270.Rules, Cursor) {
+// LoginScreen returns the branding-forward login screen, its validation rules,
+// and the initial cursor (on the username field), sized for geom. Layout
+// (0-based; login is a documented exception to the three-band convention — see
+// docs/ispf-style-guide.md):
+//
+//	row 0     centered title              | Date  (col StatusBlockCol)
+//	row 1     error line (col 2)          | Time
+//	row 2                                 | System ID
+//	row 3                                 | Release
+//	rows 4..  branding (cols 0-79 verbatim, vertically centered; first-N
+//	  input-1   top-aligned clip when taller than the region)
+//	BodyBottomRow  User ID + Password on one line (password input reaches col 78)
+//	HelpRow        PF3=Disconnect
+//
+// branding holds the already-split file lines (see SplitBranding); nil/empty
+// renders a blank body. status supplies the right-hand info; the presenter
+// stamps status.Now at paint time. errMsg, if non-empty, shows on row 1
+// (truncated so it cannot collide with the Time block at StatusBlockCol).
+func LoginScreen(geom Geometry, status MenuStatus, branding []string, errMsg string) (go3270.Screen, go3270.Rules, Cursor) {
 	title := "TN3270 GATEWAY LOGIN"
-	username := go3270.Field{Row: 3, Col: 16, Name: FieldUsername, Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
+	row := geom.BodyBottomRow() // credential row (second-to-last)
+	username := go3270.Field{Row: row, Col: 15, Name: FieldUsername, Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},
-		{Row: 3, Col: 2, Color: go3270.Turquoise, Content: "User ID. . ."},
+		// Error on row 1: attribute at col 2, content cols 3..58 (truncated to
+		// 56 runes), leaving col 59 free before the Time block at StatusBlockCol
+		// (60). Generic errors are far shorter.
+		{Row: 1, Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: truncateRunes(errMsg, 56)},
+		// Credential row: both fields share one line.
+		{Row: row, Col: 2, Color: go3270.Turquoise, Content: "User ID . . :"},
 		username,
-		{Row: 3, Col: 33}, // stop field: closes the username input
-		{Row: 5, Col: 2, Color: go3270.Turquoise, Content: "Password . ."},
-		{Row: 5, Col: 16, Name: FieldPassword, Write: true, Hidden: true, Color: go3270.Green, Highlighting: go3270.Underscore},
-		{Row: 5, Col: 33}, // stop field
-		{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
+		{Row: row, Col: 28}, // stop field: closes the username input (cols 16-27)
+		{Row: row, Col: 30, Color: go3270.Turquoise, Content: "Password . . :"},
+		{Row: row, Col: 44, Name: FieldPassword, Write: true, Hidden: true, Color: go3270.Green, Highlighting: go3270.Underscore},
+		{Row: row, Col: 79}, // stop field: password input runs cols 45-78
 		{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Disconnect"},
 	}
-	// Right-hand info block, top-aligned with the User ID field (row 3) and
-	// sharing the menu's column so the two screens line up. No User ID yet
-	// (pre-login) and Terminal is omitted by design.
-	screen = append(screen, statusBlock(geom, 3, []statusRow{
+	// Status header on rows 0-3 at StatusBlockCol (startRow 0 places the four
+	// rows consecutively). No User ID (pre-login) and no Terminal, by design.
+	screen = append(screen, statusBlock(geom, 0, []statusRow{
 		{"Date . . :", julianDate(status.Now)},
 		{"Time . . :", clockHM(status.Now)},
 		{"System ID:", truncateRunes(status.SystemID, 7)},
 		{"Release. :", truncateRunes(status.Release, 7)},
 	})...)
+	// Branding region: rows LoginBrandingTop .. (credential row - 1). Vertically
+	// centered when it fits; first-N top-aligned clip when taller.
+	top, h := geom.LoginBrandingTop(), geom.LoginBrandingHeight()
+	lines := branding
+	if len(lines) > h {
+		lines = lines[:h]
+	}
+	pad := (h - len(lines)) / 2
+	for i, ln := range lines {
+		if ln == "" {
+			continue // blank line: spacing only, no protected field
+		}
+		screen = append(screen, go3270.Field{Row: top + pad + i, Col: 0, Color: go3270.White, Content: ln})
+	}
 	rules := go3270.Rules{
 		FieldUsername: {Validator: go3270.NonBlank, ErrorText: "User ID is required"},
 	}

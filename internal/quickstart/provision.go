@@ -94,6 +94,14 @@ func Provision(ctx context.Context, dir string) (*Result, error) {
 		return nil, fmt.Errorf("set motd config: %w", err)
 	}
 
+	// Branding file + sysconfig pointer (mirrors MOTD).
+	if err := os.WriteFile(l.Branding, []byte(DefaultBranding()), 0o644); err != nil {
+		return nil, fmt.Errorf("write branding: %w", err)
+	}
+	if err := st.SetConfig(ctx, sysconfig.KeyBrandingFile, l.Branding); err != nil {
+		return nil, fmt.Errorf("set branding config: %w", err)
+	}
+
 	// Human-readable credential record. World-readable (0644) on purpose: it is
 	// written into a root-owned bind mount and the host user must be able to open
 	// it. Secrets (mfa.key, key.pem) stay 0600. The file tells the user to delete

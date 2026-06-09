@@ -31,6 +31,31 @@ import (
 // including MOD 5, truncate at 79).
 const newsMaxCols = 79
 
+// SplitBranding turns raw branding-file text into the lines the login screen
+// renders. It mirrors PaginateNews's line handling but does not paginate: lines
+// split on "\n" (a trailing "\r" is stripped) and truncate at column 79.
+// Trailing whitespace-only lines are dropped (so a conventional EOF newline
+// doesn't skew vertical centering); leading and interior blank lines are
+// preserved (the author owns vertical spacing). Returns nil when the text is
+// empty or whitespace-only.
+func SplitBranding(raw string) []string {
+	lines := strings.Split(raw, "\n")
+	for i, ln := range lines {
+		ln = strings.TrimSuffix(ln, "\r")
+		if r := []rune(ln); len(r) > newsMaxCols {
+			ln = string(r[:newsMaxCols])
+		}
+		lines[i] = ln
+	}
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return lines
+}
+
 // PaginateNews turns raw MOTD file text into pages for NewsScreen. Lines split
 // on "\n" (a trailing "\r" is stripped) and truncate at column 79. Trailing
 // blank lines are dropped so a conventional EOF newline never yields a spurious

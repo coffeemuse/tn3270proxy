@@ -117,3 +117,16 @@ func (g Geometry) CenterCol(n int) int {
 // labels + 7-rune values fit within cols 60-78. Content is always within cols
 // 0-79 (rows-only adaptation), so this does not widen on taller models.
 func (g Geometry) StatusBlockCol() int { return 60 }
+
+// Login-screen branding region (login is a documented layout exception; see
+// docs/ispf-style-guide.md). The region sits below the rows 0-3 status header
+// and above the credential row (BodyBottomRow). LoginBrandingTop is fixed at 4;
+// the region runs LoginBrandingTop .. BodyBottomRow-1, so its height is
+// BodyBottomRow-4 (18 on MOD 2). The credential row rides BodyBottomRow and the
+// PF-key help rides HelpRow, so both bottom-anchor on taller models.
+
+// LoginBrandingTop is the first row of the login branding region.
+func (g Geometry) LoginBrandingTop() int { return 4 }
+
+// LoginBrandingHeight is how many rows the login branding region spans.
+func (g Geometry) LoginBrandingHeight() int { return g.BodyBottomRow() - g.LoginBrandingTop() }
