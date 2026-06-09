@@ -8,7 +8,7 @@ func DefaultBranding() string {
 	return "" +
 		"            ____________________________________________            \n" +
 		"           |                                            |           \n" +
-		"           |        T N 3 2 7 0   G A T E W A Y        |           \n" +
+		"           |        T N 3 2 7 0   G A T E W A Y         |           \n" +
 		"           |                                            |           \n" +
 		"           |            QUICK-START DEMO HOST           |           \n" +
 		"           |____________________________________________|           \n" +
