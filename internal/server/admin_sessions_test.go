@@ -54,7 +54,7 @@ func (r *sessRenderer) List(ui3270.ListView) (ui3270.ListAction, error) { panic(
 func (r *sessRenderer) Form(ui3270.FormView) (ui3270.FormAction, error) { panic("unused") }
 func (r *sessRenderer) Detail(ui3270.DetailView) error { return nil }
 func (r *sessRenderer) DetailAct(ui3270.DetailView, int) (ui3270.ListAction, error) {
-	return ui3270.ListAction{}, nil
+	panic("unexpected DetailAct call") // replaced by a scripting impl in the S-detail task
 }
 func (r *sessRenderer) Snapshot(v ui3270.SnapshotView) (ui3270.ListAction, error) {
 	r.views = append(r.views, v)
