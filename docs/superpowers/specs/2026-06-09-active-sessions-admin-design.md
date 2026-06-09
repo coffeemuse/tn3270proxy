@@ -195,60 +195,105 @@ type SnapshotConfig[T any] struct {
 
 Behaviour added to the driver loop:
 - An `ActCmd` keystroke on a row, with no pending confirm, calls `Confirm(item)`.
-  A non-empty `blocked` string is shown as the error line and nothing happens
-  (this is the self-disconnect veto). Otherwise the `prompt` is shown and the
-  action is held pending, exactly like `RunList`'s delete dance.
+  A non-empty `blocked` string is shown and nothing happens (the self-disconnect
+  veto). Otherwise the `prompt` is shown and the action is held pending, exactly
+  like `RunList`'s delete dance.
 - The pending action is resolved by the next keystroke: re-issuing `ActCmd` on the
   same row confirms (calls `OnAct`); any other action cancels it.
 - `OnAct` returning `refresh=true` re-fetches the snapshot (a disconnected row
-  disappears). An `errMsg` is shown on the error line.
+  disappears). An `errMsg` is shown.
+
+**Message-line rendering (style-guide conformance).** The `prompt`, the `blocked`
+veto, and every `errMsg` all flow into the **single `errormsg` field on the
+message line at row 2**, rendered Red-intense — exactly as `RunList` and the
+audit viewer already do (`internal/ui3270/screen.go`, `snapshotscreen.go`:
+`messageRow() == 2`). The ISPF style guide's palette nominally colours *confirm
+prompts* Yellow (WASL caution), but the established `ui3270` convention is one
+shared red message field for prompts, vetoes, and errors alike; this screen
+**follows the existing convention** rather than introducing a second message
+field, keeping all snapshot/list panels uniform. (If a yellow caution band is
+ever wanted, it is a guide-wide `ui3270` change, out of scope here.)
 
 This keeps the read-only fetch-once/Enter-refresh/PF7-PF8 paging intact and adds
-the minimum needed for a guarded mutating command. `OnSelect`/`S` remain
-available (the active-sessions screen does not need a detail drill-down in v1;
-all fields fit one row).
+the minimum needed for a guarded mutating command. `OnSelect`/`S` remains
+available but is unused in v1 (all fields fit one row; no detail drill-down).
+
+**Second `ui3270` change — a wider row for 6 columns.** The audit viewer's
+`SnapshotRow` is a fixed three-segment model (Left cols 8–27 = 20 wide, Mid
+29–40 = 12, Right 42–79 = 38) whose Mid segment exists to carry its own colour.
+Active Sessions has six columns and an `IP:port` that alone can reach 21 chars,
+so the 20-wide Left segment is too tight. Since this screen needs **no
+per-segment colour**, the row is rendered as a **single full-width content field
+(cols 8–79, 72 chars)** packed by the `server`-layer formatter. This is a small,
+additive `snapshotscreen.go` change (a full-width row variant selected when the
+`SnapshotRow` carries no Mid colour); the audit viewer keeps the three-segment
+coloured model unchanged. The Blue column-heading row (r3) uses the same
+full-width field so headings align with the packed columns.
 
 ### 5. List screen layout (MOD 2; self-normalising for larger models)
 
-Reuses the `SnapshotView` three-band layout and `pageBounds` math. Columns laid
-out within cols 1–79 (≈14 data rows per page on MOD 2):
+The screen follows the ISPF three-band layout (`docs/ispf-style-guide.md`) and
+reuses the snapshot builder's band rows verbatim — exactly the placement
+`buildSnapshotScreen` already produces:
+
+- **r0** — centered White-intense title; right-justified `ROW x TO y OF z`
+  indicator at col 60.
+- **r1** — turquoise, centered `AS OF …` snapshot stamp (snapshot lists carry the
+  as-of stamp here; no `Command ===>` line, per style-guide deviation 7 — list
+  panels have no command line yet).
+- **r2** — the **message line**: Red-intense `errormsg` field, blank unless there
+  is a prompt / veto / error.
+- **r3** — Blue column-heading row.
+- **r4 … rN−3** — data rows; the line-command (`CMD`) input is the green field at
+  col 3.
+- **rN−2** — turquoise legend row (`D=Disconnect`).
+- **rN−1** — turquoise PF-key help row.
 
 ```
- ACTIVE SESSIONS                                          ROW 1 OF 3
- AS OF 2026-06-09 (2026.160)  14:32 UTC
- CMD  ID  CLIENT               CONNECTED  SESSION   USER      SERVICE
- _    12  203.0.113.7:51234    14:02:11   00:18:43  DARROW    DEMO
- _    13  203.0.113.9:44120    14:19:55   00:00:59  (login)   -
- D    14  10.0.0.4:5050        13:40:02   00:39:52  *YOU*     -
- D=Disconnect
- <error / confirm line>
- PF3=Back   PF7=Bkwd  PF8=Fwd   Enter=Refresh
+ r0   ACTIVE SESSIONS                                        ROW 1 TO 3 OF 3
+ r1                     AS OF 2026-06-09 (2026.160)  14:32 UTC
+ r2   <message line — Red, blank unless prompt/veto/error>
+ r3   CMD ID    CLIENT             CONNECTED SESSION  USER     SERVICE
+ r4   _   12    203.0.113.7:51234  14:02:11  00:18:43 DARROW   DEMO
+ r5   _   13    203.0.113.9:44120  14:19:55  00:00:59 (login)  -
+ r6   D   14    10.0.0.4:5050      13:40:02  00:39:52 *YOU*    -
+ ...
+ r20  D=Disconnect
+ r23  PF3=Admin Menu  PF7=Up  PF8=Down  Enter=Refresh
 ```
 
-| Field | Width | Notes |
-|-------|-------|-------|
-| ID | ≤5 | per-process monotonic session id |
-| CLIENT | ~21 | remote IP:port (IPv6 may truncate; full form acceptable to clip) |
-| CONNECTED | 8 | wall-clock `HH:MM:SS` of TCP accept, UTC |
-| SESSION | 8 | elapsed `HH:MM:SS` since `connectedAt`, computed at snapshot time |
-| USER | 8 | logged-in username; `(login)` when pre-auth; own row shows `*YOU*` |
-| SERVICE | rest | bridged service NAME; `-` when not bridged |
+Each data row is one full-width content field (cols 8–79, 72 chars; see §4),
+packed by the `server`-layer formatter to this column budget:
+
+| Column | Cols (within 8–79) | Width | Notes |
+|--------|--------------------|-------|-------|
+| ID | 8–12 | 5 | per-process monotonic session id |
+| CLIENT | 14–34 | 21 | remote `IP:port`; IPv6 clips at 21 (full value in a future detail view) |
+| CONNECTED | 36–43 | 8 | wall-clock `HH:MM:SS` of TCP accept, UTC |
+| SESSION | 45–52 | 8 | elapsed `HH:MM:SS` since `connectedAt` |
+| USER | 54–61 | 8 | logged-in username; `(login)` pre-auth; own row `*YOU*` |
+| SERVICE | 63–79 | 17 | bridged service NAME (≤8 in practice); `-` when not bridged |
 
 - **SESSION** is `now - connectedAt`, formatted `HH:MM:SS` (the requested session
   length). Because it is computed at snapshot time, plain Enter advances the
-  clock. `loggedInAt` is carried in the view for a possible future "login age"
-  column / detail but is not shown in v1.
+  clock. `loggedInAt` is carried in `SessionView` for a possible future "login
+  age" column / detail but is not shown in v1.
 - **`*YOU*`** marks the acting admin's own session (matched by `selfSessionID`).
-- **As-of stamp**, **UTC everywhere**, and the overflow/empty conventions match
-  the audit viewer. Empty state: `(no active sessions)` — never reachable in
-  practice since the viewing admin is themselves a session, but handled.
+- **PF-key help** follows style-guide §3 (`PFn=Verb`, no spaces around `=`, two
+  spaces between entries); `PF3=Admin Menu` matches the sibling audit viewer
+  (this is an admin sub-screen returning to the admin menu).
+- **UTC everywhere**; the empty/overflow conventions match the audit viewer.
+  Empty state: `(no active sessions)` — not reachable in practice (the viewing
+  admin is themselves a session) but handled.
 
 ### 6. Disconnect flow + guardrails
 
 - `Confirm(view)` returns `blocked = "CANNOT DISCONNECT YOUR OWN SESSION"` when
   `view.id == f.selfSessionID` — the self-disconnect guardrail, consistent with
   the existing no-self-delete / no-self-demotion guardrails. Otherwise it returns
-  a prompt like `CONFIRM DISCONNECT <user-or-CLIENT> — PRESS D AGAIN`.
+  a prompt like `CONFIRM DISCONNECT <USER-OR-CLIENT> - PRESS D AGAIN` (ASCII only;
+  this renders on a 3270 screen). Both the veto and the prompt surface on the
+  **row-2 message line** via the shared `errormsg` field (§4).
 - On confirm, `OnAct` calls `registry.Disconnect(view.id)`:
   - `ok=true` → record the audit event, return `refresh=true` (row vanishes).
   - `ok=false` (already gone) → benign; `errMsg = "SESSION ALREADY ENDED"`,
@@ -281,7 +326,9 @@ audit viewer's `auditEventColor` (a security-state action, like `admin`).
 
 ## Wiring touchpoints
 
-- `internal/screens/admin.go` — add `7.  Active Sessions` to `AdminMenuScreen`.
+- `internal/screens/admin.go` — add option `7` to `AdminMenuScreen` on the
+  tri-color keyword grid (style-guide §2): turquoise name `Sessions`, green
+  description `Active client sessions`.
 - `internal/server/presenter_admin.go` — accept `"7"` in the `AdminMenu` parse.
 - `internal/server/admin.go` — `case 7:` dispatch; add `sessions SessionRegistry`
   and `selfSessionID uint64` to `adminFlow`; (no `AdminStore` change — the
@@ -297,8 +344,12 @@ audit viewer's `auditEventColor` (a security-state action, like `admin`).
   `setLogin`/`clearLogin`/`setService`/`clearService` calls at the existing
   transitions.
 - `internal/ui3270/snapshotlist.go` — extend `SnapshotConfig` with
-  `ActCmd`/`Confirm`/`OnAct` and the confirm dance.
-- `internal/ui3270/types.go` — (if needed) confirm-line plumbing on `SnapshotView`.
+  `ActCmd`/`Confirm`/`OnAct` and the confirm dance (all messages via the
+  existing row-2 `errormsg` field).
+- `internal/ui3270/snapshotscreen.go` — add a full-width row variant (cols 8–79)
+  selected when a `SnapshotRow` carries no Mid colour, used for the packed
+  6-column rows and the heading row; the audit viewer's three-segment coloured
+  layout is untouched.
 - `internal/store` — `AuditSessionDisconnect` kind constant; colour it in
   `auditEventColor`.
 
