@@ -787,6 +787,7 @@ Wait(5,Output)
 Ascii()
 PF(3)
 Wait(5,InputField)
+Ascii()
 Quit()
 EOF
 wait "$ALICE18_PID" 2>/dev/null
@@ -799,6 +800,13 @@ check  "18f admin's own row still marked *YOU* on list" "\*YOU\*"            "$W
 # The authoritative proof: alice's held connection was dropped by the admin's
 # Disconnect-from-detail (Wait(Disconnect) returns cleanly; a timeout emits '^error').
 ncheck "18g alice connection dropped by admin disconnect" "^error"           "$WORK/t18alice.out"
+# PF3 from the detail returns to the (refreshed) list: DISCONNECTED renders on the
+# detail, then ACTIVE SESSIONS appears again after it (ordering proves the return).
+if awk '/DISCONNECTED/{seen=1} seen && /ACTIVE SESSIONS/{ok=1} END{exit !ok}' "$WORK/t18admin.out"; then
+  PASS=$((PASS+1)); echo "PASS: 18h PF3 from detail returns to the active-sessions list"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 18h PF3 from detail did not return to the list"
+fi
 
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
