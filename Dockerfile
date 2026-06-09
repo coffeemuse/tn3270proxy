@@ -2,12 +2,18 @@
 
 # --- build stage ---
 FROM golang:1.25 AS build
+# Version stamp injected by the release CI (VERSION=<tag>); defaults to the
+# "dev" sentinel for a plain `docker build`, which internal/version reports
+# honestly. .git is excluded from the build context (.dockerignore), so the
+# VCS fallback can't run inside the container — this build-arg is the only
+# path to a real version in the image.
+ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 ENV CGO_ENABLED=0
-RUN go build -o /out/tn3270proxy ./cmd/tn3270proxy && \
+RUN go build -ldflags "-X main.version=${VERSION}" -o /out/tn3270proxy ./cmd/tn3270proxy && \
     go build -o /out/dummy3270 ./cmd/dummy3270
 
 # --- runtime stage ---
