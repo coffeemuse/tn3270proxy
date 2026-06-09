@@ -107,10 +107,8 @@ func TestRegistry_MutatorsOnMissingIDAreNoOps(t *testing.T) {
 func TestRegistry_ConcurrentAccessIsRaceFree(t *testing.T) {
 	r := newSessionRegistry()
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 50 {
+		wg.Go(func() {
 			id := r.register("9.9.9.9:1", time.Unix(1, 0), func() {})
 			r.setLogin(id, "U", time.Unix(2, 0))
 			r.setService(id, "S")
@@ -118,7 +116,7 @@ func TestRegistry_ConcurrentAccessIsRaceFree(t *testing.T) {
 			r.clearService(id)
 			r.clearLogin(id)
 			r.deregister(id)
-		}()
+		})
 	}
 	wg.Wait()
 	if got := len(r.Snapshot()); got != 0 {
@@ -141,6 +139,12 @@ func TestRegistry_DisconnectClosesAndReturnsView(t *testing.T) {
 	}
 	if booted.Username != "BOB" || booted.RemoteAddr != "3.3.3.3:7000" {
 		t.Errorf("booted view = %+v, want BOB@3.3.3.3:7000", booted)
+	}
+	// Disconnect must NOT deregister: the session goroutine's own teardown defer
+	// removes the entry once its blocked Read unblocks. A second Disconnect (or
+	// the audit lookup) must still find the entry until then.
+	if snap := r.Snapshot(); len(snap) != 1 {
+		t.Errorf("Disconnect must not remove the entry; Snapshot len = %d, want 1", len(snap))
 	}
 }
 
