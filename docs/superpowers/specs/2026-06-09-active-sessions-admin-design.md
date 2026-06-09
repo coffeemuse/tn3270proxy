@@ -111,8 +111,9 @@ Methods (all concurrency-safe):
   `clearLogin(id)` (logoff / idle-logout — clears username + `loggedInAt`),
   `setService(id, name)`, `clearService(id)`.
 - `deregister(id)` — removes the entry (called from the session's teardown defer).
-- `snapshot(now time.Time) []SessionView` — returns a sorted (by id), copied
-  slice of display rows; never hands out live pointers.
+- `Snapshot() []SessionView` — returns a sorted (by id), copied slice of display
+  rows; never hands out live pointers. (The registry holds no clock; the flow
+  computes elapsed session length with its own `now` when formatting rows.)
 - `disconnect(id uint64) (booted SessionView, ok bool)` — looks up the entry,
   calls its `close()`, returns the entry's last-known view for the audit record.
   `ok=false` if the id is already gone (lost a race with natural disconnect).
@@ -162,7 +163,7 @@ a fake, and the screen layer never sees concurrency internals):
 
 ```go
 type SessionRegistry interface {
-    Snapshot(now time.Time) []SessionView
+    Snapshot() []SessionView
     Disconnect(id uint64) (booted SessionView, ok bool)
 }
 ```
@@ -331,7 +332,7 @@ audit viewer's `auditEventColor` (a security-state action, like `admin`).
 
 ## Data flow (one refresh)
 
-1. `activeSessions` calls `registry.Snapshot(now)` → copied `[]SessionView`,
+1. `activeSessions` calls `registry.Snapshot()` → copied `[]SessionView`,
    sorted by id.
 2. Format each row (`SESSION = now - connectedAt`; `(login)` / `*YOU*` / `-`
    substitutions); stamp `AS OF now`.
