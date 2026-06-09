@@ -266,7 +266,7 @@ func TestSessionDetail_Fields(t *testing.T) {
 	if !strings.Contains(got["Logged in"], "00:08:20") { // 1_000_000-999_500 = 500s
 		t.Errorf("Logged in = %q, want elapsed 00:08:20", got["Logged in"])
 	}
-	if dv.PFHelp != "PF11=Disconnect   PF3=Back" {
+	if dv.PFHelp != "PF3=Back   PF11=Disconnect" {
 		t.Errorf("PFHelp = %q", dv.PFHelp)
 	}
 }

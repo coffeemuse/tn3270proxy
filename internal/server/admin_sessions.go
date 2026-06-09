@@ -194,7 +194,7 @@ func (f *adminFlow) sessionDetail(ctx context.Context, v SessionView) ui3270.Det
 	return ui3270.DetailView{
 		Title:     "SESSION DETAIL",
 		Fields:    fields,
-		PFHelp:    "PF11=Disconnect   PF3=Back",
+		PFHelp:    "PF3=Back   PF11=Disconnect",
 		DotLeader: true,
 	}
 }
