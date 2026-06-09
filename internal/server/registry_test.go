@@ -125,3 +125,33 @@ func TestRegistry_ConcurrentAccessIsRaceFree(t *testing.T) {
 		t.Fatalf("all sessions deregistered, want 0, got %d", got)
 	}
 }
+
+func TestRegistry_DisconnectClosesAndReturnsView(t *testing.T) {
+	r := newSessionRegistry()
+	closes := 0
+	id := r.register("3.3.3.3:7000", time.Unix(100, 0), func() { closes++ })
+	r.setLogin(id, "BOB", time.Unix(120, 0))
+
+	booted, ok := r.Disconnect(id)
+	if !ok {
+		t.Fatal("Disconnect on a live session must return ok=true")
+	}
+	if closes != 1 {
+		t.Errorf("close called %d times, want 1", closes)
+	}
+	if booted.Username != "BOB" || booted.RemoteAddr != "3.3.3.3:7000" {
+		t.Errorf("booted view = %+v, want BOB@3.3.3.3:7000", booted)
+	}
+}
+
+func TestRegistry_DisconnectMissingIDIsBenign(t *testing.T) {
+	r := newSessionRegistry()
+	_, ok := r.Disconnect(404)
+	if ok {
+		t.Error("Disconnect on an unknown id must return ok=false")
+	}
+}
+
+func TestRegistry_SatisfiesSeam(t *testing.T) {
+	var _ SessionRegistry = newSessionRegistry()
+}
