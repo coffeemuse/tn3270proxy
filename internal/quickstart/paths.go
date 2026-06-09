@@ -34,6 +34,7 @@ type Layout struct {
 	Cert      string
 	Key       string
 	MOTD      string
+	Branding  string
 	SetupFile string
 }
 
@@ -48,6 +49,7 @@ func NewLayout(dir string) Layout {
 		Cert:      filepath.Join(dir, "tls", "cert.pem"),
 		Key:       filepath.Join(dir, "tls", "key.pem"),
 		MOTD:      filepath.Join(dir, "motd.txt"),
+		Branding:  filepath.Join(dir, "branding.txt"),
 		SetupFile: filepath.Join(dir, "SETUP-DEFAULTS.TXT"),
 	}
 }

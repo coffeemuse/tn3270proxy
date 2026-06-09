@@ -21,7 +21,7 @@ func TestProvisionFresh(t *testing.T) {
 		t.Fatalf("Provision: %v", err)
 	}
 	l := NewLayout(dir)
-	for _, p := range []string{l.Config, l.DB, l.MFAKey, l.Cert, l.Key, l.MOTD, l.SetupFile} {
+	for _, p := range []string{l.Config, l.DB, l.MFAKey, l.Cert, l.Key, l.MOTD, l.Branding, l.SetupFile} {
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("expected artifact %s: %v", p, err)
 		}
@@ -61,6 +61,14 @@ func TestProvisionFresh(t *testing.T) {
 	}
 	if mv != l.MOTD {
 		t.Errorf("MOTD_FILE = %q, want %q", mv, l.MOTD)
+	}
+	// BRANDING_FILE sysconfig points at the branding file.
+	bv, err := st.GetConfig(context.Background(), sysconfig.KeyBrandingFile)
+	if err != nil {
+		t.Fatalf("get branding config: %v", err)
+	}
+	if bv != l.Branding {
+		t.Errorf("BRANDING_FILE = %q, want %q", bv, l.Branding)
 	}
 }
 

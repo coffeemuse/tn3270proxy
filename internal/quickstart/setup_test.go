@@ -3,6 +3,8 @@ package quickstart
 import (
 	"strings"
 	"testing"
+
+	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 )
 
 func sampleResult() Result {
@@ -33,5 +35,20 @@ func TestDefaultMOTDEncouragesPasswordChange(t *testing.T) {
 	m := DefaultMOTD()
 	if !strings.Contains(strings.ToUpper(m), "PASSWORD") {
 		t.Errorf("MOTD should mention changing passwords:\n%s", m)
+	}
+}
+
+func TestDefaultBrandingFitsRegion(t *testing.T) {
+	lines := screens.SplitBranding(DefaultBranding())
+	if len(lines) == 0 {
+		t.Fatal("DefaultBranding produced no lines")
+	}
+	if h := screens.DefaultGeometry.LoginBrandingHeight(); len(lines) > h {
+		t.Errorf("DefaultBranding has %d lines, exceeds MOD 2 region height %d", len(lines), h)
+	}
+	for i, ln := range lines {
+		if len([]rune(ln)) > 79 {
+			t.Errorf("line %d is %d cols, exceeds 79", i, len([]rune(ln)))
+		}
 	}
 }
