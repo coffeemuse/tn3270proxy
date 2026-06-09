@@ -700,6 +700,98 @@ Quit()
 EOF
 check  "16l PF7 returns to page 1" "ITEMS 1 TO 17 OF 22" "$WORK/t16p4.out"
 
+# --- 17. Active Sessions admin screen (GH #91): admin -> A -> 7. The admin's own
+# connection is a live session marked *YOU*; the screen renders the column
+# headings, homes the cursor to the first command field (4,3), and PF3 returns
+# to the admin menu. ---
+s3 t17 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+String(A)
+Enter()
+Wait(5,InputField)
+String(7)
+Enter()
+Wait(5,InputField)
+Ascii()
+PF(3)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "17a active sessions screen renders"        "ACTIVE SESSIONS" "$WORK/t17.out"
+check "17b CLIENT column heading present"          "CLIENT"          "$WORK/t17.out"
+check "17c CONNECTED column heading present"        "CONNECTED"       "$WORK/t17.out"
+check "17d admin's own session marked *YOU*"        "\*YOU\*"         "$WORK/t17.out"
+check "17e cursor on first command field (4,3)"     "I 2 24 80 4 3 "  "$WORK/t17.out"
+# PF3 returns to the admin menu: ACTIVE SESSIONS first, then GATEWAY ADMIN again.
+if awk '/ACTIVE SESSIONS/{seen=1} seen && /TN3270 GATEWAY ADMIN/{ok=1} END{exit !ok}' "$WORK/t17.out"; then
+  PASS=$((PASS+1)); echo "PASS: 17f PF3 on Active Sessions returns to admin menu"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 17f PF3 on Active Sessions did not return to admin menu"
+fi
+
+# --- 18. Disconnect from the Active Sessions screen (GH #91). A second client
+# (alice) connects and sits at the menu, holding its connection open via
+# Wait(Disconnect). The admin opens A -> 7 (alice has the lower session id, so it
+# is row 0), issues D then D again to confirm, and the proxy hard-closes alice's
+# connection — her Wait(Disconnect) then completes WITHOUT a timeout 'error'.
+# The admin's own session (*YOU*, row 1) is never the target. ---
+sleep 1  # let scenario 17's admin connection fully deregister
+s3270 -model 3279-2 > "$WORK/t18alice.out" 2>&1 <<EOF &
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(alice)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+Wait(20,Disconnect)
+Ascii()
+Quit()
+EOF
+ALICE18_PID=$!
+sleep 2  # alice reaches the menu and registers first (lower id => row 0)
+s3 t18admin <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+String(A)
+Enter()
+Wait(5,InputField)
+String(7)
+Enter()
+Wait(5,InputField)
+Ascii()
+String(D)
+Enter()
+Wait(5,InputField)
+Ascii()
+String(D)
+Enter()
+Wait(5,InputField)
+Ascii()
+PF(3)
+Wait(5,InputField)
+Quit()
+EOF
+wait "$ALICE18_PID" 2>/dev/null
+check  "18a active sessions reached with second client" "ACTIVE SESSIONS"    "$WORK/t18admin.out"
+check  "18b disconnect confirm prompt on a non-self row" "CONFIRM DISCONNECT" "$WORK/t18admin.out"
+check  "18c admin's own row still marked *YOU*"          "\*YOU\*"            "$WORK/t18admin.out"
+# The authoritative proof: alice's held connection was dropped by the admin's
+# Disconnect (Wait(Disconnect) returns cleanly; a timeout would emit '^error').
+ncheck "18d alice connection dropped by admin disconnect" "^error"            "$WORK/t18alice.out"
+
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
 [ "$FAIL" -eq 0 ]
