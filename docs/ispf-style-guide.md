@@ -254,6 +254,21 @@ Conscious departures from textbook ISPF, with rationale:
    a functional command line is deferred to a follow-up. Lists use line commands
    (S/D) + PF keys; row 1 stays blank. (The `Option`/`Command` split still governs
    the label once it lands.)
+8. **Login screen (branding-forward) — layout exception.** The login screen deviates
+   from the three-band convention to make room for operator branding art:
+
+   - Rows 0–3 are a status header: centered title (row 0) and the
+     Date / Time / System ID / Release block at the status column (rows 0–3).
+   - The red error line moves to **row 1** (col 2), truncated so it cannot collide
+     with the Time block at the status column.
+   - Rows 4 .. `BodyBottomRow()-1` render the `BRANDING_FILE` contents (cols 0–79
+     verbatim, no indent), vertically centered when shorter than the region and
+     top-aligned/clipped when taller.
+   - The `User ID` and `Password` fields share `BodyBottomRow()` (the password
+     field's input reaches col 78); `PF3=Disconnect` stays on `HelpRow()`.
+
+   Like MOTD/NEWS, this is an intentional, documented exception — not a model for
+   new ISPF-layer screens.
 
 ---
 

@@ -50,9 +50,9 @@ Every action echoes a status line + `ok`/`error`. **Always `Wait(...)` after Con
 | `ReadBuffer(Ascii)` | dump with field attributes: `SF(c0=XX)` |
 | `Quit()` | end session |
 
-**Status line** (after every `ok`): `U F U C(127.0.0.1) I 2 24 80 3 17 0x0 0.000` → keyboard, formatted, _, connection (`N` = dropped), mode, model, rows, cols, **cursor row, cursor col (0-based)**, window, time.
+**Status line** (after every `ok`): `U F U C(127.0.0.1) I 2 24 80 22 16 0x0 0.000` → keyboard, formatted, _, connection (`N` = dropped), mode, model, rows, cols, **cursor row, cursor col (0-based)**, window, time.
 
-- **Cursor check:** login screen must show cursor `3 17` — input position, one right of the attribute byte (the go3270 `field.Col+1` gotcha is machine-checkable here).
+- **Cursor check:** login screen must show cursor `22 16` (branding-forward layout: `BodyBottomRow()=22`, userid attr col=15, input col=16 — the go3270 `field.Col+1` gotcha is machine-checkable here).
 - **Non-display check:** password field is `SF(c0=cd,...)` (`c0 & 0x0C == 0x0C` = non-display); userid is `c0=c1`.
 
 ## Project gotchas
