@@ -46,6 +46,11 @@ type SnapshotConfig[T any] struct {
 	// pending action commits via OnAct when ActCmd is re-issued, and is cancelled
 	// by any other action. OnAct returns (refresh, errMsg): refresh re-fetches the
 	// snapshot. All messages render on the row-2 message line.
+	//
+	// Confirm and OnAct must both be non-nil when ActCmd != 0; the action is
+	// deliberately confirm-gated (no immediate-commit path), so a nil Confirm
+	// makes ActCmd inert. This differs from RunList by design: ActCmd is meant
+	// for destructive operations that must never fire on a single keypress.
 	ActCmd  byte
 	Confirm func(item T) (prompt, blocked string)
 	OnAct   func(ctx context.Context, item T) (refresh bool, errMsg string)

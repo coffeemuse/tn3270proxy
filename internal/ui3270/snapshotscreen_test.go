@@ -152,6 +152,17 @@ func TestBuildSnapshotScreen_WideRendersFullWidthRows(t *testing.T) {
 	if sawMid {
 		t.Error("wide mode must not emit a Mid-segment field (it would chop the row)")
 	}
+
+	// The heading row (bodyTopRow) must also be a single full-width field, with
+	// no Mid/Right segment fields that would chop the packed columns.
+	if f, ok := fieldAt(screen, bodyTopRow(), snapLeftAttr); !ok || f.Content != "ID    CLIENT" {
+		t.Errorf("wide heading not rendered as a single left-anchored field: %+v ok=%v", f, ok)
+	}
+	for _, f := range screen {
+		if f.Row == bodyTopRow() && (f.Col == snapMidAttr || f.Col == snapRightAttr) {
+			t.Error("wide mode must not emit Mid/Right heading fields")
+		}
+	}
 }
 
 func TestBuildDetailScreen_DotLeader(t *testing.T) {
