@@ -74,9 +74,15 @@ func RunSnapshotList[T any](ctx context.Context, r Renderer, cfg SnapshotConfig[
 	)
 	for {
 		if !loaded {
-			rows, asOf, errMsg = cfg.Fetch(ctx)
-			if errMsg != "" {
+			// A non-empty fetch error replaces the rows and the message. An empty
+			// fetch error must NOT clobber a message carried over from an action
+			// that requested a refresh (e.g. OnAct returning (refresh=true, msg)),
+			// so errMsg is only overwritten when the fetch itself reports an error.
+			var ferr string
+			rows, asOf, ferr = cfg.Fetch(ctx)
+			if ferr != "" {
 				rows = nil
+				errMsg = ferr
 			}
 			loaded = true
 		}
