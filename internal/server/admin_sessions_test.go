@@ -140,4 +140,34 @@ func TestActiveSessions_RowFormatting(t *testing.T) {
 	if !strings.Contains(row1, "(login)") || !strings.Contains(row1, "-") {
 		t.Errorf("row1 = %q, want (login) and '-' service", row1)
 	}
+	// SESSION is the elapsed clock now-ConnectedAt: 1_000_000-999_000 = 1000s = 00:16:40.
+	if !strings.Contains(row0, "00:16:40") {
+		t.Errorf("row0 SESSION = %q, want elapsed 00:16:40", row0)
+	}
+}
+
+// TestActiveSessions_DisconnectAlreadyGone covers the race where the target
+// session ends naturally between the snapshot and the D-confirm: Disconnect
+// returns ok=false, so no audit is emitted and the message line says so.
+func TestActiveSessions_DisconnectAlreadyGone(t *testing.T) {
+	reg := &fakeRegistry{
+		views:       []SessionView{{ID: 5, RemoteAddr: "1.2.3.4:9999", LoggedInAt: time.Unix(1, 0), Username: "GONE"}},
+		disconnects: map[uint64]SessionView{5: {}},
+		okFor:       map[uint64]bool{5: false}, // already ended
+	}
+	var audits []store.AuditEvent
+	r := &sessRenderer{acts: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {Cmd: 'D', Row: 0}, {PF: 3}}}
+	f := newSessionsFlow(reg, 99, r, &audits)
+	if err := f.activeSessions(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(reg.disconnect) != 1 || reg.disconnect[0] != 5 {
+		t.Fatalf("Disconnect calls = %v, want [5]", reg.disconnect)
+	}
+	if len(audits) != 0 {
+		t.Errorf("no audit expected for an already-ended session; got %+v", audits)
+	}
+	if r.views[2].ErrMsg != "SESSION ALREADY ENDED" {
+		t.Errorf("error message = %q, want SESSION ALREADY ENDED", r.views[2].ErrMsg)
+	}
 }

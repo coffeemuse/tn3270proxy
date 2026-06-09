@@ -30,26 +30,31 @@ import (
 )
 
 // Active-sessions column widths (full-width row, cols 8–79 = 72 chars):
-// ID 5 + CLIENT 21 + CONNECTED 9 + SESSION 8 + USER 8 + SERVICE 16, single
-// spaces between (5+1+21+1+9+1+8+1+8+1+16 = 72).
-const sessionRowFmt = "%-5d %-21s %-9s %-8s %-8s %-16s"
+// ID 5 + CLIENT 21 + CONNECTED 9 + SESSION 9 + USER 8 + SERVICE 15, single
+// spaces between (5+1+21+1+9+1+9+1+8+1+15 = 72). SESSION is 9 wide so the
+// HH:MM:SS elapsed clock has room for 3-digit hours (a session held open for
+// 100+ hours via bridge_idle=exempt) without shifting USER/SERVICE.
+const sessionRowFmt = "%-5d %-21s %-9s %-9s %-8s %-15s"
 
 func sessionHeader() string {
-	return fmt.Sprintf("%-5s %-21s %-9s %-8s %-8s %-16s",
+	return fmt.Sprintf("%-5s %-21s %-9s %-9s %-8s %-15s",
 		"ID", "CLIENT", "CONNECTED", "SESSION", "USER", "SERVICE")
 }
 
-// clipField clips s to width w, marking truncation with a trailing '>' (ASCII;
-// '…' is unsafe on a 3270 screen). Shorter strings are returned unchanged (the
-// row formatter pads via the width verb).
+// clipField clips s to width w (in runes), marking truncation with a trailing
+// '>' (ASCII; '…' is unsafe on a 3270 screen). Shorter strings are returned
+// unchanged (the row formatter pads via the width verb). Rune-based so a
+// non-ASCII value (e.g. an accented username) is never sliced mid-rune.
 func clipField(s string, w int) string {
-	if len(s) <= w {
+	r := []rune(s)
+	if len(r) <= w {
 		return s
 	}
-	return s[:w-1] + ">"
+	return string(r[:w-1]) + ">"
 }
 
-// hhmmss formats a non-negative duration as HH:MM:SS (hours may exceed 99).
+// hhmmss formats a non-negative duration as HH:MM:SS; hours are not zero-padded
+// beyond two digits and may exceed 99 (the SESSION column reserves 9 chars).
 func hhmmss(d time.Duration) string {
 	if d < 0 {
 		d = 0
@@ -77,7 +82,7 @@ func fmtSessionRow(v SessionView, now time.Time, selfID uint64) ui3270.SnapshotR
 		v.ConnectedAt.UTC().Format("15:04:05"),
 		hhmmss(now.Sub(v.ConnectedAt)),
 		clipField(user, 8),
-		clipField(service, 16),
+		clipField(service, 15),
 	)
 	return ui3270.SnapshotRow{Left: left}
 }
