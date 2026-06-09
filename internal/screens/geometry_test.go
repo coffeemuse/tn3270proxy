@@ -136,3 +136,28 @@ func TestCenterCol(t *testing.T) {
 		t.Errorf("zero-geom CenterCol(19) = %d, want 30", got)
 	}
 }
+
+func TestLoginBrandingGeometry(t *testing.T) {
+	cases := []struct {
+		g          Geometry
+		wantTop    int
+		wantHeight int
+	}{
+		{Geometry{24, 80}, 4, 18},  // BodyBottomRow 22 -> height 22-4
+		{Geometry{}, 4, 18},        // normalizes to 24x80
+		{Geometry{32, 80}, 4, 26},  // BodyBottomRow 30 -> 26
+		{Geometry{43, 80}, 4, 37},  // BodyBottomRow 41 -> 37
+	}
+	for _, c := range cases {
+		if got := c.g.LoginBrandingTop(); got != c.wantTop {
+			t.Errorf("%+v LoginBrandingTop = %d, want %d", c.g, got, c.wantTop)
+		}
+		if got := c.g.LoginBrandingHeight(); got != c.wantHeight {
+			t.Errorf("%+v LoginBrandingHeight = %d, want %d", c.g, got, c.wantHeight)
+		}
+		// Region must sit strictly between the header band and the input row.
+		if c.g.LoginBrandingTop()+c.g.LoginBrandingHeight() != c.g.BodyBottomRow() {
+			t.Errorf("%+v region bottom should be input row %d", c.g, c.g.BodyBottomRow())
+		}
+	}
+}
