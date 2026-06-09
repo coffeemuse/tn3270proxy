@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
 	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 )
 
@@ -44,17 +45,25 @@ func (f *fakeRegistry) Disconnect(id uint64) (SessionView, bool) {
 	return f.disconnects[id], f.okFor[id]
 }
 
-// sessRenderer scripts Snapshot actions for the activeSessions flow.
+// sessRenderer scripts Snapshot + DetailAct actions for the activeSessions flow.
 type sessRenderer struct {
-	acts  []ui3270.ListAction
-	views []ui3270.SnapshotView
+	acts    []ui3270.ListAction
+	views   []ui3270.SnapshotView
+	detActs []ui3270.ListAction
+	dets    []ui3270.DetailView
 }
 
 func (r *sessRenderer) List(ui3270.ListView) (ui3270.ListAction, error) { panic("unused") }
 func (r *sessRenderer) Form(ui3270.FormView) (ui3270.FormAction, error) { panic("unused") }
-func (r *sessRenderer) Detail(ui3270.DetailView) error { return nil }
-func (r *sessRenderer) DetailAct(ui3270.DetailView, int) (ui3270.ListAction, error) {
-	panic("unexpected DetailAct call") // replaced by a scripting impl in the S-detail task
+func (r *sessRenderer) Detail(ui3270.DetailView) error                  { return nil }
+func (r *sessRenderer) DetailAct(v ui3270.DetailView, _ int) (ui3270.ListAction, error) {
+	r.dets = append(r.dets, v)
+	if len(r.detActs) == 0 {
+		panic("unexpected DetailAct call")
+	}
+	a := r.detActs[0]
+	r.detActs = r.detActs[1:]
+	return a, nil
 }
 func (r *sessRenderer) Snapshot(v ui3270.SnapshotView) (ui3270.ListAction, error) {
 	r.views = append(r.views, v)
@@ -63,8 +72,18 @@ func (r *sessRenderer) Snapshot(v ui3270.SnapshotView) (ui3270.ListAction, error
 	return a, nil
 }
 
-func newSessionsFlow(reg SessionRegistry, selfID uint64, r ui3270.Renderer, audit *[]store.AuditEvent) *adminFlow {
+func newSessionsFlow(t *testing.T, reg SessionRegistry, selfID uint64, r ui3270.Renderer, audit *[]store.AuditEvent) *adminFlow {
+	t.Helper()
+	st, err := store.Open(t.TempDir() + "/s.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	if err := st.SetConfig(context.Background(), sysconfig.KeyAuditReverseDNS, "N"); err != nil {
+		t.Fatal(err)
+	}
 	return &adminFlow{
+		store:         st,
 		term:          Term{Rows: 24, Cols: 80},
 		renderer:      func(_ net.Conn) ui3270.Renderer { return r },
 		sessions:      reg,
@@ -78,14 +97,16 @@ func TestActiveSessions_DisconnectAuditsSubject(t *testing.T) {
 	reg := &fakeRegistry{
 		views: []SessionView{
 			{ID: 1, RemoteAddr: "10.0.0.9:5050", ConnectedAt: time.Unix(999_000, 0), LoggedInAt: time.Unix(999_500, 0), Username: "BOB"},
-			{ID: 7, RemoteAddr: "10.0.0.4:6060", ConnectedAt: time.Unix(998_000, 0)}, // pre-auth
 		},
 		disconnects: map[uint64]SessionView{1: {ID: 1, RemoteAddr: "10.0.0.9:5050", Username: "BOB"}},
 		okFor:       map[uint64]bool{1: true},
 	}
 	var audits []store.AuditEvent
-	r := &sessRenderer{acts: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {Cmd: 'D', Row: 0}, {PF: 3}}}
-	f := newSessionsFlow(reg, 7 /*self is id 7*/, r, &audits)
+	r := &sessRenderer{
+		acts:    []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}},
+		detActs: []ui3270.ListAction{{PF: 11}, {PF: 11}, {PF: 3}},
+	}
+	f := newSessionsFlow(t, reg, 7 /*self is id 7, not present*/, r, &audits)
 
 	if err := f.activeSessions(context.Background(), nil); err != nil {
 		t.Fatal(err)
@@ -96,6 +117,12 @@ func TestActiveSessions_DisconnectAuditsSubject(t *testing.T) {
 	if len(audits) != 1 || audits[0].Kind != store.AuditSessionDisconnect || audits[0].Username != "BOB" {
 		t.Fatalf("audit = %+v, want one session_disconnect for BOB", audits)
 	}
+	if r.dets[1].Message != "CONFIRM DISCONNECT BOB - PRESS PF11 AGAIN" {
+		t.Errorf("confirm prompt = %q", r.dets[1].Message)
+	}
+	if r.dets[2].Message != "DISCONNECTED" {
+		t.Errorf("status = %q, want DISCONNECTED", r.dets[2].Message)
+	}
 }
 
 func TestActiveSessions_SelfDisconnectVetoed(t *testing.T) {
@@ -105,8 +132,11 @@ func TestActiveSessions_SelfDisconnectVetoed(t *testing.T) {
 		okFor:       map[uint64]bool{},
 	}
 	var audits []store.AuditEvent
-	r := &sessRenderer{acts: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {Cmd: 'D', Row: 0}, {PF: 3}}}
-	f := newSessionsFlow(reg, 7, r, &audits)
+	r := &sessRenderer{
+		acts:    []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}},
+		detActs: []ui3270.ListAction{{PF: 11}, {PF: 3}}, // PF11 vetoed, then back
+	}
+	f := newSessionsFlow(t, reg, 7, r, &audits)
 
 	if err := f.activeSessions(context.Background(), nil); err != nil {
 		t.Fatal(err)
@@ -117,8 +147,34 @@ func TestActiveSessions_SelfDisconnectVetoed(t *testing.T) {
 	if len(audits) != 0 {
 		t.Errorf("no audit on a vetoed self-disconnect; got %+v", audits)
 	}
-	if r.views[1].ErrMsg != "CANNOT DISCONNECT YOUR OWN SESSION" {
-		t.Errorf("veto message = %q", r.views[1].ErrMsg)
+	if r.dets[1].Message != "CANNOT DISCONNECT YOUR OWN SESSION" {
+		t.Errorf("veto message = %q", r.dets[1].Message)
+	}
+}
+
+func TestActiveSessions_DisconnectAlreadyGone(t *testing.T) {
+	reg := &fakeRegistry{
+		views:       []SessionView{{ID: 5, RemoteAddr: "1.2.3.4:9999", LoggedInAt: time.Unix(1, 0), Username: "GONE"}},
+		disconnects: map[uint64]SessionView{5: {}},
+		okFor:       map[uint64]bool{5: false}, // already ended
+	}
+	var audits []store.AuditEvent
+	r := &sessRenderer{
+		acts:    []ui3270.ListAction{{Cmd: 'S', Row: 0}, {PF: 3}},
+		detActs: []ui3270.ListAction{{PF: 11}, {PF: 11}, {PF: 3}},
+	}
+	f := newSessionsFlow(t, reg, 99, r, &audits)
+	if err := f.activeSessions(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(reg.disconnect) != 1 || reg.disconnect[0] != 5 {
+		t.Fatalf("Disconnect calls = %v, want [5]", reg.disconnect)
+	}
+	if len(audits) != 0 {
+		t.Errorf("no audit expected for an already-ended session; got %+v", audits)
+	}
+	if r.dets[2].Message != "SESSION ALREADY ENDED" {
+		t.Errorf("status = %q, want SESSION ALREADY ENDED", r.dets[2].Message)
 	}
 }
 
@@ -131,7 +187,7 @@ func TestActiveSessions_RowFormatting(t *testing.T) {
 	}
 	var audits []store.AuditEvent
 	r := &sessRenderer{acts: []ui3270.ListAction{{PF: 3}}}
-	f := newSessionsFlow(reg, 99 /*self not present*/, r, &audits)
+	f := newSessionsFlow(t, reg, 99 /*self not present*/, r, &audits)
 	if err := f.activeSessions(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -172,28 +228,81 @@ func TestFmtSessionRow_RowWidthBounded(t *testing.T) {
 	}
 }
 
-// TestActiveSessions_DisconnectAlreadyGone covers the race where the target
-// session ends naturally between the snapshot and the D-confirm: Disconnect
-// returns ok=false, so no audit is emitted and the message line says so.
-func TestActiveSessions_DisconnectAlreadyGone(t *testing.T) {
-	reg := &fakeRegistry{
-		views:       []SessionView{{ID: 5, RemoteAddr: "1.2.3.4:9999", LoggedInAt: time.Unix(1, 0), Username: "GONE"}},
-		disconnects: map[uint64]SessionView{5: {}},
-		okFor:       map[uint64]bool{5: false}, // already ended
-	}
+func TestSessionDetail_Fields(t *testing.T) {
+	r := &sessRenderer{}
 	var audits []store.AuditEvent
-	r := &sessRenderer{acts: []ui3270.ListAction{{Cmd: 'D', Row: 0}, {Cmd: 'D', Row: 0}, {PF: 3}}}
-	f := newSessionsFlow(reg, 99, r, &audits)
-	if err := f.activeSessions(context.Background(), nil); err != nil {
+	f := newSessionsFlow(t, &fakeRegistry{}, 0, r, &audits) // reverse DNS off
+	v := SessionView{
+		ID: 14, RemoteAddr: "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:65535",
+		ConnectedAt: time.Unix(999_000, 0), LoggedInAt: time.Unix(999_500, 0),
+		Username: "DARROW", Service: "DEMO",
+	}
+	dv := f.sessionDetail(context.Background(), v)
+
+	want := map[string]string{
+		"Session": "14",
+		"Client":  "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:65535",
+		"User":    "DARROW",
+		"Service": "DEMO",
+	}
+	got := map[string]string{}
+	for _, fld := range dv.Fields {
+		got[fld.Label] = fld.Value
+	}
+	for label, w := range want {
+		if got[label] != w {
+			t.Errorf("field %q = %q, want %q", label, got[label], w)
+		}
+	}
+	if _, ok := got["PTR"]; ok {
+		t.Errorf("PTR must be absent when reverse DNS is off; fields=%+v", dv.Fields)
+	}
+	if !strings.Contains(got["Connected"], "00:16:40") { // 1_000_000-999_000 = 1000s
+		t.Errorf("Connected = %q, want elapsed 00:16:40", got["Connected"])
+	}
+	if dv.PFHelp != "PF11=Disconnect   PF3=Back" {
+		t.Errorf("PFHelp = %q", dv.PFHelp)
+	}
+}
+
+func TestSessionDetail_PreAuthAndUnbridged(t *testing.T) {
+	r := &sessRenderer{}
+	var audits []store.AuditEvent
+	f := newSessionsFlow(t, &fakeRegistry{}, 0, r, &audits)
+	v := SessionView{ID: 2, RemoteAddr: "10.0.0.8:5051", ConnectedAt: time.Unix(999_900, 0)} // pre-auth, no service
+	dv := f.sessionDetail(context.Background(), v)
+	got := map[string]string{}
+	for _, fld := range dv.Fields {
+		got[fld.Label] = fld.Value
+	}
+	if got["User"] != "(login)" {
+		t.Errorf("User = %q, want (login)", got["User"])
+	}
+	if got["Service"] != "-" {
+		t.Errorf("Service = %q, want -", got["Service"])
+	}
+	if got["Logged in"] != "(not logged in)" {
+		t.Errorf("Logged in = %q, want (not logged in)", got["Logged in"])
+	}
+}
+
+func TestSessionDetail_PTRWhenEnabled(t *testing.T) {
+	r := &sessRenderer{}
+	var audits []store.AuditEvent
+	f := newSessionsFlow(t, &fakeRegistry{}, 0, r, &audits)
+	if err := f.store.(*store.Store).SetConfig(context.Background(), sysconfig.KeyAuditReverseDNS, "Y"); err != nil {
 		t.Fatal(err)
 	}
-	if len(reg.disconnect) != 1 || reg.disconnect[0] != 5 {
-		t.Fatalf("Disconnect calls = %v, want [5]", reg.disconnect)
+	f.resolver = fakeResolver{names: []string{"host.example.de."}}
+	v := SessionView{ID: 3, RemoteAddr: "203.0.113.9:5050", ConnectedAt: time.Unix(999_000, 0)}
+	dv := f.sessionDetail(context.Background(), v)
+	var ptrVal string
+	for _, fld := range dv.Fields {
+		if fld.Label == "PTR" {
+			ptrVal = fld.Value
+		}
 	}
-	if len(audits) != 0 {
-		t.Errorf("no audit expected for an already-ended session; got %+v", audits)
-	}
-	if r.views[2].ErrMsg != "SESSION ALREADY ENDED" {
-		t.Errorf("error message = %q, want SESSION ALREADY ENDED", r.views[2].ErrMsg)
+	if ptrVal != "host.example.de" {
+		t.Errorf("PTR = %q, want host.example.de", ptrVal)
 	}
 }
