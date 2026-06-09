@@ -36,7 +36,7 @@ func fieldByName(s go3270.Screen, name string) (go3270.Field, bool) {
 }
 
 func TestLoginScreenFields(t *testing.T) {
-	screen, rules, _ := LoginScreen(DefaultGeometry, MenuStatus{}, "")
+	screen, rules, _ := LoginScreen(DefaultGeometry, MenuStatus{}, nil, "")
 
 	uf, ok := fieldByName(screen, FieldUsername)
 	if !ok {
@@ -65,7 +65,7 @@ func TestLoginScreenFields(t *testing.T) {
 }
 
 func TestLoginScreenShowsError(t *testing.T) {
-	screen, _, _ := LoginScreen(DefaultGeometry, MenuStatus{}, "Invalid credentials")
+	screen, _, _ := LoginScreen(DefaultGeometry, MenuStatus{}, nil, "Invalid credentials")
 	f, ok := fieldByName(screen, FieldError)
 	if !ok {
 		t.Fatalf("missing error field")
@@ -83,10 +83,10 @@ func TestLoginScreenBands(t *testing.T) {
 		{Rows: 27, Cols: 132},
 		{}, // zero value normalizes to 24×80
 	} {
-		screen, _, _ := LoginScreen(g, MenuStatus{}, "err")
+		screen, _, _ := LoginScreen(g, MenuStatus{}, nil, "err")
 		f, ok := fieldByName(screen, FieldError)
-		if !ok || f.Row != g.MessageRow() {
-			t.Errorf("%+v: error row = %d, want MessageRow %d", g, f.Row, g.MessageRow())
+		if !ok || f.Row != 1 {
+			t.Errorf("%+v: error row = %d, want row 1", g, f.Row)
 		}
 		foundHelp := false
 		for _, fl := range screen {
@@ -114,7 +114,7 @@ func fieldByContent(s go3270.Screen, content string) (go3270.Field, bool) {
 
 func TestLoginScreenPalette(t *testing.T) {
 	g := Geometry{Rows: 24, Cols: 80}
-	screen, _, cur := LoginScreen(g, MenuStatus{}, "bad creds")
+	screen, _, cur := LoginScreen(g, MenuStatus{}, nil, "bad creds")
 
 	title, ok := fieldByContent(screen, "TN3270 GATEWAY LOGIN")
 	if !ok {
@@ -126,29 +126,29 @@ func TestLoginScreenPalette(t *testing.T) {
 	if title.Col != g.CenterCol(len("TN3270 GATEWAY LOGIN")) {
 		t.Errorf("title not centered: col %d", title.Col)
 	}
-	label, ok := fieldByContent(screen, "User ID. . .")
+	label, ok := fieldByContent(screen, "User ID . . :")
 	if !ok {
 		t.Fatal("missing userid label")
 	}
-	if label.Color != go3270.Turquoise {
-		t.Errorf("userid label color = %v, want Turquoise", label.Color)
+	if label.Row != g.BodyBottomRow() || label.Color != go3270.Turquoise {
+		t.Errorf("userid label = %+v, want row %d turquoise", label, g.BodyBottomRow())
 	}
 	user, ok := fieldByName(screen, FieldUsername)
 	if !ok {
 		t.Fatal("missing username field")
 	}
-	if user.Color != go3270.Green || !user.Write {
-		t.Errorf("userid input = %+v, want green writable", user)
+	if user.Color != go3270.Green || !user.Write || user.Row != g.BodyBottomRow() {
+		t.Errorf("userid input = %+v, want green writable on row %d", user, g.BodyBottomRow())
 	}
 	msg, ok := fieldByName(screen, FieldError)
 	if !ok {
 		t.Fatal("missing error field")
 	}
-	if msg.Row != 2 || msg.Color != go3270.Red || !msg.Intense {
-		t.Errorf("message field = %+v, want row 2 red intense", msg)
+	if msg.Row != 1 || msg.Color != go3270.Red || !msg.Intense {
+		t.Errorf("message field = %+v, want row 1 red intense", msg)
 	}
-	if cur.Row != 3 || cur.Col != 17 {
-		t.Errorf("cursor = %+v, want (3,17)", cur)
+	if want := cursorAt(user); cur != want {
+		t.Errorf("cursor = %+v, want %+v", cur, want)
 	}
 }
 
@@ -156,7 +156,7 @@ func TestLoginScreenStatusBlock(t *testing.T) {
 	g := Geometry{Rows: 24, Cols: 80}
 	now := time.Date(2026, 6, 6, 14, 52, 0, 0, time.UTC)
 	status := MenuStatus{SystemID: "PROXY", Release: "aa23543", Now: now}
-	screen, _, _ := LoginScreen(g, status, "")
+	screen, _, _ := LoginScreen(g, status, nil, "")
 
 	// The info block mirrors the menu's right-hand status block (same column,
 	// turquoise labels / green values) but without User ID or Terminal rows.
@@ -191,12 +191,91 @@ func TestLoginScreenStatusBlock(t *testing.T) {
 }
 
 func TestLoginScreenCursor(t *testing.T) {
-	screen, _, cur := LoginScreen(DefaultGeometry, MenuStatus{}, "")
+	screen, _, cur := LoginScreen(DefaultGeometry, MenuStatus{}, nil, "")
 	uf, ok := fieldByName(screen, FieldUsername)
 	if !ok {
 		t.Fatalf("missing %q field", FieldUsername)
 	}
 	if want := cursorAt(uf); cur != want {
 		t.Errorf("login cursor = %+v, want %+v (username field row %d col %d)", cur, want, uf.Row, uf.Col)
+	}
+}
+
+func fieldAt(s go3270.Screen, row, col int) (go3270.Field, bool) {
+	for _, f := range s {
+		if f.Row == row && f.Col == col {
+			return f, true
+		}
+	}
+	return go3270.Field{}, false
+}
+
+func TestLoginScreenCredentialRow(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	screen, _, _ := LoginScreen(g, MenuStatus{}, nil, "")
+	row := g.BodyBottomRow()
+
+	pf, ok := fieldByName(screen, FieldPassword)
+	if !ok || pf.Row != row {
+		t.Fatalf("password field = %+v, want row %d", pf, row)
+	}
+	if !pf.Hidden {
+		t.Errorf("password field must be Hidden")
+	}
+	// Password input runs from pf.Col+1 to the column before its closing stop
+	// field; the requirement is the input reaches column 78 (stop field at 79).
+	if _, ok := fieldAt(screen, row, 79); !ok {
+		t.Errorf("missing password stop field at col 79 (input must reach col 78)")
+	}
+	if pf.Col >= 79 {
+		t.Errorf("password attribute col = %d, leaves no input before col 79", pf.Col)
+	}
+	if _, ok := fieldByContent(screen, "Password . . :"); !ok {
+		t.Errorf("missing password label")
+	}
+}
+
+func TestLoginScreenBrandingCentered(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	screen, _, _ := LoginScreen(g, MenuStatus{}, []string{"AAA", "BBB"}, "")
+	// 2 lines in an 18-row region (rows 4..21): top padding = (18-2)/2 = 8,
+	// so the first line lands on row 4+8 = 12.
+	a, ok := fieldByContent(screen, "AAA")
+	if !ok || a.Row != 12 || a.Col != 0 {
+		t.Errorf("AAA = %+v, want row 12 col 0", a)
+	}
+	b, ok := fieldByContent(screen, "BBB")
+	if !ok || b.Row != 13 {
+		t.Errorf("BBB = %+v, want row 13", b)
+	}
+}
+
+func TestLoginScreenBrandingClipsTopAligned(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80} // region height 18
+	lines := make([]string, 25)
+	for i := range lines {
+		lines[i] = "L" + string(rune('A'+i%26))
+	}
+	screen, _, _ := LoginScreen(g, MenuStatus{}, lines, "")
+	// Overflow: first line top-aligned at LoginBrandingTop (row 4)...
+	first, ok := fieldByContent(screen, lines[0])
+	if !ok || first.Row != g.LoginBrandingTop() {
+		t.Errorf("first branding line = %+v, want row %d", first, g.LoginBrandingTop())
+	}
+	// ...and nothing renders past the row above the credential row.
+	for _, f := range screen {
+		if f.Col == 0 && f.Content != "" && f.Row >= g.BodyBottomRow() {
+			t.Errorf("branding line %q on row %d overruns input row %d", f.Content, f.Row, g.BodyBottomRow())
+		}
+	}
+}
+
+func TestLoginScreenBrandingBlankWhenNil(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	screen, _, _ := LoginScreen(g, MenuStatus{}, nil, "")
+	for _, f := range screen {
+		if f.Col == 0 && f.Row >= g.LoginBrandingTop() && f.Row < g.BodyBottomRow() && f.Content != "" {
+			t.Errorf("unexpected body content with nil branding: %+v", f)
+		}
 	}
 }

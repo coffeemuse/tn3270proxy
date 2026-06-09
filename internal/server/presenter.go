@@ -79,7 +79,7 @@ func (go3270Presenter) Negotiate(conn net.Conn) (Term, error) {
 
 func (go3270Presenter) Login(conn net.Conn, term Term, status screens.MenuStatus, errMsg string) (string, string, bool, error) {
 	status.Now = time.Now() // paint-time clock, matching the menu status block
-	screen, rules, cur := screens.LoginScreen(term.Geometry(), status, errMsg)
+	screen, rules, cur := screens.LoginScreen(term.Geometry(), status, nil, errMsg)
 	resp, err := handleScreen(func() (go3270.Response, error) {
 		return go3270.HandleScreenAlt(
 			screen, rules, map[string]string{},
