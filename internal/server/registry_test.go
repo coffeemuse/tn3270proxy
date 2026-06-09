@@ -20,6 +20,7 @@
 package server
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -66,5 +67,61 @@ func TestRegistry_DeregisterRemoves(t *testing.T) {
 	r.deregister(id)
 	if got := r.Snapshot(); len(got) != 0 {
 		t.Fatalf("snapshot len = %d after deregister, want 0", len(got))
+	}
+}
+
+func TestRegistry_LoginAndServiceMutators(t *testing.T) {
+	r := newSessionRegistry()
+	id := r.register("1.1.1.1:5000", time.Unix(100, 0), func() {})
+
+	r.setLogin(id, "ALICE", time.Unix(150, 0))
+	v := r.Snapshot()[0]
+	if v.Username != "ALICE" || !v.LoggedInAt.Equal(time.Unix(150, 0)) {
+		t.Fatalf("after setLogin: %+v", v)
+	}
+
+	r.setService(id, "PROD")
+	if v = r.Snapshot()[0]; v.Service != "PROD" {
+		t.Fatalf("after setService: service = %q", v.Service)
+	}
+
+	r.clearService(id)
+	if v = r.Snapshot()[0]; v.Service != "" {
+		t.Fatalf("after clearService: service = %q", v.Service)
+	}
+
+	r.clearLogin(id)
+	if v = r.Snapshot()[0]; v.Username != "" || !v.LoggedInAt.IsZero() {
+		t.Fatalf("after clearLogin: %+v", v)
+	}
+}
+
+func TestRegistry_MutatorsOnMissingIDAreNoOps(t *testing.T) {
+	r := newSessionRegistry()
+	r.setLogin(999, "X", time.Unix(1, 0))
+	r.clearLogin(999)
+	r.setService(999, "Y")
+	r.clearService(999)
+}
+
+func TestRegistry_ConcurrentAccessIsRaceFree(t *testing.T) {
+	r := newSessionRegistry()
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			id := r.register("9.9.9.9:1", time.Unix(1, 0), func() {})
+			r.setLogin(id, "U", time.Unix(2, 0))
+			r.setService(id, "S")
+			_ = r.Snapshot()
+			r.clearService(id)
+			r.clearLogin(id)
+			r.deregister(id)
+		}()
+	}
+	wg.Wait()
+	if got := len(r.Snapshot()); got != 0 {
+		t.Fatalf("all sessions deregistered, want 0, got %d", got)
 	}
 }
