@@ -49,7 +49,7 @@ import (
 // at the client's negotiated size and codepage.
 type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
-	Login(conn net.Conn, term Term, status screens.MenuStatus, errMsg string) (username, password string, quit bool, err error)
+	Login(conn net.Conn, term Term, status screens.MenuStatus, branding []string, errMsg string) (username, password string, quit bool, err error)
 	Menu(conn net.Conn, term Term, services []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
 	// UserSettings renders the self-service settings menu with the given
 	// adaptive rows and returns the typed option key (e.g. "1"); back=true on
@@ -770,7 +770,8 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 	// presenter stamps the paint-time clock per render.
 	status := screens.MenuStatus{SystemID: s.systemID(ctx), Release: s.Release}
 	for {
-		user, pass, quit, err := s.Presenter.Login(conn, term, status, errMsg)
+		branding := s.loginBranding(ctx)
+		user, pass, quit, err := s.Presenter.Login(conn, term, status, branding, errMsg)
 		if err != nil {
 			if isTimeoutErr(err) {
 				return auth.Identity{}, false, "idle timeout"

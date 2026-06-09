@@ -33,6 +33,7 @@ import (
 	"github.com/CoffeeMuse/tn3270proxy/internal/mfa"
 	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
 	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
 	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/hotp"
@@ -53,6 +54,7 @@ type fakePresenter struct {
 	gotTerms          []Term               // every term passed to Login/Menu, in call order
 	gotStatus         []screens.MenuStatus // every status passed to Menu, in call order
 	loginStatuses     []screens.MenuStatus // every status passed to Login, in call order
+	gotBranding       [][]string           // branding lines passed to each Login call
 	newsCalls         [][][]string         // pages passed to each News call, in order
 	newsResults       []error              // queued News return values; default nil
 	enrolls           []mfaResult
@@ -97,10 +99,11 @@ func (f *fakePresenter) Negotiate(conn net.Conn) (Term, error) {
 	return Term{Type: f.termType, Rows: rows, Cols: cols}, nil
 }
 
-func (f *fakePresenter) Login(conn net.Conn, term Term, status screens.MenuStatus, errMsg string) (string, string, bool, error) {
+func (f *fakePresenter) Login(conn net.Conn, term Term, status screens.MenuStatus, branding []string, errMsg string) (string, string, bool, error) {
 	f.gotTerms = append(f.gotTerms, term)
 	f.loginStatuses = append(f.loginStatuses, status)
 	f.loginErrors = append(f.loginErrors, errMsg)
+	f.gotBranding = append(f.gotBranding, branding)
 	r := f.logins[0]
 	f.logins = f.logins[1:]
 	return r.user, r.pass, r.quit, r.err
@@ -1395,5 +1398,41 @@ func TestSessionAuditActorAttribution(t *testing.T) {
 	}
 	if a := rec.events[4].Actor; a != "" { // disconnect from the login screen post-logoff
 		t.Errorf("disconnect actor = %q, want empty after logoff", a)
+	}
+}
+
+func TestSessionReadsBrandingPerLoginPaint(t *testing.T) {
+	p := &fakePresenter{
+		termType: "IBM-3278-2-E",
+		logins: []loginResult{
+			{user: "alice", pass: "bad"},  // render 1
+			{user: "alice", pass: "good"}, // render 2
+			{quit: true},                  // render 3 (after menu logoff)
+		},
+		menuPicks: []menuResult{{quit: true}},
+	}
+	s := newTestSession(t, p, &fakeBridger{})
+	ctx := context.Background()
+	s.Store.SetConfig(ctx, sysconfig.KeyBrandingFile, "/abs/branding.txt")
+	var reads int
+	s.BrandingRead = func(string) ([]byte, error) {
+		reads++
+		return []byte("HELLO\nWORLD"), nil
+	}
+
+	client, _ := net.Pipe()
+	defer client.Close()
+	s.Run(client)
+
+	if reads < 2 {
+		t.Errorf("branding read %d times, want once per login paint (>=2)", reads)
+	}
+	if len(p.gotBranding) < 2 {
+		t.Fatalf("login painted %d times, want >=2", len(p.gotBranding))
+	}
+	for i, b := range p.gotBranding {
+		if len(b) != 2 || b[0] != "HELLO" || b[1] != "WORLD" {
+			t.Errorf("paint %d branding = %v, want [HELLO WORLD]", i, b)
+		}
 	}
 }
