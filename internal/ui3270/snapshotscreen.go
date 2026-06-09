@@ -57,11 +57,16 @@ func buildSnapshotScreen(rows int, v SnapshotView) (go3270.Screen, Cursor) {
 		{Row: 0, Col: centerCol(len(v.Title)), Color: go3270.White, Intense: true, Content: v.Title},
 		{Row: 0, Col: 60, Content: v.RowInfo},
 		{Row: 1, Col: centerCol(len(v.AsOf)), Color: go3270.Turquoise, Content: v.AsOf},
-		{Row: bodyTopRow(), Col: snapLeftAttr, Color: go3270.Blue, Content: v.Head.Left},
-		{Row: bodyTopRow(), Col: snapMidAttr, Color: go3270.Blue, Content: v.Head.Mid},
-		{Row: bodyTopRow(), Col: snapRightAttr, Color: go3270.Blue, Content: v.Head.Right},
 	}
-
+	if v.Wide {
+		screen = append(screen, go3270.Field{Row: bodyTopRow(), Col: snapLeftAttr, Color: go3270.Blue, Content: v.Head.Left})
+	} else {
+		screen = append(screen,
+			go3270.Field{Row: bodyTopRow(), Col: snapLeftAttr, Color: go3270.Blue, Content: v.Head.Left},
+			go3270.Field{Row: bodyTopRow(), Col: snapMidAttr, Color: go3270.Blue, Content: v.Head.Mid},
+			go3270.Field{Row: bodyTopRow(), Col: snapRightAttr, Color: go3270.Blue, Content: v.Head.Right},
+		)
+	}
 	data := v.Rows
 	if size := listPageSize(rows); len(data) > size {
 		data = data[:size]
@@ -74,7 +79,11 @@ func buildSnapshotScreen(rows int, v SnapshotView) (go3270.Screen, Cursor) {
 			cur = Cursor{Row: cmd.Row, Col: cmd.Col + 1}
 		}
 		screen = append(screen, cmd, go3270.Field{Row: row, Col: snapCmdStop})
-		screen = append(screen, snapSegments(row, r)...)
+		if v.Wide {
+			screen = append(screen, go3270.Field{Row: row, Col: snapLeftAttr, Color: go3270.Green, Content: r.Left})
+		} else {
+			screen = append(screen, snapSegments(row, r)...)
+		}
 	}
 	if len(data) == 0 {
 		screen = append(screen, go3270.Field{Row: 4, Col: snapLeftAttr, Content: v.Empty})
