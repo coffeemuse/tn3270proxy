@@ -42,8 +42,9 @@ const (
 	AuditMFACleared       = "mfa_cleared"       // admin wiped the secret
 	AuditMFAEnforced      = "mfa_enforced"      // admin turned mfa_required on
 	AuditPasswordSelf     = "password_self"     // user changed their own password (self-service)
-	AuditSettingsLocked   = "settings_locked"   // admin locked a user out of self-service
-	AuditSettingsUnlocked = "settings_unlocked" // admin restored a user's self-service
+	AuditSettingsLocked    = "settings_locked"    // admin locked a user out of self-service
+	AuditSettingsUnlocked  = "settings_unlocked"  // admin restored a user's self-service
+	AuditSessionDisconnect = "session_disconnect" // admin disconnected a live session (GH #91)
 )
 
 // AuditEvent is one audit-trail row. Username is a plain string, not a user

@@ -119,3 +119,9 @@ func TestAuditDetailShowsActor(t *testing.T) {
 		t.Errorf("auditDetail fields missing Actor=ADMIN; got %+v", dv.Fields)
 	}
 }
+
+func TestAuditEventColor_SessionDisconnectIsYellow(t *testing.T) {
+	if got := auditEventColor(store.AuditSessionDisconnect); got != go3270.Yellow {
+		t.Errorf("auditEventColor(session_disconnect) = %v, want Yellow", got)
+	}
+}
