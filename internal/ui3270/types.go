@@ -158,3 +158,23 @@ type DetailView struct {
 	Fields                         []DetailField
 	DotLeader                      bool
 }
+
+// DetailConfig parameterizes RunDetail: a read-only detail screen carrying at
+// most one confirm-gated PF-key action. ActPF is the action key (e.g. 11 for
+// PF11=Disconnect); 0 ⇒ pure read-only (PF3 only). Confirm and OnAct must both
+// be non-nil when ActPF != 0 — the action is always confirm-gated (no
+// immediate-commit path), mirroring RunSnapshotList's ActCmd contract.
+//
+// First ActPF press consults Confirm: blocked != "" vetoes with that message;
+// otherwise prompt is shown and the action arms. Second ActPF press commits via
+// OnAct, which returns (status, refresh): status replaces the message line, the
+// action disarms (ActPF goes inert, PFHelp becomes DonePFHelp), and the screen
+// stays up until PF3. refresh is returned from RunDetail so the caller re-fetches
+// its list.
+type DetailConfig struct {
+	View       DetailView
+	ActPF      int
+	DonePFHelp string
+	Confirm    func() (prompt, blocked string)
+	OnAct      func(ctx context.Context) (status string, refresh bool)
+}
