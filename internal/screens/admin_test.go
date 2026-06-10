@@ -121,4 +121,3 @@ func TestAdminMenuScreen_HasSessionsOption(t *testing.T) {
 		t.Errorf("admin menu missing option 7 Sessions (key=%v name=%v)", sawKey, sawName)
 	}
 }
-

@@ -44,11 +44,11 @@ func TestParseDuration(t *testing.T) {
 		{"", 0, true},
 		{"d", 0, true},
 		{"-5d", 0, true},
-		{"1d12h", 0, true},            // mixed day form not supported
+		{"1d12h", 0, true}, // mixed day form not supported
 		{"ninety", 0, true},
-		{"9999999d", 0, true},          // overflow guard: > maxDays
-		{" 90d", 0, true},              // leading whitespace rejected
-		{" 24h", 0, true},              // leading whitespace rejected (time.ParseDuration rejects it too)
+		{"9999999d", 0, true},              // overflow guard: > maxDays
+		{" 90d", 0, true},                  // leading whitespace rejected
+		{" 24h", 0, true},                  // leading whitespace rejected (time.ParseDuration rejects it too)
 		{"+5d", 5 * 24 * time.Hour, false}, // leading + accepted by strconv.Atoi — deliberately valid
 	}
 	for _, c := range cases {

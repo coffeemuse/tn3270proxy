@@ -23,7 +23,7 @@ import "testing"
 
 func TestPageBounds(t *testing.T) {
 	cases := []struct {
-		page, total, rows     int
+		page, total, rows      int
 		wantPage, wantS, wantE int
 		wantInfo               string
 	}{
@@ -60,14 +60,14 @@ func TestLayoutFormulas(t *testing.T) {
 func TestFormInputCol(t *testing.T) {
 	// max(16, 2+1+maxLabel+1), clamped to the ceiling (79-16 = 63).
 	cases := []struct{ maxLabel, want int }{
-		{0, 16},   // empty label → floor
-		{11, 16},  // short → floor
-		{12, 16},  // dot-leader convention → exactly the historical col 16
-		{13, 17},  // first width that pushes right
-		{15, 19},  // "Max Auth Tries:"
-		{22, 26},  // "Auth Delay Base (sec):"
-		{23, 27},  // "Auth Fail Window (min):" — the worst real label
-		{80, 63},  // pathological → clamped to ceiling
+		{0, 16},  // empty label → floor
+		{11, 16}, // short → floor
+		{12, 16}, // dot-leader convention → exactly the historical col 16
+		{13, 17}, // first width that pushes right
+		{15, 19}, // "Max Auth Tries:"
+		{22, 26}, // "Auth Delay Base (sec):"
+		{23, 27}, // "Auth Fail Window (min):" — the worst real label
+		{80, 63}, // pathological → clamped to ceiling
 	}
 	for _, c := range cases {
 		if got := formInputCol(c.maxLabel); got != c.want {

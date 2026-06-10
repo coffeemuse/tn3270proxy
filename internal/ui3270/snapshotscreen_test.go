@@ -44,7 +44,7 @@ func TestBuildSnapshotScreen_RowLayoutAndColor(t *testing.T) {
 			{Left: "06/06 14:28 BADGUY", Mid: "AUTH_FAIL", Right: "delay=4s count=2", MidColor: go3270.Red},
 		},
 		Legend: "S=Detail", PFHelp: "PF3=Back   PF7=Bkwd  PF8=Fwd   Enter=Refresh",
-		Empty:  "(none)",
+		Empty: "(none)",
 	}
 	screen, cur := buildSnapshotScreen(24, v)
 

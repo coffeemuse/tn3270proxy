@@ -31,11 +31,11 @@ func TestAuditTrailAutoFillsActor(t *testing.T) {
 	tr := &auditTrail{auditor: rec, sessionID: "sid", remoteAddr: "1.2.3.4:5"}
 	ctx := context.Background()
 
-	tr.record(ctx, store.AuditEvent{Kind: store.AuditConnect})                // pre-auth: no actor
-	tr.setActor("ALICE")                                                       // login success
+	tr.record(ctx, store.AuditEvent{Kind: store.AuditConnect}) // pre-auth: no actor
+	tr.setActor("ALICE")                                       // login success
 	tr.record(ctx, store.AuditEvent{Kind: store.AuditAuthOK, Username: "ALICE"})
-	tr.record(ctx, store.AuditEvent{Kind: store.AuditAdmin, Actor: "ADMIN"})   // explicit override kept
-	tr.setActor("")                                                            // logout / back to login
+	tr.record(ctx, store.AuditEvent{Kind: store.AuditAdmin, Actor: "ADMIN"}) // explicit override kept
+	tr.setActor("")                                                          // logout / back to login
 	tr.record(ctx, store.AuditEvent{Kind: store.AuditDisconnect})
 
 	if got := rec.events[0].Actor; got != "" {
