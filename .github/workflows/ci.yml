@@ -17,6 +17,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      # `go fmt` (not bare gofmt) so the go.mod toolchain directive picks the
+      # formatter version; the diff on failure shows the misformatted lines.
+      - name: gofmt
+        run: go fmt ./... && git diff --exit-code
       - name: Vet
         run: go vet ./...
       - name: Build
