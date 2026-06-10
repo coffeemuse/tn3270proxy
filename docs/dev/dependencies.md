@@ -1,7 +1,7 @@
 # Dependencies & supply chain
 
 How tn3270proxy manages third-party code and scans for vulnerabilities. This is
-maintainer-facing (for operator deployment hardening, see [`../install/security-hardening.md`](../install/security-hardening.md)).
+maintainer-facing (for operator deployment hardening, see [`../install/08-security-hardening.md`](../install/08-security-hardening.md)).
 
 ## Vulnerability scanning (govulncheck)
 

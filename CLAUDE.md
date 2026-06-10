@@ -198,7 +198,7 @@ internal/quickstart First-run provisioning for the Docker quick-start. Provision
                   the "provisioned" marker. Detection: config present → no-op
                   (ErrAlreadyProvisioned); proxy.db without config → partial-dir error;
                   else fresh. Pure-Go cert (no openssl); shares GenPassword with bootstrap.
-                  Not the production path (see docs/install/security-hardening.md).
+                  Not the production path (see docs/install/08-security-hardening.md).
 internal/version  Resolve(injected) string: returns injected when set by ldflags, otherwise
                   falls back to a 12-char VCS revision from runtime/debug.ReadBuildInfo
                   (+"-dirty" suffix when the working tree is modified). Resolved in
