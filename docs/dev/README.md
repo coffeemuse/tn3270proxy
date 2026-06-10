@@ -10,3 +10,4 @@ package map, start with [CLAUDE.md](../../CLAUDE.md).
   documented deviations.
 - [Dependencies & supply chain](dependencies.md) — vulnerability scanning
   (govulncheck), toolchain bumps, and dependency decision records.
+- [Code Comment Style Guide](comment-style.md) - style guide for how comments are applied to go source code.
