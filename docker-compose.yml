@@ -1,7 +1,13 @@
 services:
   tn3270proxy:
+    # Default: pull the prebuilt multi-arch image (no source/Go toolchain needed).
+    # `:latest` is fine for the quick start; pin a version (e.g. :0.5.5) in production.
+    image: ghcr.io/coffeemuse/tn3270proxy:latest
+    # Build fallback for developers: `docker compose up --build` compiles from source.
+    # pull_policy: missing keeps the default `up` a pull (a bare build section would
+    # otherwise make Compose build-if-missing instead of pulling).
     build: .
-    image: tn3270proxy:quickstart
+    pull_policy: missing
     # No `command`: inherits the image CMD (quickstart then serve). Overriding it
     # here would double the `sh -c` wrapper.
     ports:
@@ -14,7 +20,9 @@ services:
     restart: unless-stopped
 
   dummy3270:
-    image: tn3270proxy:quickstart
+    # Same image as the proxy, just a different subcommand — pulled from GHCR too.
+    image: ghcr.io/coffeemuse/tn3270proxy:latest
+    pull_policy: missing
     command: ["dummy3270", "-listen", ":3300"]
     # No published ports: only the proxy reaches it, over the internal network
     # at dummy3270:3300 (the seeded DEMO service host:port).
