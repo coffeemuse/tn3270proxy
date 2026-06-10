@@ -30,7 +30,7 @@ func renderSetupFile(r Result) string {
 	b.WriteString("================================================================\n\n")
 	b.WriteString("This is the QUICK START. It is convenient, NOT a production setup.\n")
 	b.WriteString("To secure this deployment, see the security-hardening guide\n")
-	b.WriteString("(security-hardening.md) in the project documentation.\n\n")
+	b.WriteString("in the project documentation (Setup / Installation manual).\n\n")
 	b.WriteString("ADMIN LOGIN\n")
 	b.WriteString(fmt.Sprintf("  user: %s\n  password: %s\n  groups: %s\n\n",
 		r.Admin.Username, r.Admin.Password, strings.Join(r.Admin.Groups, ", ")))
