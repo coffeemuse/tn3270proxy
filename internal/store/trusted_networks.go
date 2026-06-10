@@ -26,6 +26,8 @@ import (
 	"strings"
 )
 
+// MaxCommentLen is the byte cap on a trusted network's operator annotation
+// (matches the 40-char admin form field).
 const MaxCommentLen = 40
 
 // TrustedNetwork is a trusted client network record.

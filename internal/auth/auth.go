@@ -17,6 +17,11 @@
  * along with tn3270proxy. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Package auth verifies credentials against the user store. It never touches
+// the network and holds no state: bcrypt comparison plus group lookup, with a
+// uniform failure mode — ErrInvalidCredentials for unknown user and wrong
+// password alike, timing-equalized via a dummy bcrypt compare, so callers
+// (and attackers) cannot tell which one happened.
 package auth
 
 import (
