@@ -143,10 +143,10 @@ func TestLoginBrandingGeometry(t *testing.T) {
 		wantTop    int
 		wantHeight int
 	}{
-		{Geometry{24, 80}, 4, 18},  // BodyBottomRow 22 -> height 22-4
-		{Geometry{}, 4, 18},        // normalizes to 24x80
-		{Geometry{32, 80}, 4, 26},  // BodyBottomRow 30 -> 26
-		{Geometry{43, 80}, 4, 37},  // BodyBottomRow 41 -> 37
+		{Geometry{24, 80}, 4, 18}, // BodyBottomRow 22 -> height 22-4
+		{Geometry{}, 4, 18},       // normalizes to 24x80
+		{Geometry{32, 80}, 4, 26}, // BodyBottomRow 30 -> 26
+		{Geometry{43, 80}, 4, 37}, // BodyBottomRow 41 -> 37
 	}
 	for _, c := range cases {
 		if got := c.g.LoginBrandingTop(); got != c.wantTop {

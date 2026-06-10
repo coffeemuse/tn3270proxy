@@ -17,6 +17,17 @@
  * along with tn3270proxy. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Package config loads the gateway's deployment configuration: which
+// listeners to open, connection limits, logging, the database path, and the
+// MFA master key. Precedence is defaults < JSON config file < command-line
+// flags, with the TN3270PROXY_MFA_KEY environment variable overriding the
+// file for the MFA key only.
+//
+// The config file (tn3270proxy.json in the working directory unless -config
+// says otherwise) is the deployment surface; runtime parameters that
+// operators change day-to-day (MOTD, branding, system ID, auth throttling,
+// trusted networks) live in the database and are edited through the 3270
+// admin UI instead.
 package config
 
 import (
@@ -181,6 +192,9 @@ func Load(args []string) (Config, error) {
 		cfg.DBPath = *dbPath
 	}
 	if set["listen"] {
+		// -listen only re-addresses an enabled plain listener; it must never
+		// silently re-enable plaintext on a gateway whose config file
+		// deliberately disabled it, so a conflict is fatal.
 		if !cfg.Plain.Enabled {
 			return Config{}, errors.New("config: -listen given but the plain listener is disabled by the config file; set listeners.plain.enabled=true or drop -listen")
 		}
@@ -234,6 +248,11 @@ func decodeMFAKey(b64 string) ([]byte, error) {
 	return raw, nil
 }
 
+// mergeFile overlays the JSON file at path onto cfg. A missing file is only an
+// error when the user named it explicitly via -config; the default
+// tn3270proxy.json is optional. Unknown keys are rejected so a typo (or a key
+// removed in a newer version, e.g. the old limits.trusted_cidrs) fails fast
+// instead of being silently ignored.
 func mergeFile(cfg *Config, path string, explicit bool) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -343,6 +362,8 @@ func mergeFile(cfg *Config, path string, explicit bool) error {
 	return nil
 }
 
+// validate enforces invariants on the merged result (not on any single
+// source): at least one listener, complete TLS material, positive limits.
 func validate(cfg Config) error {
 	if _, err := logging.ParseLevel(cfg.Log.Level); err != nil {
 		return fmt.Errorf("config: log.level: %q (want \"error\", \"warn\", \"info\", or \"debug\")", cfg.Log.Level)

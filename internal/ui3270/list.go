@@ -67,10 +67,10 @@ func RunList[T any](ctx context.Context, r Renderer, cfg ListConfig[T]) error {
 				continue
 			case act.PF == 3:
 				continue
-			// Any other action: pending is already nil above, so the confirm
-			// is cancelled and control deliberately falls through to the main
-			// switch below to process the action normally. Do NOT add a
-			// "default: continue" here — that would silently swallow it.
+				// Any other action: pending is already nil above, so the confirm
+				// is cancelled and control deliberately falls through to the main
+				// switch below to process the action normally. Do NOT add a
+				// "default: continue" here — that would silently swallow it.
 			}
 		}
 
