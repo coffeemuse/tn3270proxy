@@ -29,6 +29,13 @@ archives:
       - LICENSE.md
       - README.md
       - tn3270proxy.example.json
+      # Operator-facing docs only. Whitelist the three guide subtrees (plus the
+      # docs index) so internal planning/dev docs — docs/superpowers, docs/dev,
+      # docs/comment-style.md — never leak into a release archive (#119).
+      - docs/README.md
+      - docs/admin/**/*
+      - docs/install/**/*
+      - docs/user/**/*
 
 checksum:
   name_template: "SHA256SUMS"
