@@ -5,10 +5,15 @@ The fastest way to try tn3270proxy. **Not** a production setup — see
 
 ## Run it
 
+With the repo's `docker-compose.yml` (the only file you actually need —
+it pulls the prebuilt image from GHCR, no Go toolchain or source build):
+
 ```bash
 mkdir -p data
 docker compose up -d
 ```
+
+(Developers can build from source instead with `docker compose up --build`.)
 
 On first boot the container provisions a fresh `./data` directory and writes
 `./data/SETUP-DEFAULTS.TXT` with your generated **ADMIN** password and two sample
