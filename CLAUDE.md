@@ -131,7 +131,7 @@ internal/screens  Pure go3270 screen builders: LoginScreen(geom, status, brandin
                   at col 0 (vertically centered when shorter, top-aligned/clipped when taller);
                   BodyBottomRow() holds the User ID and Password credential fields (password
                   input reaches col 78); HelpRow() shows PF3=Disconnect. Cursor homes to
-                  (BodyBottomRow(), 16). Deliberate exception — see docs/ispf-style-guide.md §6.8.
+                  (BodyBottomRow(), 16). Deliberate exception — see docs/dev/ispf-style-guide.md §6.8.
                   MenuScreen(geom, svcs,
                   admin, status, errMsg, page). The menu paginates (PF7/PF8) via
                   MenuPageBounds: global/stable numbering (the returned mapping covers ALL
@@ -190,7 +190,7 @@ internal/quickstart First-run provisioning for the Docker quick-start. Provision
                   the "provisioned" marker. Detection: config present → no-op
                   (ErrAlreadyProvisioned); proxy.db without config → partial-dir error;
                   else fresh. Pure-Go cert (no openssl); shares GenPassword with bootstrap.
-                  Not the production path (see docs/security-hardening.md).
+                  Not the production path (see docs/install/security-hardening.md).
 internal/version  Resolve(injected) string: returns injected when set by ldflags, otherwise
                   falls back to a 12-char VCS revision from runtime/debug.ReadBuildInfo
                   (+"-dirty" suffix when the working tree is modified). Resolved in
@@ -324,7 +324,7 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   taller layouts, content stays within columns 0–79. Unit tests assert field *names/content/
   color*, not row numbers — verify positioning in a real emulator. **The full CUA palette,
   three-band layout, PF-key map, and conscious deviations are specified in
-  `docs/ispf-style-guide.md` — all ISPF-layer screens follow it.** Two documented exceptions:
+  `docs/dev/ispf-style-guide.md` — all ISPF-layer screens follow it.** Two documented exceptions:
   MOTD/NEWS (chrome-less pre-ISPF TSO/READY layer) and the **login screen** (branding-forward
   layout, rows 0–3 status header, branding body, credential row at BodyBottomRow — see §6.8).
 - **`go3270.NegotiateTelnet`** ends with a ~10ms read-drain loop that can discard early or
@@ -335,7 +335,7 @@ so the session is unit-tested with fakes (no live 3270 client needed).
 - **Toolchain:** `modernc.org/sqlite` pulls Go ≥1.25 via the `go` directive; the toolchain
   auto-downloads. No cgo. `go.mod` keeps `go 1.25.0` as the language floor and a separate
   `toolchain go1.25.<patch>` directive selects the build toolchain — bump the latter to
-  clear Go stdlib advisories from `govulncheck` (CI runs it; see `docs/dependencies.md`).
+  clear Go stdlib advisories from `govulncheck` (CI runs it; see `docs/dev/dependencies.md`).
 - **`tn3270proxy.json` in the repo root is auto-loaded by `serve`** and enables a TLS
   listener on :2324 — a second instance collides with a running one. `-listen` overrides
   only the plain addr (when the plain listener is enabled); if a config file sets

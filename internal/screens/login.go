@@ -33,7 +33,7 @@ const (
 // LoginScreen returns the branding-forward login screen, its validation rules,
 // and the initial cursor (on the username field), sized for geom. Layout
 // (0-based; login is a documented exception to the three-band convention — see
-// docs/ispf-style-guide.md):
+// docs/dev/ispf-style-guide.md):
 //
 //	row 0     centered title              | Date  (col StatusBlockCol)
 //	row 1     error line (col 2)          | Time
