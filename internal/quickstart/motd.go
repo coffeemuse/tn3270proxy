@@ -11,5 +11,5 @@ func DefaultMOTD() string {
 		"  log in, press A for the admin UI, and update each account.\n" +
 		"\n" +
 		"This is NOT a hardened production setup. To secure it, see the\n" +
-		"security-hardening guide (security-hardening.md) in the project docs.\n"
+		"security-hardening guide in the project documentation.\n"
 }

@@ -15,13 +15,11 @@ can connect to with any 3270 emulator:
 
     c3270 127.0.0.1:2323
 
-See the [Quick Start guide](docs/install/quickstart.md). To build from source
-instead:
-
-    go build -o bin/tn3270proxy ./cmd/tn3270proxy
-
-then follow [First run](docs/install/first-run.md) and
-[Running the gateway](docs/install/running.md).
+See the [Quick Start guide](docs/install/01-quickstart.md). Prefer a plain
+binary? Grab a [prebuilt release](docs/install/02-binary-releases.md) or
+[build from source](docs/install/03-from-source.md), then follow
+[First run](docs/install/04-first-run.md) and
+[Running the gateway](docs/install/05-running.md).
 
 ## Documentation
 
@@ -37,4 +35,4 @@ Contributor-facing reference lives in [docs/dev/](docs/dev/README.md).
 
 Tagged releases (`vX.Y.Z`) publish cross-platform binaries to the GitHub
 Releases page and multi-arch Docker images to `ghcr.io/coffeemuse/tn3270proxy`.
-See [Building from source & release artifacts](docs/install/build.md).
+See [Installing from a binary release](docs/install/02-binary-releases.md).

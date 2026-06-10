@@ -1,7 +1,7 @@
 # Quick Start (Docker)
 
 The fastest way to try tn3270proxy. **Not** a production setup — see
-[security-hardening.md](security-hardening.md) before exposing it.
+[the security-hardening guide](08-security-hardening.md) before exposing it.
 
 ## Run it
 
@@ -34,7 +34,7 @@ Log in as `ADMIN`. The menu shows a **DEMO** entry that bridges to a throwaway
 1. Change the ADMIN and sample passwords (log in, press `A` for the admin UI).
 2. Delete `./data/SETUP-DEFAULTS.TXT` once you've recorded the credentials.
 3. Point a real service at your own MVS/VM host via the admin UI.
-4. Read [security-hardening.md](security-hardening.md) before going beyond your LAN.
+4. Read [the security-hardening guide](08-security-hardening.md) before going beyond your LAN.
 
 ## What got generated
 
