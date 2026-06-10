@@ -17,7 +17,7 @@ for every comment is a competent Go developer who has never seen a 3270 terminal
      the invariant it preserves.
    - **Domain:** 3270/telnet/ISPF facts a Go developer cannot be expected to know.
      One line, plus a pointer where depth exists (RFC 1576/2355,
-     docs/ispf-style-guide.md).
+     docs/dev/ispf-style-guide.md).
    - **Cross-cutting invariants:** secret-first MFA verification, canonical
      UPPERCASE names, the idle-regime state machine, the go3270 cursor Col+1
      rule, and similar — these are not googleable and live here.

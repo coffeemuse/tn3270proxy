@@ -54,12 +54,21 @@ level (env/file, never the database), with a fail-closed startup check and a
 break-glass `mfa reset-all` recovery path.
 
 ### 🖥️ Full in-application admin console — no config files
-A complete **CRUD admin UI rendered as 3270 screens**: create and manage users,
-groups, services, and their access links live, while the server keeps running.
-Includes paging, line commands, and delete confirmations — with guardrails
-(no self-delete, the admin group can never be emptied, no self-demotion).
-**Configuration changes take effect immediately. No restart. No dropped
-sessions.**
+A complete **admin UI rendered as 3270 screens**, with seven areas reachable
+from one menu: **Users**, **Groups**, and **Services** (full CRUD with paging,
+line commands, and delete confirmations); **Sysparms** to edit runtime
+parameters live (MOTD, login branding, system ID, auth-throttle tuning);
+**Networks** to manage the trusted-network allow-list; **Audit** to browse the
+trail from a green screen; and **Sessions** to watch active clients and
+disconnect them in real time. Guardrails throughout (no self-delete, the admin
+group can never be emptied, no self-demotion). **Every change takes effect
+immediately. No restart. No dropped sessions.**
+
+### 📡 Live session monitoring & control
+Operators see **every active client session** from the admin console — who's
+connected, from where, how long, and what state they're in — and can **disconnect
+a session on the spot**. Nothing about the running system requires a restart to
+inspect or intervene.
 
 ### ⚙️ Self-service for every user
 A `0` menu entry gives each user a settings screen to **change their own
@@ -69,16 +78,19 @@ by a current-password step-up.
 ### 📓 Durable, queryable audit trail
 Every connect, login success/failure, service bridge (with outcome), admin
 change, and disconnect is written to a session-correlated **audit table** with
-UTC timestamps. Query it with `audit list`; age it out with
-`audit prune -older-than 90d`. Credentials are *never* logged.
+UTC timestamps. Browse it **right from the 3270 admin console**, query it from
+the CLI with `audit list`, and age it out with `audit prune -older-than 90d`.
+Credentials are *never* logged.
 
 ### 🛡️ Built to face a hostile network
 - **Idle-timeout regimes** that change per phase: a strict pre-auth window *with
   a non-sliding absolute ceiling* (a slow trickle can't hold a slot open),
   a post-auth window that **logs back to the login screen** rather than
   dropping you, and a configurable bridge-idle policy.
-- **Connection caps** — global and per-IP — with a configurable **trusted-CIDR**
-  list that bypasses DoS controls for known-good networks.
+- **Connection caps** — global and per-IP — with a **trusted-network allow-list**
+  (CIDR-based) that bypasses the DoS controls for known-good networks. The list
+  lives in the database and is managed live from the admin console, so changes
+  apply to new connections without a restart.
 - **Failed-auth throttling** — per-username linear backoff shared across the
   password *and* MFA paths, with decay and the applied delay recorded in the
   audit detail. (fail2ban-friendly.)
@@ -91,9 +103,12 @@ per-service backend TLS with a per-service certificate-verification toggle
 encrypt-without-verify mode for self-signed internal hosts).
 
 ### 📐 Modern 3270 polish
-- An **ISPF-style three-band layout** across every screen (centered title,
-  command line, red message line, body, PF-key help) with a documented CUA
-  palette and style guide.
+- An **ISPF-style three-band layout** across the admin and menu screens (centered
+  title, command line, red message line, body, PF-key help) with a documented CUA
+  palette and style guide. (Two deliberate exceptions: the branding-forward login
+  screen and the chrome-less MOTD/NEWS pages.)
+- A **branding-forward login screen** that renders your own custom green-screen
+  art from a `BRANDING_FILE` — make the front door look like your shop.
 - **Larger terminal models** — MOD 2/3/4/5 — render correctly, using the extra
   rows for longer menus.
 - A right-hand **status block** (User ID / date / time / terminal / system ID /
@@ -127,13 +142,16 @@ tagged releases with `SHA256SUMS`, plus a ready-to-run `docker-compose` example.
 | **Per-user / group-based menus** | ✅ | ❌ one flat menu for everyone |
 | **Multi-factor auth (TOTP)** | ✅ encrypted at rest | ❌ |
 | **In-app admin UI (users/groups/services)** | ✅ live 3270 CRUD | ❌ edit JSON + restart |
+| **In-app runtime parameters (MOTD/branding/system ID/throttling)** | ✅ live 3270 Sysparms | ❌ |
+| **In-app audit browser** | ✅ 3270 screen | ❌ |
+| **Live session monitoring + disconnect** | ✅ 3270 Active Sessions | ❌ |
 | **Live config changes (no restart, no dropped sessions)** | ✅ | ❌ restart drops all connections |
 | **Self-service password / MFA** | ✅ | ❌ |
 | **Durable audit trail (queryable)** | ✅ SQLite table + CLI | ❌ log lines only |
 | **Failed-auth throttling / lockout** | ✅ per-user backoff | ❌ |
 | **Connection caps (global + per-IP)** | ✅ | ❌ |
 | **Idle timeouts / pre-auth ceiling** | ✅ phase-aware regimes | ❌ |
-| **Trusted-CIDR bypass list** | ✅ | ❌ |
+| **Trusted-network bypass list** | ✅ DB-backed, live-managed | ❌ |
 | **Return to menu after host session** | ✅ PA3 + re-login | ⚠️ session ends (menu recovery unsolved upstream) |
 | Embedded database (no external DB) | ✅ SQLite | ➖ JSON config file |
 | Structured logging (slog, levels, JSON file) | ✅ | ➖ zerolog text, debug/trace |
@@ -141,6 +159,7 @@ tagged releases with `SHA256SUMS`, plus a ready-to-run `docker-compose` example.
 | ISPF-style layout + style guide | ✅ | ➖ minimal menu |
 | Status block (user/date/terminal/release) | ✅ | ❌ |
 | Login disclaimer / banner | ✅ MOTD/NEWS | ✅ 2-line disclaimer |
+| Custom login branding art (`BRANDING_FILE`) | ✅ | ❌ |
 | Version stamping | ✅ ldflags + VCS fallback | ❌ |
 | Container image / multi-arch releases | ✅ distroless + GHCR | ❌ |
 | Telnet "un-negotiation" handoff option | ➖ unnecessary by design¹ | ✅ flag |

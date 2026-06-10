@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a problem with the TN3270 gateway
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. **For security vulnerabilities, do not open an
+        issue** — see [SECURITY.md](https://github.com/coffeemuse/TN3270Proxy/blob/main/SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `tn3270proxy version`, or the Docker image tag.
+      placeholder: v0.7.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker / docker compose
+        - Prebuilt binary release
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: emulator
+    attributes:
+      label: 3270 emulator
+      description: Which client and version, if relevant.
+      placeholder: c3270 4.2, x3270, s3270, Vista TN3270, …
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >-
+        Paste any relevant log output. **Redact passwords, TOTP codes/secrets,
+        the MFA master key, and any other credentials.**
+      render: text

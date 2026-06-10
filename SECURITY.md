@@ -24,7 +24,6 @@ discussions.** Report privately using:
    <https://github.com/coffeemuse/TN3270Proxy/security/advisories/new>. This keeps
    the report private until a fix is published.
 
-
 Please include, as far as you can:
 
 - the version (`tn3270proxy version`) and how it's deployed (Docker / binary / source),

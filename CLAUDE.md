@@ -34,6 +34,7 @@ Remaining work is in `docs/superpowers/ROADMAP.md`.
 go build ./...                 # build
 go test ./...                  # all tests
 go test ./... -race            # tests with race detector (bridge is concurrent — use this)
+go fmt ./...                    # CI has a gofmt gate (ci.yml) — unformatted code fails the build
 go build -o bin/tn3270proxy ./cmd/tn3270proxy
 go build -o bin/dummy3270 ./cmd/dummy3270                     # demo/test TN3270 bridge target
 ./bin/dummy3270 -listen :3300                                 # run the dummy backend (no TLS, no auth, no logging)
