@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
-	"github.com/CoffeeMuse/tn3270proxy/internal/config"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/auth"
+	"github.com/coffeemuse/tn3270proxy/internal/config"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 )
 
 func TestProvisionFresh(t *testing.T) {

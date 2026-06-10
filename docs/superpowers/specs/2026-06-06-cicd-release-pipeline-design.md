@@ -1,6 +1,6 @@
 # CI/CD Release Pipeline — Design
 
-**Issue:** [#67](https://github.com/CoffeeMuse/tn3270proxy/issues/67) — CI/CD: tagged-release binaries (zipped + attached) and Docker images with sample docker-compose
+**Issue:** [#67](https://github.com/coffeemuse/tn3270proxy/issues/67) — CI/CD: tagged-release binaries (zipped + attached) and Docker images with sample docker-compose
 **Date:** 2026-06-06
 **Status:** Approved (brainstorm) — pending implementation plan
 
@@ -20,7 +20,7 @@ The release pipeline lands on top of the test gate, not before it.
 
 ## Background / current state (verified)
 
-- Module `github.com/CoffeeMuse/tn3270proxy`; single entrypoint `cmd/tn3270proxy`.
+- Module `github.com/coffeemuse/tn3270proxy`; single entrypoint `cmd/tn3270proxy`.
 - Pure Go, **no cgo** (`modernc.org/sqlite`), `go 1.25.0` directive — cross-compile
   is clean (`GOOS`/`GOARCH`, `CGO_ENABLED=0`).
 - Version stamping already wired: `-ldflags "-X main.version=vX.Y.Z"`, resolved by
@@ -69,7 +69,7 @@ The release pipeline lands on top of the test gate, not before it.
 Add at the top of `README.md`:
 
 ```markdown
-[![CI](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml)
+[![CI](https://github.com/coffeemuse/tn3270proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/coffeemuse/tn3270proxy/actions/workflows/ci.yml)
 ```
 
 Reflects `main`'s build+test health — the always-on signal operators and

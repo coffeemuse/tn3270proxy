@@ -28,7 +28,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 // motdSession builds a test session whose MOTD_FILE is set to path and whose

@@ -23,7 +23,7 @@ import (
 	"crypto/tls"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 func TestClassifyMenuSubmit(t *testing.T) {

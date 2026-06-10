@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 // parseDuration is time.ParseDuration plus a "d" suffix (days, 24h each),

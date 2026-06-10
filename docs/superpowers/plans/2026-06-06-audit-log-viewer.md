@@ -1073,7 +1073,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 	"github.com/racingmars/go3270"
 )
 
@@ -1127,8 +1127,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 	"github.com/racingmars/go3270"
 )
 
@@ -1253,7 +1253,7 @@ func (f *fakeAdminPresenter) Detail(v ui3270.DetailView) error {
 
 - [ ] **Step 4: Write the failing flow test**
 
-Add to `internal/server/admin_audit_test.go`. The file (from Task 9) already imports `testing`, `time`, `store`, and `go3270`; add `"context"`, `"strings"`, and `"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"`. `newAdminFixture` opens a real store; record two audit rows, then drive the flow (conn is `nil` — the fixture's renderer ignores it).
+Add to `internal/server/admin_audit_test.go`. The file (from Task 9) already imports `testing`, `time`, `store`, and `go3270`; add `"context"`, `"strings"`, and `"github.com/coffeemuse/tn3270proxy/internal/ui3270"`. `newAdminFixture` opens a real store; record two audit rows, then drive the flow (conn is `nil` — the fixture's renderer ignores it).
 
 ```go
 func TestAuditLogFlow(t *testing.T) {
@@ -1313,7 +1313,7 @@ Expected: FAIL — `f.auditLog undefined`.
 - [ ] **Step 6: Implement the flow**
 
 Append to `internal/server/admin_audit.go`. Add `"net"` and
-`"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"` to its import block (the
+`"github.com/coffeemuse/tn3270proxy/internal/ui3270"` to its import block (the
 Task 9 imports — `context`, `fmt`, `strconv`, `strings`, `time`, `store`,
 `sysconfig`, `go3270` — all remain in use).
 

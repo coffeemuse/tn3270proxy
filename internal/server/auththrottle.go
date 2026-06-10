@@ -27,7 +27,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 )
 
 // authThrottle applies per-username linear backoff to failed authentication

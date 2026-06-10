@@ -6,7 +6,7 @@
 
 **Architecture:** Add additive top-band geometry helpers to `screens.Geometry`, then migrate each builder: centered white title (row 0), `Option ===>` command line at the top (row 1, menus only), red message line (row 2), body from row 3, PF-key help unchanged at the bottom. Apply the tri-color option grid to all three menus. The `internal/ui3270` package is Plan 2 (independent geometry).
 
-**Tech Stack:** Go, `github.com/racingmars/go3270` (vendored locally at `/Users/robert/ClaudeSandbox/go3270`). Tests assert field *names/content/color*, not row numbers; the s3270 smoke script is the protocol-surface gate.
+**Tech Stack:** Go, `github.com/racingmars/go3270`. Tests assert field *names/content/color*, not row numbers; the s3270 smoke script is the protocol-surface gate.
 
 **Scope guardrails:** Presentation only — no auth/bridge/store behavior changes. Title *text* is unchanged on every screen (only centered + recolored). Only the admin menu *option labels* change (approved ISPF keywords). `news.go` (MOTD) is exempt and untouched.
 

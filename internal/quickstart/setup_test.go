@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
+	"github.com/coffeemuse/tn3270proxy/internal/screens"
 )
 
 func sampleResult() Result {

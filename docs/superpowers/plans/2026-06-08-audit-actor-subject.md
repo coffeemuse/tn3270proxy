@@ -525,7 +525,7 @@ func TestAdminAuditActorSubjectSplit(t *testing.T) {
 }
 ```
 
-If `auth.Identity` is not already imported in `admin_test.go`, add `"github.com/CoffeeMuse/tn3270proxy/internal/auth"` to its imports.
+If `auth.Identity` is not already imported in `admin_test.go`, add `"github.com/coffeemuse/tn3270proxy/internal/auth"` to its imports.
 
 - [ ] **Step 2: Run test to verify it fails**
 

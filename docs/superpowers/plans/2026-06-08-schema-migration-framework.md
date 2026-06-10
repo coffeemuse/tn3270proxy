@@ -138,7 +138,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 )
 
 // ErrSchemaNewer is returned by Open when the database's schema version is

@@ -27,7 +27,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/config"
+	"github.com/coffeemuse/tn3270proxy/internal/config"
 )
 
 // Build returns one net.Listener per enabled transport in cfg. On any error

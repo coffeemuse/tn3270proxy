@@ -627,7 +627,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 // motdSession builds a test session whose MOTD_FILE is set to path and whose
@@ -826,12 +826,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
-	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
-	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
-	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
+	"github.com/coffeemuse/tn3270proxy/internal/auth"
+	"github.com/coffeemuse/tn3270proxy/internal/bridge"
+	"github.com/coffeemuse/tn3270proxy/internal/screens"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
 ```
 

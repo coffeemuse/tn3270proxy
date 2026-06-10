@@ -496,7 +496,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 func TestStoreAuditorRecordsAndStampsTime(t *testing.T) {
@@ -540,7 +540,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 // Auditor records audit events. Recording is best-effort by contract: Record
@@ -972,7 +972,7 @@ func TestSessionThreadsAuditIntoAdminFlow(t *testing.T) {
 }
 ```
 
-(`screens.FieldName` (`"name"`, `internal/screens/admin.go:14`) is the group-name form field read by `adminFlow.groupAdd`. Add `"github.com/CoffeeMuse/tn3270proxy/internal/screens"` to session_test.go's imports. Step trace: admin menu choice 2 → groups list `{PF:4}` → groupAdd form creates `newgrp` and returns → groups list re-renders `{PF:3}` → admin menu `{back}` → service menu `{quit}` → login `{quit}`.)
+(`screens.FieldName` (`"name"`, `internal/screens/admin.go:14`) is the group-name form field read by `adminFlow.groupAdd`. Add `"github.com/coffeemuse/tn3270proxy/internal/screens"` to session_test.go's imports. Step trace: admin menu choice 2 → groups list `{PF:4}` → groupAdd form creates `newgrp` and returns → groups list re-renders `{PF:3}` → admin menu `{back}` → service menu `{quit}` → login `{quit}`.)
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -1242,7 +1242,7 @@ func TestPrintAuditEvents(t *testing.T) {
 }
 ```
 
-Add to audit_test.go imports: `"bytes"`, `"strings"`, `"github.com/CoffeeMuse/tn3270proxy/internal/store"`.
+Add to audit_test.go imports: `"bytes"`, `"strings"`, `"github.com/coffeemuse/tn3270proxy/internal/store"`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 

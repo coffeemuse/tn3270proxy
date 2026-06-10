@@ -6,7 +6,7 @@
 
 **Architecture:** Approach A — a thin `cmd/dummy3270` wrapper over an `internal/dummy` package. `screens.go` holds pure `go3270.Screen` builders (3 mockups + a blinking red `DUMMY3270` marker + footer); `server.go` holds the Telnet-negotiating accept/repaint loop. No DB, no auth, no TLS, no config, no per-connection logging, no session state.
 
-**Tech Stack:** Go 1.25, `github.com/racingmars/go3270` v0.9.13 (already a dependency). Module path `github.com/CoffeeMuse/tn3270proxy`.
+**Tech Stack:** Go 1.25, `github.com/racingmars/go3270` v0.9.13 (already a dependency). Module path `github.com/coffeemuse/tn3270proxy`.
 
 ---
 
@@ -417,7 +417,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/dummy"
+	"github.com/coffeemuse/tn3270proxy/internal/dummy"
 )
 
 func main() {

@@ -787,7 +787,7 @@ func newSessionsFlow(t *testing.T, reg SessionRegistry, selfID uint64, r ui3270.
 Add the `sysconfig` import to the test file's import block:
 
 ```go
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 ```
 
 Rewrite `TestActiveSessions_DisconnectAuditsSubject` (drill in with `S`, disconnect with PF11×2):

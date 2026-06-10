@@ -42,13 +42,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
-	"github.com/CoffeeMuse/tn3270proxy/internal/config"
-	"github.com/CoffeeMuse/tn3270proxy/internal/listen"
-	"github.com/CoffeeMuse/tn3270proxy/internal/logging"
-	"github.com/CoffeeMuse/tn3270proxy/internal/seed"
-	"github.com/CoffeeMuse/tn3270proxy/internal/server"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/bridge"
+	"github.com/coffeemuse/tn3270proxy/internal/config"
+	"github.com/coffeemuse/tn3270proxy/internal/listen"
+	"github.com/coffeemuse/tn3270proxy/internal/logging"
+	"github.com/coffeemuse/tn3270proxy/internal/seed"
+	"github.com/coffeemuse/tn3270proxy/internal/server"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 func main() {

@@ -27,10 +27,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
-	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
+	"github.com/coffeemuse/tn3270proxy/internal/auth"
+	"github.com/coffeemuse/tn3270proxy/internal/screens"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
 
 // users drives the user list and its sub-screens.

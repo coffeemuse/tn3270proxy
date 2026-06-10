@@ -22,7 +22,7 @@ package main
 import (
 	"fmt"
 
-	ver "github.com/CoffeeMuse/tn3270proxy/internal/version"
+	ver "github.com/coffeemuse/tn3270proxy/internal/version"
 )
 
 // version is the build-time version stamp. Override at link time with:

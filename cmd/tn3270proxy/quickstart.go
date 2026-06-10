@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/quickstart"
+	"github.com/coffeemuse/tn3270proxy/internal/quickstart"
 )
 
 // runQuickstart implements the `quickstart` subcommand: idempotently provision a

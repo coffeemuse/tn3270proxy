@@ -24,7 +24,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 )
 
 func TestMigrateSeedsCatalogDefaults(t *testing.T) {

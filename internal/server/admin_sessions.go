@@ -26,8 +26,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
 
 // Active-sessions column widths (full-width row, cols 8–79 = 72 chars):
