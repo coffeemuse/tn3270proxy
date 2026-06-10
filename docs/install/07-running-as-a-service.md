@@ -63,13 +63,13 @@ The gateway always writes human-readable text to **stderr**, which systemd
 captures in the journal (`journalctl -u tn3270proxy`). For a machine-readable
 stream (e.g. for fail2ban), add `-log-file /var/log/tn3270proxy/proxy.json` or
 set `log.file` in the config — see the
-[Administration guide on logging](../admin/logging.md).
+[Administration guide on logging](../admin/13-logging.md).
 
 ## Upgrades
 
 Stop the service, replace the binary, start it again; schema migrations run
 automatically with a backup written first. Details and rollback:
-[Upgrading & database backups](../admin/operations-upgrades.md).
+[Upgrading & database backups](../admin/15-operations-upgrades.md).
 
 ## Next steps
 
