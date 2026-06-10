@@ -23,9 +23,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
-	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/auth"
+	"github.com/coffeemuse/tn3270proxy/internal/screens"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 func TestApplyMFAEditTogglesAndClears(t *testing.T) {

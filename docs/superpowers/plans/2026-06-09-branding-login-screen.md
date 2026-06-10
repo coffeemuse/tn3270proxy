@@ -834,7 +834,7 @@ func TestDefaultBrandingFitsRegion(t *testing.T) {
 }
 ```
 
-(Add `"github.com/CoffeeMuse/tn3270proxy/internal/screens"` to `setup_test.go`'s imports — the module path is case-sensitive; matches `go.mod`.)
+(Add `"github.com/coffeemuse/tn3270proxy/internal/screens"` to `setup_test.go`'s imports — the module path is case-sensitive; matches `go.mod`.)
 
 - [ ] **Step 2: Run tests to verify they fail**
 

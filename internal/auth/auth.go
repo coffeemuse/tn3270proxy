@@ -28,7 +28,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 

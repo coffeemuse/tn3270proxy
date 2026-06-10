@@ -26,9 +26,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
-	"github.com/CoffeeMuse/tn3270proxy/internal/mfa"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/auth"
+	"github.com/coffeemuse/tn3270proxy/internal/mfa"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 // Limits carries the connection-hardening knobs (GH issue #1) into the server

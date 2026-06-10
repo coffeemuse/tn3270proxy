@@ -565,8 +565,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/bridge"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 // snapBridger captures the registry snapshot while a session is bridged, so the
@@ -1230,8 +1230,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
 
 // fakeRegistry is a scripted SessionRegistry.
@@ -1409,8 +1409,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
 
 // Active-sessions column widths (full-width row, cols 8–79 = 72 chars):

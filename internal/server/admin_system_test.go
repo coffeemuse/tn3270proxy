@@ -23,9 +23,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
-	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
 
 // TestAdminSystemParamsMenuEntry verifies choice 4 routes to systemParams and

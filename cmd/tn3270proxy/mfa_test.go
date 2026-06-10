@@ -25,8 +25,8 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/mfa"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/mfa"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 func key32() []byte { return bytes.Repeat([]byte{0x11}, 32) }

@@ -169,7 +169,7 @@ In `internal/screens/menu.go`, change the import block from:
 import (
 	"fmt"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 	"github.com/racingmars/go3270"
 )
 ```
@@ -182,7 +182,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 	"github.com/racingmars/go3270"
 )
 ```
@@ -268,7 +268,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 ```
 
@@ -368,7 +368,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 	"github.com/racingmars/go3270"
 )
 ```
@@ -537,9 +537,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
-	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/bridge"
+	"github.com/coffeemuse/tn3270proxy/internal/screens"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 	"github.com/racingmars/go3270"
 )
 ```
@@ -580,7 +580,7 @@ to:
 func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, status screens.MenuStatus, errMsg string) (*store.Service, bool, bool, error) {
 ```
 
-If `internal/server/session_test.go` does not already import `"github.com/CoffeeMuse/tn3270proxy/internal/screens"`, add it. (Check with `grep -n 'internal/screens' internal/server/session_test.go`; the body of the fake can ignore `status`.)
+If `internal/server/session_test.go` does not already import `"github.com/coffeemuse/tn3270proxy/internal/screens"`, add it. (Check with `grep -n 'internal/screens' internal/server/session_test.go`; the body of the fake can ignore `status`.)
 
 - [ ] **Step 8: Run the screens + server tests to verify they pass**
 

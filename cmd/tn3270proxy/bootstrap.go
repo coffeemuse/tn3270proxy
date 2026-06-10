@@ -26,9 +26,9 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
-	"github.com/CoffeeMuse/tn3270proxy/internal/quickstart"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/auth"
+	"github.com/coffeemuse/tn3270proxy/internal/quickstart"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 // generateBootstrapPassword returns a one-time password using the shared

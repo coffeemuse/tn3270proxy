@@ -1,6 +1,6 @@
 package quickstart
 
-import "github.com/CoffeeMuse/tn3270proxy/internal/seed"
+import "github.com/coffeemuse/tn3270proxy/internal/seed"
 
 // buildSeedData turns generated credentials into a seed.SeedData: all users
 // with their group memberships, the DEMO group, and the DEMO service pointing

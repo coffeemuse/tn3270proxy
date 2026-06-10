@@ -20,7 +20,7 @@
 package server
 
 import (
-	"github.com/CoffeeMuse/tn3270proxy/internal/screens"
+	"github.com/coffeemuse/tn3270proxy/internal/screens"
 	"github.com/racingmars/go3270"
 )
 

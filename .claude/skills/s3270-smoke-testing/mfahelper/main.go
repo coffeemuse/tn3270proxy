@@ -18,8 +18,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/mfa"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/mfa"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 	"github.com/pquerna/otp/totp"
 )
 

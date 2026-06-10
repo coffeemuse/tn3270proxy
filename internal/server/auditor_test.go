@@ -23,7 +23,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 func TestAuditTrailAutoFillsActor(t *testing.T) {

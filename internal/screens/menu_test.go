@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 	"github.com/racingmars/go3270"
 )
 

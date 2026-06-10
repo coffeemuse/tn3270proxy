@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/dummy"
+	"github.com/coffeemuse/tn3270proxy/internal/dummy"
 )
 
 func main() {

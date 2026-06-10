@@ -276,7 +276,7 @@ Expected: PASS.
 
 - [ ] **Step 5: DRY — delegate the bootstrap generator to the shared one**
 
-In `cmd/tn3270proxy/bootstrap.go`, add the import `"github.com/CoffeeMuse/tn3270proxy/internal/quickstart"`, delete the `bootstrapCharset` const and the body of `generateBootstrapPassword`, and replace it with:
+In `cmd/tn3270proxy/bootstrap.go`, add the import `"github.com/coffeemuse/tn3270proxy/internal/quickstart"`, delete the `bootstrapCharset` const and the body of `generateBootstrapPassword`, and replace it with:
 
 ```go
 // generateBootstrapPassword returns a one-time password using the shared
@@ -713,7 +713,7 @@ func DefaultMOTD() string {
 ```go
 package quickstart
 
-import "github.com/CoffeeMuse/tn3270proxy/internal/seed"
+import "github.com/coffeemuse/tn3270proxy/internal/seed"
 
 // buildSeedData turns generated credentials into a seed.SeedData: all users
 // with their group memberships, the DEMO group, and the DEMO service pointing
@@ -771,10 +771,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
-	"github.com/CoffeeMuse/tn3270proxy/internal/config"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/auth"
+	"github.com/coffeemuse/tn3270proxy/internal/config"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 )
 
 func TestProvisionFresh(t *testing.T) {
@@ -880,9 +880,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/seed"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/seed"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 )
 
 // ErrAlreadyProvisioned signals that the data dir already has a config file and
@@ -1066,7 +1066,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/quickstart"
+	"github.com/coffeemuse/tn3270proxy/internal/quickstart"
 )
 
 // runQuickstart implements the `quickstart` subcommand: idempotently provision a

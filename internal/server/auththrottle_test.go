@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 var throttleEpoch = time.Unix(1_700_000_000, 0)

@@ -24,8 +24,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/bridge"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 func TestSessionRegistryHelpers_NilRegistryIsNoOp(t *testing.T) {

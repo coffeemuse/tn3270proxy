@@ -1,8 +1,8 @@
 # TN3270Proxy
 
-[![CI](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/CoffeeMuse/tn3270proxy?sort=semver)](https://github.com/CoffeeMuse/tn3270proxy/releases)
-[![Go Report Card](https://goreportcard.com/badge/github.com/CoffeeMuse/tn3270proxy)](https://goreportcard.com/report/github.com/CoffeeMuse/tn3270proxy)
+[![CI](https://github.com/coffeemuse/tn3270proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/coffeemuse/tn3270proxy/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/coffeemuse/tn3270proxy?sort=semver)](https://github.com/coffeemuse/tn3270proxy/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/coffeemuse/tn3270proxy)](https://goreportcard.com/report/github.com/coffeemuse/tn3270proxy)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE.md)
 
 A TN3270 gateway: presents itself as a TN3270 server, authenticates users

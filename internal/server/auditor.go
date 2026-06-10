@@ -27,7 +27,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
 // Auditor records audit events. Recording is best-effort by contract: Record

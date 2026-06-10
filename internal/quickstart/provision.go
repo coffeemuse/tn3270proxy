@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/seed"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/seed"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 )
 
 // ErrAlreadyProvisioned signals that the data dir already has a config file and

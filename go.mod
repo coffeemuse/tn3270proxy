@@ -1,4 +1,4 @@
-module github.com/CoffeeMuse/tn3270proxy
+module github.com/coffeemuse/tn3270proxy
 
 go 1.25.0
 

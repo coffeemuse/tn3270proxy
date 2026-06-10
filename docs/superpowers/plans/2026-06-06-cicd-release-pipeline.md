@@ -89,7 +89,7 @@ Expected: see the H1 title line so the badge can be placed directly beneath it.
 Insert this line immediately after the H1 title line (blank line above and below):
 
 ```markdown
-[![CI](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/CoffeeMuse/tn3270proxy/actions/workflows/ci.yml)
+[![CI](https://github.com/coffeemuse/tn3270proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/coffeemuse/tn3270proxy/actions/workflows/ci.yml)
 ```
 
 - [ ] **Step 3: Verify placement**

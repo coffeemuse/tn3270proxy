@@ -41,7 +41,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/logging"
+	"github.com/coffeemuse/tn3270proxy/internal/logging"
 )
 
 // Listener describes a plaintext TCP listener.

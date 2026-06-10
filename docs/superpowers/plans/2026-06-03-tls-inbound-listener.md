@@ -488,7 +488,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/config"
+	"github.com/coffeemuse/tn3270proxy/internal/config"
 )
 
 // genSelfSigned writes a self-signed cert/key valid for 127.0.0.1 into a temp
@@ -633,7 +633,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/config"
+	"github.com/coffeemuse/tn3270proxy/internal/config"
 )
 
 // Build returns one net.Listener per enabled transport in cfg. On any error
@@ -782,8 +782,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/auth"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/auth"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 ```
 
@@ -854,12 +854,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/bridge"
-	"github.com/CoffeeMuse/tn3270proxy/internal/config"
-	"github.com/CoffeeMuse/tn3270proxy/internal/listen"
-	"github.com/CoffeeMuse/tn3270proxy/internal/seed"
-	"github.com/CoffeeMuse/tn3270proxy/internal/server"
-	"github.com/CoffeeMuse/tn3270proxy/internal/store"
+	"github.com/coffeemuse/tn3270proxy/internal/bridge"
+	"github.com/coffeemuse/tn3270proxy/internal/config"
+	"github.com/coffeemuse/tn3270proxy/internal/listen"
+	"github.com/coffeemuse/tn3270proxy/internal/seed"
+	"github.com/coffeemuse/tn3270proxy/internal/server"
+	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 ```
 

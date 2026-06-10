@@ -23,8 +23,8 @@ import (
 	"context"
 	"net"
 
-	"github.com/CoffeeMuse/tn3270proxy/internal/sysconfig"
-	"github.com/CoffeeMuse/tn3270proxy/internal/ui3270"
+	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
+	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
 
 // systemParams drives the System Parameters form. Each catalog entry becomes
