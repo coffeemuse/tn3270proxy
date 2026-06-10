@@ -25,7 +25,7 @@ import "github.com/racingmars/go3270"
 // ("Option ===>" on menus, "Command ===>" on lists) and the named green input
 // field placed just past the prompt. It returns the prompt, input, and stop
 // fields separately so callers can tune the input (e.g. NumericOnly) and compute
-// the cursor with cursorAt(input). See docs/ispf-style-guide.md §2.
+// the cursor with cursorAt(input). See docs/dev/ispf-style-guide.md §2.
 func commandLine(geom Geometry, prompt, fieldName string) (promptF, input, stop go3270.Field) {
 	const promptAttrCol = 2
 	// Prompt content runs cols 3..(2+len); the next field's attribute byte sits

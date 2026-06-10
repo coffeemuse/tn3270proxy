@@ -83,7 +83,7 @@ func (g Geometry) NewsLinesPerPage() int { return g.norm().Rows - 2 }
 
 // Top-band layout rows (ISPF style guide §2). The title/command/message band is
 // fixed at rows 0–2; the body fills row 3 down to BodyBottomRow; PF-key help
-// stays on the last row. See docs/ispf-style-guide.md.
+// stays on the last row. See docs/dev/ispf-style-guide.md.
 
 // TitleRow is the centered panel-title row.
 func (g Geometry) TitleRow() int { return 0 }
@@ -119,7 +119,7 @@ func (g Geometry) CenterCol(n int) int {
 func (g Geometry) StatusBlockCol() int { return 60 }
 
 // Login-screen branding region (login is a documented layout exception; see
-// docs/ispf-style-guide.md). The region sits below the rows 0-3 status header
+// docs/dev/ispf-style-guide.md). The region sits below the rows 0-3 status header
 // and above the credential row (BodyBottomRow). LoginBrandingTop is fixed at 4;
 // the region runs LoginBrandingTop .. BodyBottomRow-1, so its height is
 // BodyBottomRow-4 (18 on MOD 2). The credential row rides BodyBottomRow and the
