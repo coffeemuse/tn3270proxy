@@ -17,6 +17,17 @@
  * along with tn3270proxy. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Package bridge relays a live 3270 session between the end user's connection
+// and a backend TN3270 host, watching for the escape AID (PA3) that returns
+// the user to the gateway menu.
+//
+// The bridge is deliberately NOT an io.Copy pair. Telnet negotiation
+// (RFC 854; TN3270 per RFC 1576) is hop-by-hop, not end-to-end: each leg
+// negotiates options with the proxy independently, so telnetProcessor answers
+// negotiation locally on the leg it arrived on and forwards only 3270 record
+// data (preserving IAC IAC literal-0xFF and IAC EOR record framing). Escape
+// detection also requires parsing: the AID byte is only meaningful at the
+// start of an inbound 3270 record, which a byte copier cannot see.
 package bridge
 
 import (

@@ -17,7 +17,6 @@
  * along with tn3270proxy. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Package screens builds the go3270 screens the proxy renders to clients.
 package screens
 
 import "github.com/racingmars/go3270"

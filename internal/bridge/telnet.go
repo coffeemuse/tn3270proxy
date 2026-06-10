@@ -99,9 +99,6 @@ func newProcessor(r role, termType string, escapeAID byte) *telnetProcessor {
 //   - forward: bytes to write to the peer leg (3270 data + framing)
 //   - reply:   Telnet negotiation bytes to write back on THIS leg
 //   - escaped: true if a record began with escapeAID
-//
-// negotiate() and subnegReply() are implemented in Task 10; until then they
-// return nil.
 func (p *telnetProcessor) process(in []byte) (forward, reply []byte, escaped bool) {
 	for _, b := range in {
 		switch p.state {
