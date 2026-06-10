@@ -36,4 +36,4 @@ generated defaults follow the same pages (see
 9. **[Verifying the install](09-verify.md)** — version, listener, login,
    bridge; common first-connection problems.
 
-Screenshots referenced by this guide live in [images/](images/).
+The [images/](images/) folder holds any screenshots this guide references.

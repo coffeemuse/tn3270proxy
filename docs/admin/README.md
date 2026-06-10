@@ -49,4 +49,4 @@ entry — with a small CLI for lifecycle and maintenance tasks.
 15. [Upgrading & database backups](15-operations-upgrades.md) — migrations,
     automatic pre-upgrade backups, rollback, retention.
 
-Screenshots referenced by this guide live in [images/](images/).
+The [images/](images/) folder holds any screenshots this guide references.
