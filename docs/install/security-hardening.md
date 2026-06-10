@@ -33,8 +33,9 @@ up the key** — losing it makes existing MFA enrollments unrecoverable.
 
 The quick start enables plaintext on `:2323` for emulator convenience. For an
 exposed gateway, set `listeners.plain.enabled = false` in `tn3270proxy.json` and
-serve TLS only. Apply the DoS limits and `trusted_cidrs` described in the main
-configuration docs.
+serve TLS only. Apply the DoS limits described in the main configuration docs;
+trusted client networks (exempt from the pre-auth timers and per-IP cap) are
+managed in the 3270 admin UI (Admin → Networks), not the config file.
 
 ## 5. Run the container as non-root
 

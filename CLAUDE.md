@@ -76,14 +76,17 @@ cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, `ver
                   can't decrypt the MFA_KEY_CHECK sentinel) and injects the *mfa.Cipher.
 cmd/dummy3270     main: tiny standalone TN3270 server (-listen, no TLS/DB/auth/logging)
                   used as a demo/test bridge target; wraps internal/dummy.
-internal/config   Config{DBPath, Plain, TLS, Limits, Log}; Load(args) merges defaults<file<flags
+internal/config   Config{DBPath, Plain, TLS, Limits, Log, MFA}; Load(args) merges defaults<file<flags
                   (Log{Level,File}; flags -log-level/-log-file; level error|warn|info|debug).
-                  Optional JSON file (tn3270proxy.json) defines plain+tls listeners and a
+                  Optional JSON file (tn3270proxy.json) defines plain+tls listeners, an
+                  `mfa` section (key/key_file; env TN3270PROXY_MFA_KEY wins), and a
                   `limits` section (pre_auth_idle/idle/pre_auth_max as Go duration
-                  strings, trusted_cidrs []IP-or-CIDR, bridge_idle "disconnect"|"exempt",
-                  max_conns, max_per_ip; defaults 2m/30m/5m, [], disconnect, 512, 16,
-                  max_per_ip 0 disables). trusted_cidrs is config-file-only by design
-                  (it bypasses DoS controls — deployment surface, not the admin UI).
+                  strings, bridge_idle "disconnect"|"exempt", max_conns, max_per_ip;
+                  defaults 2m/30m/5m, disconnect, 512, 16, max_per_ip 0 disables).
+                  The old `limits.trusted_cidrs` key is REMOVED (DisallowUnknownFields
+                  rejects it): trusted networks are DB-backed now, managed in the admin
+                  UI (store/trusted_networks.go + server.StoreTrustChecker), applying to
+                  new connections without a restart.
 internal/logging  slog setup: New(level, file) → (*slog.Logger, io.Closer) writing
                   human-readable text to stderr always, plus optional JSON to a file
                   (multiHandler). ParseLevel(error|warn|info|debug). Wired in main; the
@@ -100,7 +103,9 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
                   sysconfig.Catalog defaults) live in `reconcileDefaults`, run every
                   Open OUTSIDE the ledger so new catalog entries reach existing DBs.
                   maintenance.go owns the reusable Backup primitive (future home of
-                  Vacuum/IntegrityCheck/SchemaVersion).
+                  Vacuum/IntegrityCheck/SchemaVersion). trusted_networks.go owns the
+                  DB-backed trusted-network records (ParseTrustedCIDR normalizes a bare
+                  IP to a host route; LoadTrustedPrefixes feeds the live trust check).
                   Names are canonical UPPERCASE: usernames, group names, and service
                   NAMEs fold to upper on create/lookup (the single choke point) and the
                   UNIQUE columns are COLLATE NOCASE. A service has a short uppercase
@@ -183,7 +188,10 @@ internal/dummy    Throwaway TN3270 server: pure go3270 screen builders (3 random
                   mockup welcome screens with a blinking red DUMMY3270 marker +
                   "Press PA3 to disconnect." footer) + a Telnet-negotiating
                   accept/repaint loop. No state, no logging.
-internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative, idempotent seeding.
+internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative one-time seeding.
+                  NOT idempotent by design: Apply pre-flights and fails loudly when any
+                  user/service already exists ("seed is a one-time tool"); passwords are
+                  pre-validated so a mid-run bcrypt rejection can't leave partial state.
 internal/quickstart First-run provisioning for the Docker quick-start. Provision(ctx,dir)
                   generates the data dir (proxy.db via store + seed, mfa.key, self-signed
                   cert, motd.txt, branding.txt, SETUP-DEFAULTS.TXT) and writes tn3270proxy.json LAST as
@@ -217,8 +225,15 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   loginBranding/BrandingRead reads BRANDING_FILE fresh on each login paint
                   (8 KiB cap, absolute-path guard), mirroring the MOTD reader; the branding
                   lines are threaded through Presenter.Login and passed to LoginScreen.
-                  adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go)
-                  behind AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
+                  adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go,
+                  admin_system.go sysparms form, admin_networks.go trusted networks,
+                  admin_audit.go 72h RECENT-activity viewer + PTR detail, admin_sessions.go
+                  Active Sessions + 'S' detail + PF11 disconnect) behind
+                  AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
+                  Supporting files: registry.go (sessionRegistry, live-session
+                  views/disconnect), trust.go (TrustChecker/StoreTrustChecker, DB-backed
+                  per-accept), resolver.go (bounded PTR lookups), term.go (negotiated
+                  Term + 24×80 normalize), handle_screen.go (silent PA/Clear AID loop).
                   userSettings flow (session.go, behind the UserSettings Presenter method)
                   handles the `0`-entry self-service: an adaptive menu (userSettingsActions)
                   offering self change-password (re-verify current via s.Authenticate,
@@ -237,7 +252,8 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   bridge_idle=exempt). Post-auth idle at the menu/admin LOGS OUT to the
                   login screen (re-arming pre-auth) rather than disconnecting — audited as
                   logout{idle logout}; PF3-logoff audits as logout{user logoff}. Trusted
-                  clients (limits.trusted_cidrs) skip the pre-auth timers and the per-IP cap
+                  clients (DB-backed trusted networks, admin UI option 5) skip the
+                  pre-auth timers and the per-IP cap
                   but still count toward the global cap. connLimiter (shared across listeners
                   by ServeAll(…, Limits)) claims a global slot BEFORE Accept (over-cap conns
                   wait in the kernel backlog) and enforces the per-IP cap after Accept by
