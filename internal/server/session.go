@@ -17,8 +17,6 @@
  * along with tn3270proxy. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Package server runs the proxy: accepting connections and driving each one
-// through the login → menu → bridge state machine.
 package server
 
 import (
@@ -690,6 +688,9 @@ func (s *Session) confirmEnroll(ctx context.Context, conn net.Conn, term Term, u
 	}
 }
 
+// mfaEnroll forces first-time enrollment at login for an mfa_required user:
+// generate a fresh secret and run the shared confirm loop. PF3 and idle
+// timeout return the user to the login screen rather than disconnecting.
 func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
 	issuer := s.mfaIssuer(ctx)
 	secret, gerr := s.generateSecret(issuer, u.Username)
@@ -713,6 +714,9 @@ func (s *Session) mfaEnroll(ctx context.Context, conn net.Conn, term Term, u sto
 	return true, "", nil
 }
 
+// mfaVerify challenges an enrolled user for a TOTP code at login, persisting
+// the accepted step as the new replay floor (UpdateMFAStep). PF3 and idle
+// timeout return the user to the login screen.
 func (s *Session) mfaVerify(ctx context.Context, conn net.Conn, term Term, u store.User, aud *auditTrail) (bool, string, error) {
 	pt, oerr := s.MFA.Open(u.MFASecret)
 	if oerr != nil {
@@ -812,6 +816,9 @@ func (s *Session) doLogin(ctx context.Context, conn net.Conn, term Term, aud *au
 	}
 }
 
+// usAction enumerates the self-service actions offered by the menu's `0 User
+// Settings` entry; userSettingsActions picks the subset valid for a user's
+// current MFA state.
 type usAction int
 
 const (
