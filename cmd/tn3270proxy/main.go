@@ -17,6 +17,22 @@
  * along with tn3270proxy. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Command tn3270proxy is the TN3270 gateway: it presents a TN3270 server to
+// clients, authenticates users against a local SQLite database, shows a
+// group-filtered menu of backend services, and bridges the chosen session.
+//
+// The first argument selects a subcommand:
+//
+//	serve      run the gateway (the default when omitted)
+//	bootstrap  create the first ADMIN account on a fresh database
+//	seed       bulk-load users/groups/services from a JSON file
+//	quickstart provision a fresh Docker data dir with opinionated defaults
+//	audit      query (list) or trim (prune) the audit trail
+//	mfa        break-glass MFA operations (reset-all)
+//	version    print the resolved build version
+//
+// Each subcommand only wires internal packages together; no business logic
+// lives in this package. Run any subcommand with -h for its flags.
 package main
 
 import (
@@ -42,6 +58,8 @@ func main() {
 	}
 }
 
+// run dispatches on the first argument. An unrecognized first argument falls
+// through to serve (the default subcommand), whose flag parsing rejects it.
 func run(args []string) error {
 	if len(args) > 0 && args[0] == "seed" {
 		return runSeed(args[1:])
@@ -68,6 +86,9 @@ func run(args []string) error {
 	return runServe(args)
 }
 
+// runServe builds and runs the gateway: config → logger → store (runs schema
+// migrations) → fail-closed MFA key check → listeners → one shared session
+// handler served on every listener. It blocks until the accept loops exit.
 func runServe(args []string) error {
 	cfg, err := config.Load(args)
 	if err != nil {
@@ -122,6 +143,8 @@ func runServe(args []string) error {
 	return server.ServeAll(listeners, handler, limits)
 }
 
+// runSeed implements the `seed` subcommand: parse a JSON seed file and apply
+// it idempotently (see internal/seed), then warn if the DB still has no admin.
 func runSeed(args []string) error {
 	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
 	dbPath := fs.String("db", "tn3270proxy.db", "path to SQLite database file")

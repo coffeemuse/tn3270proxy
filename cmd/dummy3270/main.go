@@ -17,6 +17,10 @@
  * along with tn3270proxy. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// Command dummy3270 is a tiny standalone TN3270 server used as a demo and test
+// bridge target for the gateway (point a service's host:port at its -listen
+// address). Deliberately throwaway: no TLS, no auth, no database, no
+// per-connection logging. See internal/dummy for the implementation.
 package main
 
 import (
