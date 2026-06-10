@@ -12,11 +12,12 @@ on:
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Skip bot-authored PRs (Dependabot, the Copilot coding agent, etc.). The
+    # action's OIDC->app-token exchange requires the triggering actor to have
+    # write access, and bots don't (Dependabot also can't read Actions secrets),
+    # so the review can only ever fail to authenticate on these PRs. Bot PRs are
+    # gated by CI (build/test/gofmt) and govulncheck instead.
+    if: github.event.sender.type != 'Bot'
 
     runs-on: ubuntu-latest
     permissions:
