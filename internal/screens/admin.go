@@ -41,6 +41,7 @@ const (
 	FieldMFAStatus          = "mfastatus"       // edit-user form: display-only NONE/PENDING/ENROLLED
 	FieldMFAClear           = "mfaclear"        // edit-user form: Y wipes the secret
 	FieldUserSettingsLocked = "usettingslocked" // edit-user form: Y locks self-service
+	FieldPath               = "path"            // documents import form: server file path
 )
 
 // AdminMenuScreen renders the top-level admin menu sized for geom. The caller
@@ -56,6 +57,7 @@ func AdminMenuScreen(geom Geometry, errMsg string) (go3270.Screen, Cursor) {
 		{"5", "Networks", "Trusted networks (DoS allow-list)"},
 		{"6", "Audit", "Browse the audit trail"},
 		{"7", "Sessions", "Active client sessions"},
+		{"8", "Documents", "MOTD and login branding text"},
 	}
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},

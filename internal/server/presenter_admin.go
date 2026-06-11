@@ -31,9 +31,9 @@ import (
 // go3270; adminFlow tests use a fake. term carries the client's negotiated
 // screen size (and codepage) from Presenter.Negotiate.
 type AdminPresenter interface {
-	// AdminMenu returns choice 1-7 (users/groups/services/system params/
-	// trusted networks/audit log/active sessions) or back (PF3, to the service
-	// menu). It loops internally on invalid input.
+	// AdminMenu returns choice 1-8 (users/groups/services/system params/
+	// trusted networks/audit log/active sessions/documents) or back (PF3, to
+	// the service menu). It loops internally on invalid input.
 	AdminMenu(conn net.Conn, term Term, errMsg string) (choice int, back bool, err error)
 }
 
@@ -70,6 +70,8 @@ func (go3270Presenter) AdminMenu(conn net.Conn, term Term, errMsg string) (int, 
 			return 6, false, nil
 		case "7":
 			return 7, false, nil
+		case "8":
+			return 8, false, nil
 		}
 		errMsg = "Invalid option"
 	}
