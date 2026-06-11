@@ -33,7 +33,6 @@ import (
 	"github.com/coffeemuse/tn3270proxy/internal/mfa"
 	"github.com/coffeemuse/tn3270proxy/internal/screens"
 	"github.com/coffeemuse/tn3270proxy/internal/store"
-	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
 	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/hotp"
@@ -1413,20 +1412,14 @@ func TestSessionReadsBrandingPerLoginPaint(t *testing.T) {
 	}
 	s := newTestSession(t, p, &fakeBridger{})
 	ctx := context.Background()
-	s.Store.SetConfig(ctx, sysconfig.KeyBrandingFile, "/abs/branding.txt")
-	var reads int
-	s.BrandingRead = func(string) ([]byte, error) {
-		reads++
-		return []byte("HELLO\nWORLD"), nil
+	if err := s.Store.SetDocument(ctx, store.DocBranding, "HELLO\nWORLD", "TEST"); err != nil {
+		t.Fatalf("SetDocument BRANDING: %v", err)
 	}
 
 	client, _ := net.Pipe()
 	defer client.Close()
 	s.Run(client)
 
-	if reads < 2 {
-		t.Errorf("branding read %d times, want once per login paint (>=2)", reads)
-	}
 	if len(p.gotBranding) < 2 {
 		t.Fatalf("login painted %d times, want >=2", len(p.gotBranding))
 	}
