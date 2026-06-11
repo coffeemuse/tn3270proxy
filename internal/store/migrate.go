@@ -216,6 +216,15 @@ func migrateV3Documents(ctx context.Context, tx *sql.Tx) error {
 // render-time readers — an over-cap legacy file rendered clipped, so it
 // migrates clipped rather than failing the upgrade).
 func readLegacyDocFile(path string) (string, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !fi.Mode().IsRegular() {
+		// A FIFO or device file would block the read forever — hanging serve
+		// startup mid-migration. Fail fast; the caller logs and starts empty.
+		return "", errors.New("not a regular file")
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err

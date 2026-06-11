@@ -80,10 +80,10 @@ type EditorConfig struct {
 const editorPFHelp = "Enter=Apply    PF3=Save+End    PF7=PgUp    PF8=PgDn    PF12=Cancel"
 
 // RunEditor drives the line editor until PF3 (save + return) or PF12 (cancel).
-// Per transmission, ISPF order: text changes apply first, then prefix commands
-// (I/D/R), then navigation/save. Text changes for protected (over-wide) lines
-// are ignored — those lines change only by re-import. A non-nil error is a
-// dead connection.
+// Per transmission, text changes apply first (to the line indices the user
+// saw), then prefix commands (I/D/R) restructure, then navigation/save.
+// Text changes for protected (over-wide) lines are ignored — those lines
+// change only by re-import. A non-nil error is a dead connection.
 func RunEditor(ctx context.Context, r Renderer, cfg EditorConfig) error {
 	lines := slices.Clone(cfg.Lines)
 	if len(lines) == 0 {

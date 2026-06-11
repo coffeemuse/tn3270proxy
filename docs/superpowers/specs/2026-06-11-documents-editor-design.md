@@ -142,15 +142,18 @@ news truncates at col 79). Rule:
   (`I`), but their content can only be changed by re-import. The editor never
   silently truncates wide art.
 
-**Prefix commands**, processed ISPF-style on Enter (commands first, then text
-changes from the same transmission, then re-render):
+**Prefix commands**, processed on Enter — text changes from the transmission
+apply first (to the lines as the user saw them), then prefix commands
+restructure, then re-render:
 
 - `I` — insert one blank editable line after this one.
 - `D` — delete this line.
 - `R` — repeat (duplicate) this line after itself.
 
-Invalid prefix input re-renders with the red message line and the offending
-prefix preserved.
+Invalid prefix input re-renders with the red message line naming the offending
+command; typed prefixes are not preserved across the veto (**deviation accepted
+at final review** — an accepted simplification: the prefix set is small and
+retyping is cheap).
 
 **Keys:** Enter = apply commands/changes and stay; PF7/PF8 = page; PF3 = END
 (save to DB + return to member list, audited as `doc_update` with line count

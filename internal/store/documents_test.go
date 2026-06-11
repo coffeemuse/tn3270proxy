@@ -71,6 +71,27 @@ func TestSetGetDocument(t *testing.T) {
 	}
 }
 
+// TestDocumentLines pins the trailing-newline semantics: a single trailing EOF
+// newline does not count as an extra line, so an imported "A\nB\n" file is 2
+// lines, matching what the editor shows and re-saves.
+func TestDocumentLines(t *testing.T) {
+	for _, tc := range []struct {
+		content string
+		want    int
+	}{
+		{"", 0},
+		{"A", 1},
+		{"A\nB", 2},
+		{"A\nB\n", 2}, // trailing EOF newline is not an extra line
+		{"A\n\n", 2},  // deliberate blank line before EOF still counts
+		{"\n", 1},     // a single newline is one empty line
+	} {
+		if got := (Document{Content: tc.content}).LineCount(); got != tc.want {
+			t.Errorf("LineCount(%q) = %d, want %d", tc.content, got, tc.want)
+		}
+	}
+}
+
 func TestSetDocumentRejectsUnknownAndOversize(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
@@ -119,6 +140,25 @@ func TestReadDocumentFile(t *testing.T) {
 	}
 	if _, err := ReadDocumentFile(big); !errors.Is(err, ErrDocumentTooLarge) {
 		t.Errorf("oversize file: got %v, want ErrDocumentTooLarge", err)
+	}
+}
+
+// TestReadDocumentFileRejectsNonRegular guards against a path that is not a
+// regular file (directory here; the real-world hazard is a FIFO, whose open or
+// read would block forever). The guard must fail fast, not hang.
+func TestReadDocumentFileRejectsNonRegular(t *testing.T) {
+	_, err := ReadDocumentFile(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("directory path: got %v, want not-a-regular-file error", err)
+	}
+}
+
+// TestReadLegacyDocFileRejectsNonRegular is the same guard for the migration's
+// truncating reader — a FIFO there would hang serve startup.
+func TestReadLegacyDocFileRejectsNonRegular(t *testing.T) {
+	_, err := readLegacyDocFile(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("directory path: got %v, want not-a-regular-file error", err)
 	}
 }
 

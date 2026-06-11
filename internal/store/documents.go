@@ -57,12 +57,14 @@ type Document struct {
 	UpdatedBy string // actor username; "" until first save
 }
 
-// Lines splits Content for the editor; nil for an empty document.
+// Lines splits Content for the editor; nil for an empty document. A single
+// trailing EOF newline does not count as an extra line; round-trip via the
+// editor re-joins without it — the render path drops trailing blanks either way.
 func (d Document) Lines() []string {
 	if d.Content == "" {
 		return nil
 	}
-	return strings.Split(d.Content, "\n")
+	return strings.Split(strings.TrimSuffix(d.Content, "\n"), "\n")
 }
 
 // LineCount is the member-list Lines column.
@@ -145,6 +147,14 @@ func ReadDocumentFile(path string) (string, error) {
 	}
 	if !filepath.IsAbs(path) {
 		return "", errors.New("path must be absolute")
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !fi.Mode().IsRegular() {
+		// A FIFO or device file would block the read forever; fail fast.
+		return "", errors.New("not a regular file")
 	}
 	f, err := os.Open(path)
 	if err != nil {

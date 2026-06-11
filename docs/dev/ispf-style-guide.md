@@ -236,9 +236,11 @@ ISPF column ruler (`----+----1----+----2----+----3…`) aligned with the text
 columns at col 4.
 
 **Prefix commands (I / D / R):** typed in the 2-char prefix area then Enter
-to apply. An invalid command vetoes the whole transmission (the set is applied
-atomically or not at all). Commands apply in descending line-index order so
-structural shifts do not move targets. The document can never become empty:
+to apply. An invalid command vetoes the PREFIX SET (all commands apply or none
+do); text changes from the same transmission still apply — they were made
+against the lines as displayed and are kept. Commands apply in descending
+line-index order so structural shifts do not move targets. The document can
+never become empty:
 deleting the last line leaves one blank line.
 
 **Key map:** `Enter=Apply  PF3=Save+End  PF7=PgUp  PF8=PgDn  PF12=Cancel`

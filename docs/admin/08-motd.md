@@ -61,6 +61,10 @@ back out for offline editing:
 - Write maintenance windows in **UTC** by convention.
 - Branding lines render verbatim from column 0 on the login screen body;
   vertical centering is automatic when the art is shorter than the body.
+- Editing a line in the 3270 editor strips its trailing spaces (a 3270 terminal
+  cannot distinguish trailing blanks from empty positions); art that depends on
+  trailing spaces survives import and render, but not an in-editor edit of that
+  line.
 
 Saves and imports are audited (`doc_update` / `doc_import`) with the actor,
 line count, and (for imports) the source path.
