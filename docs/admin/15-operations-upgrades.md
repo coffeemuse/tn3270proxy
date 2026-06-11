@@ -15,6 +15,16 @@ Each migration runs in its own transaction and advances the recorded version
 atomically, so an interrupted upgrade leaves the database at the last fully
 applied version with the snapshot intact.
 
+## Schema v3 — Documents table (one-time file import)
+
+Upgrading to schema v3 creates the `documents` table and performs a one-time
+import of the files configured in the old **MOTD Import Path** / **Branding
+Import Path** system parameters into the new `documents` table (actor
+`migration`). A missing, unreadable, or non-absolute path is skipped with a
+warning and the document starts empty — re-import it from the admin UI
+(**8 Documents → I**) or the CLI (`tn3270proxy doc import`). As with every
+migration, a `*.pre-migrate-*.bak` backup is written first.
+
 ## Rolling back
 
 There are no "down" migrations by design. To roll back an upgrade:

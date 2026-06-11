@@ -10,8 +10,8 @@ No restart is ever needed — every parameter is read at use time.
 | Parameter | Default | What it does |
 |---|---|---|
 | System ID | `PROXY` | Identifier in the menu's status block. A–Z/0–9/dash, max 7. Effective next render. |
-| MOTD File | *(empty)* | Absolute path to the post-login MOTD/NEWS text. Empty disables. Read fresh each login — see [MOTD](08-motd.md). |
-| Branding File | *(empty)* | Absolute path to login-screen branding art. Empty shows the default. Read fresh each login paint — see below. |
+| MOTD Import Path | *(empty)* | Default source path pre-filled on the Documents import screen. The displayed content itself lives in the database (admin menu → [Documents](08-motd.md)); this parameter only says where imports come from. |
+| Branding Import Path | *(empty)* | Default source path pre-filled on the Documents import screen for login-screen branding. The displayed content itself lives in the database (admin menu → [Documents](08-motd.md)); this parameter only says where imports come from. |
 | Auth Delay Base (sec) | `2` | Failed-auth backoff base. `0` disables throttling. |
 | Max Auth Tries | `5` | Failure count where the backoff stops growing. |
 | Auth Fail Window (min) | `15` | Idle period after which a username's failure count decays. |
@@ -38,13 +38,3 @@ delay is recorded in the `auth_fail` / `mfa_failed` audit detail
 pair it with an external banner like fail2ban if you want bans — see
 [Logging](13-logging.md).
 
-## Branding file authoring
-
-The branding file is plain text painted verbatim on the login screen's body
-(between the status header and the credential fields):
-
-- Absolute path only; up to 8 KiB read per paint.
-- Lines render from column 0 and are clipped at the screen edge; extra lines
-  beyond the body region are dropped, shorter art is vertically centered.
-- Read fresh on every login paint — edits show up immediately, and an
-  unreadable file just falls back to the default art.

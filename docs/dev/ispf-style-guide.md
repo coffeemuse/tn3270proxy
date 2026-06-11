@@ -155,6 +155,8 @@ description.
 | 4 | `Sysparms` | Runtime system parameters |
 | 5 | `Networks` | Trusted networks (DoS allow-list) |
 | 6 | `Audit` | Browse the audit trail |
+| 7 | `Sessions` | Active client sessions |
+| 8 | `Documents` | MOTD and login branding text |
 
 The User Settings menu is adaptive (its rows depend on MFA state), so its
 `UserSettingsRow` carries a short `Name` plus a `Description` rendered on the same
@@ -215,6 +217,44 @@ two `ui3270` builders polishes all of them at once.
   (`Command ===>`, blue headings, `S` line command, RowInfo on r0); the record
   detail uses a read-only field panel (DetailView). Built to this guide from day one.
 
+### Editor screens
+
+The `ui3270.RunEditor` driver and `buildEditorScreen` implement an ISPF-style
+line editor (Documents — MOTD and login branding). Key layout and rules:
+
+**Column layout per data row:**
+
+| Columns | Role | Color / attr |
+|---|---|---|
+| 0 (attribute byte) | Separates rows; never visible | — |
+| 1–2 | Prefix command input (2 chars) | Green, underscored, writable |
+| 3 (attribute byte) | Separates prefix from text area | — |
+| 4–79 | Editable text (76 columns) | Green, writable; Yellow + protected when over-wide |
+
+**Ruler row (body top row, r3):** a Blue protected field showing the classic
+ISPF column ruler (`----+----1----+----2----+----3…`) aligned with the text
+columns at col 4.
+
+**Prefix commands (I / D / R):** typed in the 2-char prefix area then Enter
+to apply. An invalid command vetoes the whole transmission (the set is applied
+atomically or not at all). Commands apply in descending line-index order so
+structural shifts do not move targets. The document can never become empty:
+deleting the last line leaves one blank line.
+
+**Key map:** `Enter=Apply  PF3=Save+End  PF7=PgUp  PF8=PgDn  PF12=Cancel`
+(PF3 is ISPF's `END` — save and return; PF12 is ISPF's `CANCEL` — discard all
+changes). If a prefix error is pending when PF3 is pressed, the error is shown
+and the save is deferred (re-press PF3 after the screen re-presents).
+
+**Over-wide lines:** lines whose rune count exceeds 76 (editorTextMax) render
+Yellow and protected. Text changes to them are silently ignored — only
+structural prefix commands (I/D/R) and re-import can change them.
+
+**Trailing-NUL rule:** editable text fields are written to the screen WITHOUT
+trailing space padding. The field's unused trailing positions stay NUL, which
+is what enables native 3270 Insert mode (padding with spaces would lock the
+keyboard). Never add trailing space padding to editor text fields.
+
 ---
 
 ## 5. Cursor home
@@ -261,7 +301,7 @@ Conscious departures from textbook ISPF, with rationale:
      Date / Time / System ID / Release block at the status column (rows 0–3).
    - The red error line moves to **row 1** (col 2), truncated so it cannot collide
      with the Time block at the status column.
-   - Rows 4 .. `BodyBottomRow()-1` render the `BRANDING_FILE` contents (cols 0–79
+   - Rows 4 .. `BodyBottomRow()-1` render the BRANDING document content (cols 0–79
      verbatim, no indent), vertically centered when shorter than the region and
      top-aligned/clipped when taller.
    - The `User ID` and `Password` fields share `BodyBottomRow()` (the password
