@@ -18,6 +18,12 @@ user (e.g. a shared/guest account): it hides the `0` self-service entry and free
 account's MFA as admin-managed — a stored secret is still verified at login, but the
 account is never force-enrolled (so a shared login can't be hijacked into holding the only
 TOTP).
+MOTD and login branding live in the DB (`documents` table, names `MOTD` / `BRANDING`),
+managed via the admin **Documents** member list (admin menu option 8) — an ISPF-style
+line editor with I/D/R prefix commands, a 76-column editable width, and over-wide lines
+rendered read-only (yellow, re-import to change) — plus an import-from-server-file form
+(pre-filled from the `MOTD_FILE` / `BRANDING_FILE` sysconfig paths) and the `doc
+import`/`doc export` CLI verbs for provisioning and offline editing.
 
 The connect → login → menu → bridge core loop (the MVP) is **complete and on `main`**.
 Remaining work is in `docs/superpowers/ROADMAP.md`.
@@ -49,6 +55,7 @@ go build -ldflags "-X main.version=v1.2.3" -o bin/tn3270proxy ./cmd/tn3270proxy
 ./bin/tn3270proxy audit prune -db proxy.db -older-than 90d     # retention cleanup
 TN3270PROXY_MFA_KEY=$(openssl rand -base64 32) ./bin/tn3270proxy serve -db proxy.db   # serve with MFA enabled
 ./bin/tn3270proxy mfa reset-all -db proxy.db                   # break-glass: wipe all MFA enrollments (needs the key)
+./bin/tn3270proxy doc import -db proxy.db -name MOTD -file motd.txt   # import a document (doc export round-trips)
 
 ./bin/tn3270proxy serve -db proxy.db -log-level debug -log-file proxy.json   # slog: stderr text + JSON file
 
@@ -66,7 +73,8 @@ Connect with a real 3270 emulator: `c3270 127.0.0.1:2323`.
 
 ```
 cmd/tn3270proxy   main: subcommands `serve` (default), `seed`, `bootstrap`, `version`,
-                  `audit list|prune`, `mfa reset-all` (break-glass), and `quickstart`;
+                  `audit list|prune`, `mfa reset-all` (break-glass), `doc import|export`,
+                  and `quickstart`;
                   wires everything. `quickstart` provisions a fresh `-data` dir with
                   opinionated Docker defaults (admin + sample users + DEMO service →
                   dummy3270 + MFA key + self-signed cert + MOTD + SETUP-DEFAULTS.TXT);
@@ -107,6 +115,15 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
                   Vacuum/IntegrityCheck/SchemaVersion). trusted_networks.go owns the
                   DB-backed trusted-network records (ParseTrustedCIDR normalizes a bare
                   IP to a host route; LoadTrustedPrefixes feeds the live trust check).
+                  documents.go owns DB-resident text documents (MOTD / BRANDING):
+                  Document{Name,Content,Lines(),LineCount()}, GetDocument/SetDocument/
+                  ListDocuments, NormalizeDocName (the single choke point, canonical
+                  uppercase, rejects unknown names), ReadDocumentFile (absolute-path
+                  required; rejects over MaxDocumentBytes — 8 KiB — rather than
+                  truncating); reconcileDefaults seeds the two empty rows; migration v3
+                  creates the documents table and does the one-time cutover import from
+                  the legacy MOTD_FILE/BRANDING_FILE paths (truncating, non-fatal skip
+                  for missing/unreadable/relative paths).
                   Names are canonical UPPERCASE: usernames, group names, and service
                   NAMEs fold to upper on create/lookup (the single choke point) and the
                   UNIQUE columns are COLLATE NOCASE. A service has a short uppercase
@@ -133,8 +150,9 @@ internal/screens  Pure go3270 screen builders: LoginScreen(geom, status, brandin
                   uses a branding-forward layout (not the three-band ISPF convention): rows 0–3
                   are a status header (centered title + Date/Time/System ID/Release block at
                   StatusBlockCol()); row 1 col 2 holds the red error field (truncated to avoid
-                  the Time block); rows 4..BodyBottomRow()-1 render BRANDING_FILE lines verbatim
-                  at col 0 (vertically centered when shorter, top-aligned/clipped when taller);
+                  the Time block); rows 4..BodyBottomRow()-1 render the passed-in branding
+                  lines verbatim at col 0 (vertically centered when shorter, top-aligned/clipped
+                  when taller; lines come from the DB BRANDING document via loginBranding);
                   BodyBottomRow() holds the User ID and Password credential fields (password
                   input reaches col 78); HelpRow() shows PF3=Disconnect. Cursor homes to
                   (BodyBottomRow(), 16). Deliberate exception — see docs/dev/ispf-style-guide.md §6.8.
@@ -169,11 +187,23 @@ internal/ui3270   Generic 3270 driver layer behind a Renderer seam (NewGo3270Ren
                   RunForm/RunList/RunSnapshotList drive form/list/detail screens + row
                   helpers, so the admin and self-service flows share one paging/line-command
                   engine. ui3270 row helpers are the non-screens-pkg way to place rows.
+                  Editor widget (editor.go + editorscreen.go): EditorView/EditorAction/
+                  EditorLine types + RunEditor driver + buildEditorScreen screen builder;
+                  prefix commands applied via applyPrefix (I=insert-below/D=delete/
+                  R=repeat, keyed by global line index, descending order, invalid command
+                  vetoes the whole set); editorTextMax=76 editable columns (attribute +
+                  2-char prefix input + text attribute + 76 text cols = 80); over-wide
+                  lines render protected (yellow); pageBounds shared with list paging.
 internal/sysconfig Catalog of runtime system parameters operators edit via the admin UI
-                  (MOTD file path, BRANDING_FILE path, MFA issuer, System ID, #48 auth-throttle params). One
-                  Entry declaration per param; the store seeds the default and the admin
-                  form builds from the labels. The MFA_KEY_CHECK sentinel is deliberately
-                  NOT a Catalog entry (hidden from the form).
+                  (System ID, MOTD_FILE import path, BRANDING_FILE import path, MFA
+                  issuer, #48 auth-throttle params, audit params). One Entry declaration
+                  per param; the store seeds the default and the admin form builds from
+                  the labels. MOTD_FILE and BRANDING_FILE are the DEFAULT IMPORT PATHS
+                  for the admin Documents import form (pre-filled from these values) and
+                  were the source for the v3 migration one-time cutover — they are NOT
+                  the render source (rendered content lives in the documents table). The
+                  MFA_KEY_CHECK sentinel is deliberately NOT a Catalog entry (hidden from
+                  the form).
 internal/mfa      Pure TOTP (RFC 6238, pquerna/otp, 80-bit/16-char base32) + AES-256-GCM
                   secret-at-rest. NewCipher/Seal/Open (ErrDecrypt on wrong key), GenerateSecret,
                   Chunk (ABCD EFGH…), Validate(secret, code, lastStep, now) → (ok, step) with
@@ -199,6 +229,10 @@ internal/quickstart First-run provisioning for the Docker quick-start. Provision
                   the "provisioned" marker. Detection: config present → no-op
                   (ErrAlreadyProvisioned); proxy.db without config → partial-dir error;
                   else fresh. Pure-Go cert (no openssl); shares GenPassword with bootstrap.
+                  Seeds the documents table (DocMOTD / DocBranding) with the default
+                  content at provision time; motd.txt and branding.txt remain on disk as
+                  the import-path defaults (MOTD_FILE / BRANDING_FILE sysconfig values)
+                  and as seeds for offline editing — the DB is the render source of truth.
                   Not the production path (see docs/install/08-security-hardening.md).
 internal/version  Resolve(injected) string: returns injected when set by ldflags, otherwise
                   falls back to a 12-char VCS revision from runtime/debug.ReadBuildInfo
@@ -223,13 +257,15 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   A user_settings_locked account skips the enrollment branch entirely (forced or
                   self-service); the verify branch is unchanged, and the menu/dispatch hide and
                   reject `0`.
-                  loginBranding/BrandingRead reads BRANDING_FILE fresh on each login paint
-                  (8 KiB cap, absolute-path guard), mirroring the MOTD reader; the branding
-                  lines are threaded through Presenter.Login and passed to LoginScreen.
+                  loginBranding reads the BRANDING document from the DB fresh on each
+                  login paint; maybeShowNews reads the MOTD document fresh on each
+                  post-login MOTD gate. The old file-based BrandingRead/MOTDRead seams
+                  are gone — content comes exclusively from the documents table.
                   adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go,
                   admin_system.go sysparms form, admin_networks.go trusted networks,
                   admin_audit.go 72h RECENT-activity viewer + PTR detail, admin_sessions.go
-                  Active Sessions + 'S' detail + PF11 disconnect) behind
+                  Active Sessions + 'S' detail + PF11 disconnect, admin_documents.go
+                  Documents member list E=editor / I=import + doc_update/doc_import audits) behind
                   AdminStore/AdminPresenter seams handles the `A`-entry CRUD flow.
                   Supporting files: registry.go (sessionRegistry, live-session
                   views/disconnect), trust.go (TrustChecker/StoreTrustChecker, DB-backed
@@ -322,6 +358,11 @@ so the session is unit-tested with fakes (no live 3270 client needed).
 
 ## Gotchas (learned the hard way)
 
+- **Editor text fields are written unpadded:** `buildEditorScreen` writes text field
+  content WITHOUT trailing-space padding so that the field's trailing positions stay NUL —
+  3270 native insert mode requires NUL-filled trailing positions to shift characters right.
+  Padding with spaces locks the keyboard on Insert. Do NOT "fix" this. The smoke script
+  asserts mid-line insert works in the editor.
 - **go3270 cursor:** `HandleScreen`'s initial cursor `(crow, ccol)` must be
   `(field.Row, field.Col + 1)` — a field's `Col` is the **attribute byte**, so input starts
   one column right. `(0,0)` or the field's own `Col` leaves the cursor in the wrong place.
