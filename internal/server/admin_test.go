@@ -56,6 +56,9 @@ type fakeAdminPresenter struct {
 	gotSnaps []ui3270.SnapshotView
 	gotDets  []ui3270.DetailView
 	detActs  []ui3270.ListAction
+
+	edits    []ui3270.EditorAction
+	gotEdits []ui3270.EditorView
 }
 
 func (f *fakeAdminPresenter) AdminMenu(_ net.Conn, _ Term, errMsg string) (int, bool, error) {
@@ -106,8 +109,14 @@ func (f *fakeAdminPresenter) Detail(v ui3270.DetailView) error {
 	return nil
 }
 
-func (f *fakeAdminPresenter) Editor(ui3270.EditorView) (ui3270.EditorAction, error) {
-	return ui3270.EditorAction{PF: 12}, nil
+func (f *fakeAdminPresenter) Editor(v ui3270.EditorView) (ui3270.EditorAction, error) {
+	f.gotEdits = append(f.gotEdits, v)
+	if len(f.edits) == 0 {
+		panic("unexpected Editor call")
+	}
+	a := f.edits[0]
+	f.edits = f.edits[1:]
+	return a, nil
 }
 
 func (f *fakeAdminPresenter) DetailAct(v ui3270.DetailView, _ int) (ui3270.ListAction, error) {
