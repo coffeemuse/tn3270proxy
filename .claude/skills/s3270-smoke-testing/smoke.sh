@@ -949,7 +949,7 @@ Enter()
 Wait(5,InputField)
 Ascii()
 Tab()
-String("SMOKE EDIT LINE ONE")
+String("  SMOKE EDIT LINE ONE")
 PF(3)
 Wait(5,InputField)
 Ascii()
@@ -958,6 +958,8 @@ String(E)
 Enter()
 Wait(5,InputField)
 Tab()
+Right()
+Right()
 Right()
 Right()
 Right()
@@ -1037,9 +1039,10 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 19o PF12 did not return to the member list"
 fi
 
-# The saved MOTD ("SMOKE EDIT LINE ONE", saved by walk A's PF3; walk B's edits
-# were cancelled) renders on the NEWS screen at the next login: alice lands on
-# the 1-page gate (the text shows BEFORE the menu), then one ENTER clears it.
+# The saved MOTD ("  SMOKE EDIT LINE ONE" with a deliberate 2-space indent,
+# saved by walk A's PF3; walk B's edits were cancelled) renders on the NEWS
+# screen at the next login: alice lands on the 1-page gate (the text shows
+# BEFORE the menu), then one ENTER clears it.
 s3 t19news <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
 Wait(5,InputField)
@@ -1064,6 +1067,15 @@ fi
 # Walk B's cancelled insert (the X) must NOT have been persisted.
 ncheck "19q PF12-cancelled edit not persisted" "SMOKEX" "$WORK/t19news.out"
 check "19r ENTER clears the gate to the menu" "TN3270 GATEWAY MENU" "$WORK/t19news.out"
+# Leading-whitespace round trip (KeepSpaces contract): go3270 TrimSpaces field
+# values unless the editor's text fields set KeepSpaces, which silently
+# destroys indents/ASCII-art positioning on save. NEWS renders MOTD lines at
+# col 0 verbatim, so the typed 2-space indent must survive to the line start.
+# Found in human QA; unit tests feed synthetic Responses and cannot catch it.
+# Anchor anatomy: "data: " (s3270 Ascii row prefix) + 1 blank (the NEWS field
+# attribute byte at col 0) + the 2-space indent = exactly 4 spaces before SMOKE.
+# Without KeepSpaces the indent is eaten and only 2 spaces remain — no match.
+check "19s leading whitespace survives editor save" "^data:    SMOKE EDIT LINE ONE" "$WORK/t19news.out"
 
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="

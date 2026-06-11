@@ -56,6 +56,13 @@ func TestBuildEditorScreenEditableLine(t *testing.T) {
 	if strings.HasSuffix(txt.Content, " ") || len(txt.Content) != len("HELLO") {
 		t.Errorf("txt0 content padded: %q", txt.Content)
 	}
+	// go3270 TrimSpaces every field value unless KeepSpaces is set — without
+	// it, leading whitespace (paragraph indents, ASCII-art positioning) is
+	// destroyed before editorAction ever sees the value. Found in live QA;
+	// synthetic-Response tests cannot catch it.
+	if !txt.KeepSpaces {
+		t.Error("txt0 missing KeepSpaces: go3270 would strip leading whitespace")
+	}
 	// Cursor on the first prefix input (attribute byte + 1).
 	if cur != (Cursor{Row: pfx.Row, Col: pfx.Col + 1}) {
 		t.Errorf("cursor %+v, want {%d %d}", cur, pfx.Row, pfx.Col+1)

@@ -62,9 +62,12 @@ func buildEditorScreen(rows int, v EditorView) (go3270.Screen, Cursor) {
 			screen = append(screen, go3270.Field{Row: row, Col: 3, Color: go3270.Yellow,
 				Content: truncRunes(ln.Text, editorTextMax)})
 		} else {
+			// KeepSpaces: go3270 otherwise TrimSpaces the returned value,
+			// destroying leading whitespace (indents, ASCII-art positioning).
+			// Trailing spaces/NULs are trimmed by editorAction instead.
 			screen = append(screen, go3270.Field{Row: row, Col: 3,
 				Name: fmt.Sprintf("%s%d", fieldTxtPrefix, i), Write: true,
-				Color: go3270.Green, Content: ln.Text})
+				KeepSpaces: true, Color: go3270.Green, Content: ln.Text})
 		}
 	}
 	// Stop field: the last text field would otherwise run through the blank
