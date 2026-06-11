@@ -24,7 +24,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/coffeemuse/tn3270proxy/internal/sysconfig"
@@ -157,17 +161,71 @@ func migrateV2AuditActor(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-// migrateV3Documents creates the documents table and imports the MOTD/branding
-// files configured in system_config (one-time cutover; import logic follows in
-// the next task).
+// migrateV3Documents creates the documents table and performs the one-time
+// cutover import: for each legacy path param (MOTD_FILE / BRANDING_FILE) whose
+// value points at a readable absolute path, the file's contents become the
+// document's initial content. Missing/unreadable/relative paths are skipped
+// NON-FATALLY (the document starts empty — the same user-visible behavior as an
+// unset param before the cutover). Over-cap files are truncated, matching the
+// legacy capped render readers. The params themselves survive as the default
+// import source paths (see internal/sysconfig).
 func migrateV3Documents(ctx context.Context, tx *sql.Tx) error {
-	_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS documents (
+	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS documents (
 		name       TEXT PRIMARY KEY COLLATE NOCASE NOT NULL,
 		content    TEXT NOT NULL DEFAULT '',
 		updated_at TEXT NOT NULL DEFAULT '',
 		updated_by TEXT NOT NULL DEFAULT ''
-	)`)
-	return err
+	)`); err != nil {
+		return err
+	}
+	imports := []struct{ doc, key string }{
+		{DocMOTD, sysconfig.KeyMOTDFile},
+		{DocBranding, sysconfig.KeyBrandingFile},
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, im := range imports {
+		var path string
+		err := tx.QueryRowContext(ctx,
+			"SELECT value FROM system_config WHERE key = ?", im.key).Scan(&path)
+		if err == sql.ErrNoRows {
+			continue // fresh DB: param not seeded yet at migration time
+		}
+		if err != nil {
+			return fmt.Errorf("read %s: %w", im.key, err)
+		}
+		path = strings.TrimSpace(path)
+		if path == "" || !filepath.IsAbs(path) {
+			continue
+		}
+		content, rerr := readLegacyDocFile(path)
+		if rerr != nil {
+			slog.Default().Warn("documents migration: configured file unreadable; document starts empty",
+				"key", im.key, "path", path, "error", rerr)
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			"INSERT OR REPLACE INTO documents (name, content, updated_at, updated_by) VALUES (?, ?, ?, ?)",
+			im.doc, content, now, "migration"); err != nil {
+			return fmt.Errorf("import %s: %w", im.doc, err)
+		}
+	}
+	return nil
+}
+
+// readLegacyDocFile reads at most MaxDocumentBytes (truncating, like the old
+// render-time readers — an over-cap legacy file rendered clipped, so it
+// migrates clipped rather than failing the upgrade).
+func readLegacyDocFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, MaxDocumentBytes))
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 // schemaVersion reads PRAGMA user_version using any query-capable handle.
