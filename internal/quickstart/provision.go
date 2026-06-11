@@ -102,6 +102,15 @@ func Provision(ctx context.Context, dir string) (*Result, error) {
 		return nil, fmt.Errorf("set branding config: %w", err)
 	}
 
+	// Documents: the DB is the render source of truth; the starter files above
+	// remain as the import-path defaults and offline-editing seeds.
+	if err := st.SetDocument(ctx, store.DocMOTD, DefaultMOTD(), "quickstart"); err != nil {
+		return nil, fmt.Errorf("seed motd document: %w", err)
+	}
+	if err := st.SetDocument(ctx, store.DocBranding, DefaultBranding(), "quickstart"); err != nil {
+		return nil, fmt.Errorf("seed branding document: %w", err)
+	}
+
 	// Human-readable credential record. World-readable (0644) on purpose: it is
 	// written into a root-owned bind mount and the host user must be able to open
 	// it. Secrets (mfa.key, key.pem) stay 0600. The file tells the user to delete
