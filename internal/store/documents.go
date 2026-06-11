@@ -17,11 +17,6 @@
  * along with tn3270proxy. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Package store: documents.go owns the documents table — the DB-resident text
-// documents (MOTD, login branding) edited via the admin Documents screen.
-// Content is LF-joined lines; the 8 KiB cap is enforced at WRITE time so reads
-// never need a cap.
-
 package store
 
 import (
@@ -32,6 +27,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -76,10 +72,8 @@ func (d Document) LineCount() int { return len(d.Lines()) }
 // KnownDocuments (the single choke point, mirroring usernames/service names).
 func NormalizeDocName(name string) (string, error) {
 	n := strings.ToUpper(strings.TrimSpace(name))
-	for _, k := range KnownDocuments {
-		if n == k {
-			return n, nil
-		}
+	if slices.Contains(KnownDocuments, n) {
+		return n, nil
 	}
 	return "", fmt.Errorf("unknown document %q (want %s)", name, strings.Join(KnownDocuments, " or "))
 }

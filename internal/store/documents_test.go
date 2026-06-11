@@ -29,18 +29,6 @@ import (
 	"time"
 )
 
-// newDocStore opens a fresh store in a temp dir (mirrors the helper style used
-// by the other store tests; reuse an existing helper if one fits).
-func newDocStore(t *testing.T) *Store {
-	t.Helper()
-	st, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
-	return st
-}
-
 func TestNormalizeDocName(t *testing.T) {
 	for _, tc := range []struct {
 		in, want string
@@ -63,7 +51,7 @@ func TestNormalizeDocName(t *testing.T) {
 }
 
 func TestSetGetDocument(t *testing.T) {
-	st := newDocStore(t)
+	st := newTestStore(t)
 	ctx := context.Background()
 	if err := st.SetDocument(ctx, "motd", "HELLO\nWORLD", "ADMIN"); err != nil {
 		t.Fatal(err)
@@ -84,7 +72,7 @@ func TestSetGetDocument(t *testing.T) {
 }
 
 func TestSetDocumentRejectsUnknownAndOversize(t *testing.T) {
-	st := newDocStore(t)
+	st := newTestStore(t)
 	ctx := context.Background()
 	if err := st.SetDocument(ctx, "NOPE", "x", "A"); err == nil {
 		t.Error("unknown name: want error")
@@ -96,7 +84,7 @@ func TestSetDocumentRejectsUnknownAndOversize(t *testing.T) {
 }
 
 func TestListDocumentsAlwaysShowsKnownDocs(t *testing.T) {
-	st := newDocStore(t)
+	st := newTestStore(t)
 	docs, err := st.ListDocuments(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -131,5 +119,74 @@ func TestReadDocumentFile(t *testing.T) {
 	}
 	if _, err := ReadDocumentFile(big); !errors.Is(err, ErrDocumentTooLarge) {
 		t.Errorf("oversize file: got %v, want ErrDocumentTooLarge", err)
+	}
+}
+
+// TestDocumentReopenSurvival guards the invariant that reconcileDefaults'
+// INSERT OR IGNORE never clobbers saved content on re-open.
+func TestDocumentReopenSurvival(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "reopen.db")
+	ctx := context.Background()
+
+	st, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+	if err := st.SetDocument(ctx, DocMOTD, "PERSISTED", "ADMIN"); err != nil {
+		t.Fatalf("SetDocument: %v", err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	st2, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("second Open: %v", err)
+	}
+	defer st2.Close()
+
+	d, err := st2.GetDocument(ctx, DocMOTD)
+	if err != nil {
+		t.Fatalf("GetDocument after reopen: %v", err)
+	}
+	if d.Content != "PERSISTED" {
+		t.Errorf("reopen clobbered content: got %q, want %q", d.Content, "PERSISTED")
+	}
+}
+
+// TestSetDocumentExactMaxSize verifies that content of exactly MaxDocumentBytes
+// is accepted (boundary: one byte under the rejection threshold).
+func TestSetDocumentExactMaxSize(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	exact := strings.Repeat("x", MaxDocumentBytes)
+	if err := st.SetDocument(ctx, DocMOTD, exact, "A"); err != nil {
+		t.Errorf("exact MaxDocumentBytes: got %v, want nil", err)
+	}
+}
+
+// TestReadDocumentFileExactMaxSize verifies that a file of exactly
+// MaxDocumentBytes is accepted.
+func TestReadDocumentFileExactMaxSize(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "exact.txt")
+	if err := os.WriteFile(p, []byte(strings.Repeat("y", MaxDocumentBytes)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadDocumentFile(p)
+	if err != nil {
+		t.Errorf("exact MaxDocumentBytes file: got %v, want nil", err)
+	}
+	if len(got) != MaxDocumentBytes {
+		t.Errorf("got len %d, want %d", len(got), MaxDocumentBytes)
+	}
+}
+
+// TestGetDocumentUnknownName verifies that GetDocument returns an error for an
+// unrecognised document name (NormalizeDocName rejects it before any DB hit).
+func TestGetDocumentUnknownName(t *testing.T) {
+	st := newTestStore(t)
+	if _, err := st.GetDocument(context.Background(), "BOGUS"); err == nil {
+		t.Error("GetDocument(BOGUS): want error, got nil")
 	}
 }
