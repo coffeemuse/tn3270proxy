@@ -54,6 +54,7 @@ type fakePresenter struct {
 	gotStatus         []screens.MenuStatus // every status passed to Menu, in call order
 	loginStatuses     []screens.MenuStatus // every status passed to Login, in call order
 	gotBranding       [][]string           // branding lines passed to each Login call
+	loginHook         func(call int)       // optional: runs after Login paint #call (0-based) is recorded
 	newsCalls         [][][]string         // pages passed to each News call, in order
 	newsResults       []error              // queued News return values; default nil
 	enrolls           []mfaResult
@@ -103,6 +104,9 @@ func (f *fakePresenter) Login(conn net.Conn, term Term, status screens.MenuStatu
 	f.loginStatuses = append(f.loginStatuses, status)
 	f.loginErrors = append(f.loginErrors, errMsg)
 	f.gotBranding = append(f.gotBranding, branding)
+	if f.loginHook != nil {
+		f.loginHook(len(f.gotBranding) - 1)
+	}
 	r := f.logins[0]
 	f.logins = f.logins[1:]
 	return r.user, r.pass, r.quit, r.err
@@ -1400,12 +1404,12 @@ func TestSessionAuditActorAttribution(t *testing.T) {
 	}
 }
 
-func TestSessionReadsBrandingPerLoginPaint(t *testing.T) {
+func TestSessionBrandingRereadFreshEachLoginPaint(t *testing.T) {
 	p := &fakePresenter{
 		termType: "IBM-3278-2-E",
 		logins: []loginResult{
-			{user: "alice", pass: "bad"},  // render 1
-			{user: "alice", pass: "good"}, // render 2
+			{user: "alice", pass: "bad"},  // render 1 (original branding)
+			{user: "alice", pass: "good"}, // render 2 (mutated branding)
 			{quit: true},                  // render 3 (after menu logoff)
 		},
 		menuPicks: []menuResult{{quit: true}},
@@ -1415,6 +1419,16 @@ func TestSessionReadsBrandingPerLoginPaint(t *testing.T) {
 	if err := s.Store.SetDocument(ctx, store.DocBranding, "HELLO\nWORLD", "TEST"); err != nil {
 		t.Fatalf("SetDocument BRANDING: %v", err)
 	}
+	// Mutate the BRANDING document after the first login paint: a later paint
+	// must show the NEW content, proving branding is re-read per paint, not
+	// cached at session start.
+	p.loginHook = func(call int) {
+		if call == 0 {
+			if err := s.Store.SetDocument(ctx, store.DocBranding, "FRESH\nLINES", "TEST"); err != nil {
+				t.Errorf("SetDocument BRANDING (mutation): %v", err)
+			}
+		}
+	}
 
 	client, _ := net.Pipe()
 	defer client.Close()
@@ -1423,9 +1437,12 @@ func TestSessionReadsBrandingPerLoginPaint(t *testing.T) {
 	if len(p.gotBranding) < 2 {
 		t.Fatalf("login painted %d times, want >=2", len(p.gotBranding))
 	}
-	for i, b := range p.gotBranding {
-		if len(b) != 2 || b[0] != "HELLO" || b[1] != "WORLD" {
-			t.Errorf("paint %d branding = %v, want [HELLO WORLD]", i, b)
+	if b := p.gotBranding[0]; len(b) != 2 || b[0] != "HELLO" || b[1] != "WORLD" {
+		t.Errorf("paint 0 branding = %v, want [HELLO WORLD]", b)
+	}
+	for i, b := range p.gotBranding[1:] {
+		if len(b) != 2 || b[0] != "FRESH" || b[1] != "LINES" {
+			t.Errorf("paint %d branding = %v, want [FRESH LINES] (mutated content)", i+1, b)
 		}
 	}
 }

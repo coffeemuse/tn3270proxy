@@ -69,6 +69,30 @@ func TestRunEditorPrefixThenCancelDiscards(t *testing.T) {
 	}
 }
 
+func TestRunEditorInvalidPrefixVetoesPF3Save(t *testing.T) {
+	f := &fakeRenderer{editorActs: []EditorAction{
+		{Prefix: map[int]byte{0: 'X'}, PF: 3}, // invalid prefix on the save press
+		{PF: 12},                              // then cancel
+	}}
+	saveCalled := false
+	err := RunEditor(context.Background(), f, EditorConfig{
+		Title: "EDIT MOTD", Rows: 24, Lines: []string{"A", "B"},
+		Save: func(_ context.Context, _ []string) (string, error) {
+			saveCalled = true
+			return "", nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saveCalled {
+		t.Error("Save called; an invalid prefix in the same transmission must veto PF3")
+	}
+	if got := f.editorViews[1].ErrMsg; !strings.Contains(got, "INVALID LINE COMMAND") {
+		t.Errorf("second paint ErrMsg = %q, want it to contain INVALID LINE COMMAND", got)
+	}
+}
+
 func TestRunEditorEmptyDocGetsOneLine(t *testing.T) {
 	f := &fakeRenderer{editorActs: []EditorAction{{PF: 12}}}
 	if err := RunEditor(context.Background(), f, EditorConfig{
