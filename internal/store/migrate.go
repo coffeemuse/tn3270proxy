@@ -106,6 +106,7 @@ type migration struct {
 var migrations = []migration{
 	{1, "baseline schema", migrateV1Baseline},
 	{2, "audit actor column", migrateV2AuditActor},
+	{3, "documents table + file import", migrateV3Documents},
 }
 
 func maxKnownVersion() int { return migrations[len(migrations)-1].version }
@@ -154,6 +155,19 @@ func migrateV2AuditActor(ctx context.Context, tx *sql.Tx) error {
 		return fmt.Errorf("create audit_actor index: %w", err)
 	}
 	return nil
+}
+
+// migrateV3Documents creates the documents table and imports the MOTD/branding
+// files configured in system_config (one-time cutover; import logic follows in
+// the next task).
+func migrateV3Documents(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS documents (
+		name       TEXT PRIMARY KEY COLLATE NOCASE NOT NULL,
+		content    TEXT NOT NULL DEFAULT '',
+		updated_at TEXT NOT NULL DEFAULT '',
+		updated_by TEXT NOT NULL DEFAULT ''
+	)`)
+	return err
 }
 
 // schemaVersion reads PRAGMA user_version using any query-capable handle.
@@ -292,6 +306,12 @@ func (s *Store) reconcileDefaults(ctx context.Context) error {
 			"INSERT OR IGNORE INTO system_config (key, value) VALUES (?, ?)",
 			e.Key, e.Default); err != nil {
 			return fmt.Errorf("seed system_config %s: %w", e.Key, err)
+		}
+	}
+	for _, name := range KnownDocuments {
+		if _, err := s.db.ExecContext(ctx,
+			"INSERT OR IGNORE INTO documents (name) VALUES (?)", name); err != nil {
+			return fmt.Errorf("seed document %s: %w", name, err)
 		}
 	}
 	return nil
