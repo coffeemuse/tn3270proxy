@@ -95,11 +95,13 @@ IDLE_PID=$!
 sleep 1
 grep -q listening "$WORK/idle.log" || { echo "FAIL: idle proxy did not start"; cat "$WORK/idle.log"; exit 1; }
 
-# --- branding setup: write a known branding file and configure BRANDING_FILE via
-# the System Parameters admin form. The Branding File field is the 3rd catalog
-# entry (System ID, MOTD File, Branding File), so two Tabs reach it from the
-# System ID cursor home. This must run before scenario 1 so the login screen
-# shows branding art. ---
+# --- branding setup: login branding renders from the BRANDING document in the
+# DB (GH #126), so seed it via the Documents admin flow: admin menu option 8 →
+# member list (BRANDING sorts before MOTD, so the cursor home (4,3) IS the
+# BRANDING row) → I = import from server file. The import form pre-fills from
+# the Branding Import Path sysparam; EraseEOF clears it before typing. A
+# successful import returns to the member list with "BRANDING IMPORTED". This
+# must run before scenario 1 so the login screen shows branding art. ---
 printf '%s\n' "*** SMOKE TEST BRANDING ***" > "$WORK/branding.txt"
 s3 t0brand <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
@@ -112,23 +114,26 @@ Wait(5,InputField)
 String(A)
 Enter()
 Wait(5,InputField)
-String(4)
+String(8)
 Enter()
 Wait(5,InputField)
-Tab()
-Tab()
+String(I)
+Enter()
+Wait(5,InputField)
 EraseEOF()
 String($WORK/branding.txt)
 Enter()
 Wait(5,InputField)
+Ascii()
 PF(3)
 Wait(5,InputField)
 PF(3)
 Wait(5,InputField)
 PF(3)
-Wait(5,Disconnect)
+Wait(5,InputField)
 Quit()
 EOF
+check "0a branding document imported via Documents flow" "BRANDING IMPORTED" "$WORK/t0brand.out"
 
 # --- 1. login screen renders; password non-display; cursor on userid field ---
 s3 t1 <<EOF
@@ -403,9 +408,10 @@ Ascii()
 Quit()
 EOF
 check "11a system parameters form renders" "SYSTEM PARAMETERS" "$WORK/t11.out"
-# Labels render with right-aligned-colon dot leaders (GH #71), so the MOTD label
-# reads "MOTD File . . . . . . :" rather than a bare "MOTD File:".
-check "11b MOTD File label present" "MOTD File ." "$WORK/t11.out"
+# Labels render with right-aligned-colon dot leaders (GH #71). Document content
+# moved into the DB (GH #126), so the path param is now the import-path default:
+# the label reads "MOTD Import Path . . :" rather than the old "MOTD File:".
+check "11b MOTD Import Path label present" "MOTD Import Path" "$WORK/t11.out"
 # Form first input at row 3 col 28 (field.Col+1). The System Parameters form's
 # input column is dynamic (GH #71): it sits past the longest label
 # ("Auth Fail Window (min):", 23 chars) at attribute col 27, so the cursor lands
@@ -426,10 +432,12 @@ fi
 
 # --- 12. System Parameters Enter-save behavior (GH #44): Enter SAVES IN PLACE
 # and stays on the form (it does NOT return to the admin menu); PF3 is the way
-# out. Then re-enter the form to prove the value persisted to the store. Walk:
-# type a path, Enter (stay), capture; PF3 -> admin menu, capture; re-enter (4),
-# capture. The form help line ("Enter = save") vs the admin menu help line
-# ("PF3=Main Menu") distinguishes the two screens in the accumulated output. ---
+# out. Then re-enter the form to prove the value persisted to the store. The
+# cursor homes on the System ID field (first catalog entry); one Tab reaches the
+# MOTD Import Path field where the test path is typed. Walk: Tab, type a path,
+# Enter (stay), capture; PF3 -> admin menu, capture; re-enter (4), capture. The
+# form help line ("Enter = save") vs the admin menu help line ("PF3=Main Menu")
+# distinguishes the two screens in the accumulated output. ---
 s3 t12 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
 Wait(5,InputField)
@@ -444,6 +452,8 @@ Wait(5,InputField)
 String(4)
 Enter()
 Wait(5,InputField)
+Tab()
+EraseEOF()
 String(/etc/motd.smoke)
 Enter()
 Wait(5,InputField)
@@ -483,11 +493,13 @@ fi
 # A 25-line MOTD fixture: a "*** SYSTEM NEWS ***" banner plus 24 numbered lines.
 { echo "*** SYSTEM NEWS ***"; for i in $(seq 1 24); do echo "NEWS LINE $i"; done; } > "$WORK/motd.txt"
 #
-# Scenario 12 left MOTD_FILE set to /etc/motd.smoke in front.db; re-point it at
-# the real fixture via the System Parameters admin form. The MOTD field is the
-# only field on the form (cursor lands on it), so EraseEOF() clears the stale
-# value before we type the real path. The path is interpolated into the macro
-# here because s3() can't expand $WORK itself.
+# The MOTD renders from the MOTD document in the DB (GH #126), so activate the
+# gate by importing the fixture via the Documents admin flow: admin menu 8 →
+# member list → Tab to the MOTD row (BRANDING sorts first; cursor home is row 0)
+# → I = import. The import form pre-fills from the MOTD Import Path sysparam
+# (scenario 12 left it at /etc/motd.smoke), so EraseEOF() clears it before
+# typing the real fixture path. The path is interpolated into the macro here
+# because s3() can't expand $WORK itself.
 s3 t13set <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
 Wait(5,InputField)
@@ -499,15 +511,21 @@ Wait(5,InputField)
 String(A)
 Enter()
 Wait(5,InputField)
-String(4)
+String(8)
+Enter()
+Wait(5,InputField)
+Tab()
+String(I)
 Enter()
 Wait(5,InputField)
 EraseEOF()
 String($WORK/motd.txt)
 Enter()
 Wait(5,InputField)
+Ascii()
 Quit()
 EOF
+check "13z MOTD document imported via Documents flow" "MOTD IMPORTED" "$WORK/t13set.out"
 
 # 13a/13b: alice logs in, lands on MOTD page 1, presses PA3 then PF3 (both must
 # be inert — must NOT advance to the menu), then Quits WITHOUT pressing Enter.
@@ -556,8 +574,8 @@ check "13c ENTER pages through MOTD to the menu" "TN3270 GATEWAY MENU" "$WORK/t1
 # --- 14. Edit User Details form (GH #46): the user-list `S` line command opens
 # a unified edit form whose USERNAME is display-only, so the cursor lands on the
 # first EDITABLE field (Full name, row 5) — distinct from every other form's
-# (3,17). NOTE: scenario 13 activated the MOTD gate (front.db MOTD_FILE now
-# points at a real 2-page fixture), so every login here must clear the gate with
+# (3,17). NOTE: scenario 13 activated the MOTD gate (the MOTD document in
+# front.db now holds a 2-page fixture), so every login here must clear the gate with
 # two ENTERs (Wait(Unlock) after each — the MOTD page has no input field) before
 # reaching the service menu. Walk: login admin -> clear MOTD -> A -> users list
 # (1) -> S on the first row -> edit form, capture; PF3 -> users list, capture.
@@ -616,8 +634,8 @@ fi
 # --- 15. User Settings menu entry (GH #63): the service menu shows a "0 User
 # Settings" meta-row for every user; selecting "0" opens the User Settings
 # screen whose first row is "1 Password" / "Change your sign-on password"; PF3 returns to the service
-# menu. Scenario 13 activated the MOTD gate (front.db MOTD_FILE now points at
-# a real 2-page fixture), so this login must clear the gate with two ENTERs
+# menu. Scenario 13 activated the MOTD gate (the MOTD document in front.db now
+# holds a 2-page fixture), so this login must clear the gate with two ENTERs
 # (Wait(Unlock) after each — the MOTD page has no input field) before reaching
 # the service menu. Walk: login alice -> clear MOTD (2x Enter) -> service menu
 # (check "0 User Settings") -> type "0", Enter -> User Settings screen ->
@@ -665,10 +683,49 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 15e PF3 on User Settings did not return to service menu"
 fi
 
+# --- 15x. deactivate the MOTD gate for the remaining scenarios: import an
+# EMPTY file over the MOTD document (empty content ⇒ PaginateNews returns no
+# pages ⇒ the gate is skipped), so the scenario 16-18 logins reach the menu
+# directly — matching scenario 3. The admin login here still has to clear the
+# 2-page gate from scenario 13 (two ENTERs) before reaching the menu. Scenario
+# 19 re-populates the MOTD via the editor and re-verifies the gate at the end.
+: > "$WORK/empty.txt"
+s3 t15off <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(Unlock)
+Wait(1,seconds)
+Enter()
+Wait(Unlock)
+Wait(1,seconds)
+Enter()
+Wait(5,InputField)
+String(A)
+Enter()
+Wait(5,InputField)
+String(8)
+Enter()
+Wait(5,InputField)
+Tab()
+String(I)
+Enter()
+Wait(5,InputField)
+EraseEOF()
+String($WORK/empty.txt)
+Enter()
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "15f MOTD gate deactivated (empty import, 0 lines)" "MOTD IMPORTED (0 LINES)" "$WORK/t15off.out"
+
 # --- 16. multi-page service menu: pager (22 services) pages with PF7/PF8 ---
-# MOTD is inactive on this branch (scenario 13's sysparams save fails), so each
-# login reaches the menu directly — matching scenario 3. If MOTD is later
-# enabled, every menu-reaching scenario here and above must clear it uniformly.
+# The MOTD gate was deactivated by 15x, so each login reaches the menu
+# directly — matching scenario 3.
 s3 t16p1 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
 Wait(5,InputField)
@@ -849,6 +906,164 @@ if awk '/DISCONNECTED/{seen=1} seen && /ACTIVE SESSIONS/{ok=1} END{exit !ok}' "$
 else
   FAIL=$((FAIL+1)); echo "FAIL: 18h PF3 from detail did not return to the list"
 fi
+
+# --- 19. Documents admin flow (GH #126): member list, line editor, insert-mode
+# regression guard, prefix commands, PF12 cancel, and the saved MOTD rendering
+# on the NEWS screen at the next login.
+#
+# State on entry: BRANDING holds the smoke art (t0brand import); MOTD is EMPTY
+# (15x imported a 0-line file), so the admin login reaches the menu directly and
+# the MOTD editor opens with a single empty line.
+#
+# Editor row layout contract (buildEditorScreen): prefix attribute col 0, prefix
+# input cols 1-2, text attribute col 3, text cols 4-79. Editable text is written
+# UNPADDED so the field's trailing positions stay NUL — native 3270 insert mode
+# depends on it (padding with spaces locks the keyboard on Insert).
+#
+# Walk: login admin -> A -> 8 (member list; capture) -> Tab to the MOTD row ->
+# E (editor; capture: title, ruler, cursor on the first prefix field (4,1)) ->
+# Tab to the text field -> type line one -> PF3 (save; capture "MOTD SAVED" +
+# Lines column = 1) -> E again -> Tab, Right x5 (mid-line), Insert(), type X
+# (insert-mode guard: must NOT lock the keyboard; shifted content reads back) ->
+# Reset, Home -> prefix I on line 1, Enter (blank line appears: ROW 1 TO 2 OF 2)
+# -> Tab Tab to line 2's prefix -> D, Enter (back to 1 line) -> PF12 (cancel: no
+# save message; awk asserts exactly ONE "MOTD SAVED" in the whole session).
+s3 t19 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(admin)
+Tab()
+String(changeme)
+Enter()
+Wait(5,InputField)
+String(A)
+Enter()
+Wait(5,InputField)
+String(8)
+Enter()
+Wait(5,InputField)
+Ascii()
+Tab()
+String(E)
+Enter()
+Wait(5,InputField)
+Ascii()
+Tab()
+String("SMOKE EDIT LINE ONE")
+PF(3)
+Wait(5,InputField)
+Ascii()
+Tab()
+String(E)
+Enter()
+Wait(5,InputField)
+Tab()
+Right()
+Right()
+Right()
+Right()
+Right()
+Insert()
+String(X)
+Ascii()
+Reset()
+Home()
+String(I)
+Enter()
+Wait(5,InputField)
+Ascii()
+Tab()
+Tab()
+String(D)
+Enter()
+Wait(5,InputField)
+Ascii()
+PF(12)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check "19a Documents member list renders" "TN3270 GATEWAY ADMIN: DOCUMENTS" "$WORK/t19.out"
+check "19b member list shows BRANDING row" "BRANDING" "$WORK/t19.out"
+check "19c member list shows MOTD row" "MOTD" "$WORK/t19.out"
+check "19d member list cursor on first CMD field (4,3)" "I 2 24 80 4 3 " "$WORK/t19.out"
+check "19e editor title EDIT MOTD" "EDIT MOTD" "$WORK/t19.out"
+# The ISPF column ruler row (blue, cols 4-79) over the text area. (grep -- :
+# the pattern starts with a dash, so the plain check() helper can't take it.)
+if grep -q -- "----+----1----+----2" "$WORK/t19.out"; then
+  PASS=$((PASS+1)); echo "PASS: 19f editor column ruler present"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 19f editor column ruler not found"
+fi
+# Editor cursor on the first prefix input: attr col 0 => input col 1 (row 4).
+# Assert it AFTER the member list's 4 3 cursor line so ordering is proven.
+if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 4 1 /{ok=1} END{exit !ok}' "$WORK/t19.out"; then
+  PASS=$((PASS+1)); echo "PASS: 19g editor cursor on first prefix field (4,1)"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 19g editor cursor not at (4,1) after member list"
+fi
+check "19h PF3 saves back to member list" "MOTD SAVED" "$WORK/t19.out"
+# Lines column: "%-10s %5d" => "MOTD" + 11 spaces + "1" after the 1-line save.
+check "19i MOTD Lines column reflects saved content" "MOTD \{11\}1" "$WORK/t19.out"
+# Insert-mode regression guard (trailing-NUL contract): inserting mid-line must
+# shift the tail right, not lock the keyboard. A padded text field would lock
+# (operator error -> String fails with an 'error' line and the X never lands).
+check "19j insert mode shifts content (no keyboard lock)" "SMOKEX EDIT LINE ONE" "$WORK/t19.out"
+ncheck "19k no s3270 action errors (keyboard never locked)" "^error" "$WORK/t19.out"
+# Prefix I inserted a blank line: the editor row indicator goes to 2 lines.
+# Title and RowInfo share screen row 0, so a single-line match ("EDIT MOTD ...
+# ROW x TO y") is unambiguous — the member list's own "ROW 1 TO 2 OF 2" (two
+# documents) sits on the DOCUMENTS title line and can't satisfy it.
+check "19l prefix I inserts a line (editor ROW 1 TO 2 OF 2)" "EDIT MOTD.*ROW 1 TO 2 OF 2" "$WORK/t19.out"
+# Prefix D removed it again: an editor 1-line indicator AFTER the 2-line one
+# (the editor also shows 1 OF 1 before the insert, so ordering is required).
+if awk '/EDIT MOTD.*ROW 1 TO 2 OF 2/{seen=1} seen && /EDIT MOTD.*ROW 1 TO 1 OF 1/{ok=1} END{exit !ok}' "$WORK/t19.out"; then
+  PASS=$((PASS+1)); echo "PASS: 19m prefix D deletes the line (editor back to ROW 1 TO 1 OF 1)"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 19m prefix D did not shrink the editor back to one line"
+fi
+# PF12 cancels: back at the member list with NO save message — the only
+# "MOTD SAVED" in the whole session is walk A's PF3 save.
+if [ "$(grep -c "MOTD SAVED" "$WORK/t19.out")" -eq 1 ]; then
+  PASS=$((PASS+1)); echo "PASS: 19n PF12 cancel returns to member list without a save message"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 19n PF12 cancel produced an unexpected save message"
+fi
+# PF12 lands back on the member list: the DOCUMENTS title renders again AFTER
+# the editor's 2-line state (the only list render after that point is PF12's).
+if awk '/EDIT MOTD.*ROW 1 TO 2 OF 2/{seen=1} seen && /DOCUMENTS/{ok=1} END{exit !ok}' "$WORK/t19.out"; then
+  PASS=$((PASS+1)); echo "PASS: 19o PF12 returns to the member list"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 19o PF12 did not return to the member list"
+fi
+
+# The saved MOTD ("SMOKE EDIT LINE ONE", saved by walk A's PF3; walk B's edits
+# were cancelled) renders on the NEWS screen at the next login: alice lands on
+# the 1-page gate (the text shows BEFORE the menu), then one ENTER clears it.
+s3 t19news <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(alice)
+Tab()
+String(changeme)
+Enter()
+Wait(Unlock)
+Wait(1,seconds)
+Ascii()
+Enter()
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+# Ordering: the saved text appears before the menu title ever does (gate first).
+if awk '/TN3270 GATEWAY MENU/{menu=1} /SMOKE EDIT LINE ONE/ && !menu {ok=1} END{exit !ok}' "$WORK/t19news.out"; then
+  PASS=$((PASS+1)); echo "PASS: 19p saved MOTD text renders on the NEWS screen"
+else
+  FAIL=$((FAIL+1)); echo "FAIL: 19p saved MOTD text not on the NEWS screen before the menu"
+fi
+# Walk B's cancelled insert (the X) must NOT have been persisted.
+ncheck "19q PF12-cancelled edit not persisted" "SMOKEX" "$WORK/t19news.out"
+check "19r ENTER clears the gate to the menu" "TN3270 GATEWAY MENU" "$WORK/t19news.out"
 
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="
