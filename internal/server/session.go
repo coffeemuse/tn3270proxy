@@ -22,11 +22,8 @@ package server
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -114,12 +111,6 @@ type Session struct {
 	// connection's RemoteAddr; empty in unit tests that construct Session
 	// directly unless set explicitly.
 	RemoteHost string
-	// MOTDRead reads the MOTD file for maybeShowNews; nil selects the capped
-	// os.ReadFile default (readMOTDCapped). Tests inject a fake.
-	MOTDRead func(path string) ([]byte, error)
-	// BrandingRead reads the login branding file for loginBranding; nil selects
-	// the capped os.ReadFile default (readBrandingCapped). Tests inject a fake.
-	BrandingRead func(path string) ([]byte, error)
 	// Logger is the per-connection structured logger. nil falls back to
 	// slog.Default(). The session enriches it with "user" after authentication.
 	Logger *slog.Logger
@@ -234,67 +225,18 @@ func (s *Session) logAuthFailure(lg *slog.Logger, reason string) {
 	)
 }
 
-// motdReadCap bounds how much of the MOTD file is read. A legitimate notice is
-// a few screens of text; the cap is a defensive ceiling against a misconfigured
-// path (a device/FIFO or a huge file). An over-cap file is truncated, not
-// rejected — the banner is simply clipped.
-const motdReadCap = 8 << 10 // 8 KiB
-
-// readMOTDCapped is the default MOTDRead: it reads at most motdReadCap bytes.
-func readMOTDCapped(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return io.ReadAll(io.LimitReader(f, motdReadCap))
-}
-
-// brandingReadCap bounds how much of the branding file is read (a few screens of
-// art); an over-cap file is truncated, not rejected.
-const brandingReadCap = 8 << 10 // 8 KiB
-
-// readBrandingCapped is the default BrandingRead: it reads at most
-// brandingReadCap bytes.
-func readBrandingCapped(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return io.ReadAll(io.LimitReader(f, brandingReadCap))
-}
-
-// loginBranding resolves the login branding lines fresh for one paint: it reads
-// the BRANDING_FILE path, applies the same guards as the MOTD reader (missing
-// key, empty, relative path, or unreadable -> nil + warn), and splits the file
-// into lines (SplitBranding). nil means "render a blank body". Called once per
-// login render so live file edits take effect without a restart.
+// loginBranding resolves the login branding lines fresh for one paint from the
+// BRANDING document (one SQLite row read; admin edits take effect on the next
+// paint, no restart). nil means "render a blank body".
 func (s *Session) loginBranding(ctx context.Context) []string {
-	path, err := s.Store.GetConfig(ctx, sysconfig.KeyBrandingFile)
+	doc, err := s.Store.GetDocument(ctx, store.DocBranding)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			s.log().Warn("branding config key unreadable; skipping", "error", err)
+			s.log().Warn("branding document unreadable; skipping", "error", err)
 		}
 		return nil
 	}
-	if strings.TrimSpace(path) == "" {
-		return nil // disabled
-	}
-	if !filepath.IsAbs(path) {
-		s.log().Warn("branding path not absolute; skipping", "path", path)
-		return nil
-	}
-	read := s.BrandingRead
-	if read == nil {
-		read = readBrandingCapped
-	}
-	data, err := read(path)
-	if err != nil {
-		s.log().Warn("branding file unreadable; skipping", "path", path, "error", err)
-		return nil
-	}
-	return screens.SplitBranding(string(data))
+	return screens.SplitBranding(doc.Content)
 }
 
 // idleRegime is implemented by *idleConn (and test fakes); the session switches
@@ -569,35 +511,19 @@ func (s *Session) Run(conn net.Conn) {
 
 // maybeShowNews renders the MOTD/NEWS gate once after login, before the menu.
 // It returns (true, nil) to proceed into the menu — including every skip case
-// (MOTD disabled, unreadable, relative path, or empty). It returns (false, nil)
+// (document empty or unreadable). It returns (false, nil)
 // when the user idled out during the gate (audited + pre-auth re-armed here; the
 // caller returns to the login screen). A non-nil error is a fatal render error
 // (the caller disconnects).
 func (s *Session) maybeShowNews(ctx context.Context, conn net.Conn, term Term, identity auth.Identity, aud *auditTrail) (bool, error) {
-	path, err := s.Store.GetConfig(ctx, sysconfig.KeyMOTDFile)
+	doc, err := s.Store.GetDocument(ctx, store.DocMOTD)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			s.log().Warn("MOTD config key unreadable; skipping", "error", err)
+			s.log().Warn("MOTD document unreadable; skipping", "error", err)
 		}
 		return true, nil
 	}
-	if strings.TrimSpace(path) == "" {
-		return true, nil // disabled → straight to the menu
-	}
-	if !filepath.IsAbs(path) {
-		s.log().Warn("MOTD path not absolute; skipping", "path", path)
-		return true, nil
-	}
-	read := s.MOTDRead
-	if read == nil {
-		read = readMOTDCapped
-	}
-	data, err := read(path)
-	if err != nil {
-		s.log().Warn("MOTD file unreadable; skipping", "path", path, "error", err)
-		return true, nil
-	}
-	pages := screens.PaginateNews(term.Geometry(), string(data))
+	pages := screens.PaginateNews(term.Geometry(), doc.Content)
 	if len(pages) == 0 {
 		return true, nil // empty/whitespace-only → straight to the menu
 	}

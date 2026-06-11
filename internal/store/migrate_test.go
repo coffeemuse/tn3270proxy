@@ -24,7 +24,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -298,6 +300,88 @@ func slicesEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// buildV2DB writes a v2-schema database by hand (baseline schema + audit.actor
+// + user_version=2) so Open exercises exactly the v2→v3 step.
+func buildV2DB(t *testing.T, dbPath string, configRows map[string]string) {
+	t.Helper()
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.Exec(schema); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec("ALTER TABLE audit ADD COLUMN actor TEXT NOT NULL DEFAULT ''"); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range configRows {
+		if _, err := raw.Exec("INSERT INTO system_config (key, value) VALUES (?, ?)", k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := raw.Exec("PRAGMA user_version = 2"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMigrateV3ImportsConfiguredFiles(t *testing.T) {
+	dir := t.TempDir()
+	motd := filepath.Join(dir, "motd.txt")
+	if err := os.WriteFile(motd, []byte("HELLO\nWORLD\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(dir, "test.db")
+	buildV2DB(t, dbPath, map[string]string{
+		"MOTD_FILE":     motd,
+		"BRANDING_FILE": filepath.Join(dir, "missing.txt"), // unreadable → non-fatal skip
+	})
+
+	st, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	d, err := st.GetDocument(context.Background(), DocMOTD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Content != "HELLO\nWORLD\n" || d.UpdatedBy != "migration" {
+		t.Errorf("MOTD after migration: %+v", d)
+	}
+	b, err := st.GetDocument(context.Background(), DocBranding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Content != "" {
+		t.Errorf("BRANDING should be empty after unreadable-file skip, got %q", b.Content)
+	}
+}
+
+func TestMigrateV3TruncatesOversizeFile(t *testing.T) {
+	dir := t.TempDir()
+	big := filepath.Join(dir, "big.txt")
+	if err := os.WriteFile(big, []byte(strings.Repeat("x", MaxDocumentBytes+100)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(dir, "test.db")
+	buildV2DB(t, dbPath, map[string]string{"MOTD_FILE": big})
+
+	st, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	d, err := st.GetDocument(context.Background(), DocMOTD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Content) != MaxDocumentBytes {
+		t.Errorf("oversize import: len=%d, want truncated to %d", len(d.Content), MaxDocumentBytes)
+	}
 }
 
 // legacyAuditDB creates a user_version=0 DB whose audit table predates the actor

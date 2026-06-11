@@ -23,8 +23,9 @@ entry — with a small CLI for lifecycle and maintenance tasks.
 6. [MFA administration](06-mfa.md) — the secret-first enforcement model,
    requiring/clearing MFA, the issuer label.
 7. [System Parameters](07-system-parameters.md) — runtime settings: system
-   ID, MOTD/branding files, auth throttling, audit view options.
-8. [Message of the Day](08-motd.md) — authoring the post-login MOTD.
+   ID, MOTD/branding import paths, auth throttling, audit view options.
+8. [Documents: MOTD & login branding](08-motd.md) — the in-database editor
+   and import workflow for MOTD text and login-screen branding art.
 
 **Platform protection**
 

@@ -31,21 +31,13 @@ import (
 	"github.com/coffeemuse/tn3270proxy/internal/store"
 )
 
-// motdSession builds a test session whose MOTD_FILE is set to path and whose
-// MOTDRead returns (data, readErr). readCalled (if non-nil) is set true when
-// the reader is invoked, so tests can assert the reader was skipped.
-func motdSession(t *testing.T, p *fakePresenter, path string, data []byte, readErr error, readCalled *bool) *Session {
+// motdSession builds a test session whose MOTD document is seeded with content
+// (the documents table is the render source of truth).
+func motdSession(t *testing.T, p *fakePresenter, content string) *Session {
 	t.Helper()
 	s := newTestSession(t, p, &fakeBridger{})
-	// MOTD_FILE is seeded empty by migrate(); set it for the test.
-	if err := s.Store.SetConfig(context.Background(), "MOTD_FILE", path); err != nil {
-		t.Fatalf("SetConfig MOTD_FILE: %v", err)
-	}
-	s.MOTDRead = func(string) ([]byte, error) {
-		if readCalled != nil {
-			*readCalled = true
-		}
-		return data, readErr
+	if err := s.Store.SetDocument(context.Background(), store.DocMOTD, content, "TEST"); err != nil {
+		t.Fatalf("SetDocument MOTD: %v", err)
 	}
 	return s
 }
@@ -59,7 +51,7 @@ func TestMOTDShownBeforeMenu(t *testing.T) {
 		},
 		menuPicks: []menuResult{{quit: true}},
 	}
-	s := motdSession(t, p, "/etc/motd.txt", []byte("hello\nworld"), nil, nil)
+	s := motdSession(t, p, "hello\nworld")
 
 	client, _ := net.Pipe()
 	defer client.Close()
@@ -84,7 +76,7 @@ func TestMOTDUnsetSkips(t *testing.T) {
 		},
 		menuPicks: []menuResult{{quit: true}},
 	}
-	// MOTD_FILE stays at its seeded default "".
+	// The MOTD document stays at its seeded empty default.
 	s := newTestSession(t, p, &fakeBridger{})
 
 	client, _ := net.Pipe()
@@ -92,11 +84,11 @@ func TestMOTDUnsetSkips(t *testing.T) {
 	s.Run(client)
 
 	if len(p.newsCalls) != 0 {
-		t.Errorf("News called %d times, want 0 when MOTD_FILE unset", len(p.newsCalls))
+		t.Errorf("News called %d times, want 0 when MOTD document is empty", len(p.newsCalls))
 	}
 }
 
-func TestMOTDRelativePathSkipsWithoutReading(t *testing.T) {
+func TestMOTDWhitespaceOnlySkips(t *testing.T) {
 	p := &fakePresenter{
 		termType: "IBM-3278-2-E",
 		logins: []loginResult{
@@ -105,58 +97,14 @@ func TestMOTDRelativePathSkipsWithoutReading(t *testing.T) {
 		},
 		menuPicks: []menuResult{{quit: true}},
 	}
-	read := false
-	s := motdSession(t, p, "relative/motd.txt", []byte("x"), nil, &read)
-
-	client, _ := net.Pipe()
-	defer client.Close()
-	s.Run(client)
-
-	if read {
-		t.Error("reader was called for a relative path; want skipped before read")
-	}
-	if len(p.newsCalls) != 0 {
-		t.Errorf("News called %d times, want 0 for relative path", len(p.newsCalls))
-	}
-}
-
-func TestMOTDReadErrorSkips(t *testing.T) {
-	p := &fakePresenter{
-		termType: "IBM-3278-2-E",
-		logins: []loginResult{
-			{user: "alice", pass: "good"},
-			{quit: true}, // second login render after menu logoff
-		},
-		menuPicks: []menuResult{{quit: true}},
-	}
-	s := motdSession(t, p, "/etc/motd.txt", nil, errors.New("boom"), nil)
+	s := motdSession(t, p, "   \n\n")
 
 	client, _ := net.Pipe()
 	defer client.Close()
 	s.Run(client)
 
 	if len(p.newsCalls) != 0 {
-		t.Errorf("News called %d times, want 0 on read error", len(p.newsCalls))
-	}
-}
-
-func TestMOTDEmptyFileSkips(t *testing.T) {
-	p := &fakePresenter{
-		termType: "IBM-3278-2-E",
-		logins: []loginResult{
-			{user: "alice", pass: "good"},
-			{quit: true}, // second login render after menu logoff
-		},
-		menuPicks: []menuResult{{quit: true}},
-	}
-	s := motdSession(t, p, "/etc/motd.txt", []byte("   \n\n"), nil, nil)
-
-	client, _ := net.Pipe()
-	defer client.Close()
-	s.Run(client)
-
-	if len(p.newsCalls) != 0 {
-		t.Errorf("News called %d times, want 0 for whitespace-only file", len(p.newsCalls))
+		t.Errorf("News called %d times, want 0 for whitespace-only document", len(p.newsCalls))
 	}
 }
 
@@ -168,7 +116,7 @@ func TestMOTDIdleTimeoutLogsOut(t *testing.T) {
 			{quit: true}, // re-presented login after idle-logout
 		},
 	}
-	s := motdSession(t, p, "/etc/motd.txt", []byte("news"), nil, nil)
+	s := motdSession(t, p, "news")
 	p.newsResults = []error{os.ErrDeadlineExceeded}
 	rec := &recordingAuditor{}
 	s.Auditor = rec
@@ -199,7 +147,7 @@ func TestMOTDIdleTimeoutRearmsPreAuth(t *testing.T) {
 			{quit: true}, // re-presented login after the idle-logout
 		},
 	}
-	s := motdSession(t, p, "/etc/motd.txt", []byte("news"), nil, nil)
+	s := motdSession(t, p, "news")
 	s.PreAuthIdle = 2 * time.Minute
 	s.Idle = 30 * time.Minute
 	s.PreAuthMax = 5 * time.Minute
@@ -225,7 +173,7 @@ func TestMOTDRenderErrorDisconnects(t *testing.T) {
 		termType: "IBM-3278-2-E",
 		logins:   []loginResult{{user: "alice", pass: "good"}},
 	}
-	s := motdSession(t, p, "/etc/motd.txt", []byte("news"), nil, nil)
+	s := motdSession(t, p, "news")
 	p.newsResults = []error{errors.New("stream broke")}
 	rec := &recordingAuditor{}
 	s.Auditor = rec

@@ -28,6 +28,7 @@
 //	seed       bulk-load users/groups/services from a JSON file
 //	quickstart provision a fresh Docker data dir with opinionated defaults
 //	audit      query (list) or trim (prune) the audit trail
+//	doc        import/export the MOTD and branding documents
 //	mfa        break-glass MFA operations (reset-all)
 //	version    print the resolved build version
 //
@@ -66,6 +67,9 @@ func run(args []string) error {
 	}
 	if len(args) > 0 && args[0] == "audit" {
 		return runAudit(args[1:])
+	}
+	if len(args) > 0 && args[0] == "doc" {
+		return runDoc(args[1:])
 	}
 	if len(args) > 0 && args[0] == "bootstrap" {
 		return runBootstrap(args[1:], os.Stdout)

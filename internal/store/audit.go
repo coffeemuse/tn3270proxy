@@ -45,6 +45,8 @@ const (
 	AuditSettingsLocked    = "settings_locked"    // admin locked a user out of self-service
 	AuditSettingsUnlocked  = "settings_unlocked"  // admin restored a user's self-service
 	AuditSessionDisconnect = "session_disconnect" // admin disconnected a live session (GH #91)
+	AuditDocUpdate         = "doc_update"         // admin saved a document from the editor (detail = name + line count)
+	AuditDocImport         = "doc_import"         // document replaced from a server file (detail = name + path + line count)
 )
 
 // AuditEvent is one audit-trail row. Username is a plain string, not a user

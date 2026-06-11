@@ -101,3 +101,27 @@ func TestProvisionPartialDirErrors(t *testing.T) {
 		t.Fatalf("want a partial-dir error, got %v", err)
 	}
 }
+
+func TestProvisionSeedsDocuments(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Provision(context.Background(), dir); err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(NewLayout(dir).DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for name, want := range map[string]string{
+		store.DocMOTD:     DefaultMOTD(),
+		store.DocBranding: DefaultBranding(),
+	} {
+		d, err := st.GetDocument(context.Background(), name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Content != want || d.UpdatedBy != "quickstart" {
+			t.Errorf("%s: content match=%v updated_by=%q", name, d.Content == want, d.UpdatedBy)
+		}
+	}
+}

@@ -70,6 +70,9 @@ type AdminStore interface {
 	CreateTrustedNetwork(ctx context.Context, cidr, comment string) (int64, error)
 	UpdateTrustedNetwork(ctx context.Context, id int64, cidr, comment string) error
 	DeleteTrustedNetwork(ctx context.Context, id int64) error
+
+	ListDocuments(ctx context.Context) ([]store.Document, error)
+	SetDocument(ctx context.Context, name, content, actor string) error
 }
 
 var _ AdminStore = (*store.Store)(nil)
@@ -130,6 +133,8 @@ func (f *adminFlow) Run(ctx context.Context, conn net.Conn) error {
 			err = f.auditLog(ctx, conn)
 		case 7:
 			err = f.activeSessions(ctx, conn)
+		case 8:
+			err = f.documents(ctx, conn)
 		}
 		if err != nil {
 			return err
@@ -164,16 +169,22 @@ func (f *adminFlow) storeErr(op string, err error) string {
 	return msgTempError
 }
 
+// record emits one audit event of an explicit kind (the documents flow uses
+// doc_update/doc_import instead of the generic admin kind). Actor auto-fills.
+func (f *adminFlow) record(ctx context.Context, kind, detail string) {
+	if f.audit == nil {
+		return
+	}
+	f.audit(ctx, store.AuditEvent{Kind: kind, Detail: detail})
+}
+
 // recordAdmin emits one generic admin-CRUD audit event. The acting admin is
 // auto-filled as the actor by auditTrail.record (GH #73); Username is left empty
 // because a generic mutation's subject (a user, group, or service) is described
 // in Detail, not necessarily a single user account. Call it only after the store
 // mutation has succeeded, so the trail reflects reality.
 func (f *adminFlow) recordAdmin(ctx context.Context, detail string) {
-	if f.audit == nil {
-		return
-	}
-	f.audit(ctx, store.AuditEvent{Kind: store.AuditAdmin, Detail: detail})
+	f.record(ctx, store.AuditAdmin, detail)
 }
 
 // users is implemented in admin_users.go.
@@ -181,3 +192,4 @@ func (f *adminFlow) recordAdmin(ctx context.Context, detail string) {
 // services is implemented in admin_services.go.
 // systemParams is implemented in admin_system.go.
 // networks is implemented in admin_networks.go.
+// documents is implemented in admin_documents.go.

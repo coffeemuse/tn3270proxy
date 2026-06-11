@@ -121,3 +121,16 @@ func TestAdminMenuScreen_HasSessionsOption(t *testing.T) {
 		t.Errorf("admin menu missing option 7 Sessions (key=%v name=%v)", sawKey, sawName)
 	}
 }
+
+func TestAdminMenuHasDocumentsOption(t *testing.T) {
+	screen, _ := AdminMenuScreen(DefaultGeometry, "")
+	found := false
+	for _, f := range screen {
+		if strings.Contains(f.Content, "Documents") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("admin menu missing Documents option")
+	}
+}
