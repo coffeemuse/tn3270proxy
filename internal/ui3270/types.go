@@ -63,6 +63,30 @@ type FormAction struct {
 	Cancel bool              // PF3
 }
 
+// EditorLine is one document line in the editor. Protected lines (wider than
+// the editable width) render as static yellow text: D/I/R still work via the
+// prefix, but content changes require re-import — the editor never truncates.
+type EditorLine struct {
+	Text      string
+	Protected bool
+}
+
+// EditorView is what to paint for the line editor.
+type EditorView struct {
+	Title, RowInfo, ErrMsg, PFHelp string
+	Lines                          []EditorLine
+}
+
+// EditorAction is what the user did on an editor screen. Maps are keyed by
+// VISIBLE row index (the driver adds the page offset). Text holds only the
+// fields the device returned (protected lines never appear). PF: 3 save+end,
+// 7/8 page, 12 cancel; 0 = plain Enter.
+type EditorAction struct {
+	Prefix map[int]byte
+	Text   map[int]string
+	PF     int
+}
+
 // Renderer paints a view and returns the user's action. The production
 // implementation wraps go3270; tests inject a scripted fake.
 type Renderer interface {
@@ -74,6 +98,8 @@ type Renderer interface {
 	// (actPF; 0 ⇒ PF3 only). Returns the action so a driver can run a
 	// confirm-gated PF-key command (e.g. PF11=Disconnect).
 	DetailAct(v DetailView, actPF int) (ListAction, error)
+	// Editor renders a line-editor page and returns the user's action.
+	Editor(EditorView) (EditorAction, error)
 }
 
 // Row pairs a pre-formatted display string with its domain payload. The driver

@@ -106,6 +106,10 @@ func (f *fakeAdminPresenter) Detail(v ui3270.DetailView) error {
 	return nil
 }
 
+func (f *fakeAdminPresenter) Editor(ui3270.EditorView) (ui3270.EditorAction, error) {
+	return ui3270.EditorAction{PF: 12}, nil
+}
+
 func (f *fakeAdminPresenter) DetailAct(v ui3270.DetailView, _ int) (ui3270.ListAction, error) {
 	f.gotDets = append(f.gotDets, v)
 	if len(f.detActs) == 0 {

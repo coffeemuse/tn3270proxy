@@ -127,3 +127,14 @@ func (g *go3270Renderer) DetailAct(v DetailView, actPF int) (ListAction, error) 
 	}
 	return detailAction(resp, actPF), nil
 }
+
+var editorExitKeys = []go3270.AID{go3270.AIDPF3, go3270.AIDPF7, go3270.AIDPF8, go3270.AIDPF12}
+
+func (g *go3270Renderer) Editor(v EditorView) (EditorAction, error) {
+	screen, cur := buildEditorScreen(g.rows, v)
+	resp, err := g.call(screen, editorExitKeys, cur)
+	if err != nil {
+		return EditorAction{}, err
+	}
+	return editorAction(resp, len(v.Lines)), nil
+}

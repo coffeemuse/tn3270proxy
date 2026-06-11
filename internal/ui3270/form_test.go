@@ -32,6 +32,9 @@ type fakeRenderer struct {
 
 	gotLists []ListView
 	gotForms []FormView
+
+	editorViews []EditorView
+	editorActs  []EditorAction
 }
 
 func (f *fakeRenderer) List(v ListView) (ListAction, error) {
@@ -54,6 +57,16 @@ func (f *fakeRenderer) Snapshot(SnapshotView) (ListAction, error) {
 
 func (f *fakeRenderer) Detail(DetailView) error                       { return nil }
 func (f *fakeRenderer) DetailAct(DetailView, int) (ListAction, error) { return ListAction{}, nil }
+
+func (f *fakeRenderer) Editor(v EditorView) (EditorAction, error) {
+	f.editorViews = append(f.editorViews, v)
+	if len(f.editorActs) == 0 {
+		return EditorAction{PF: 12}, nil
+	}
+	a := f.editorActs[0]
+	f.editorActs = f.editorActs[1:]
+	return a, nil
+}
 
 func TestRunFormCancel(t *testing.T) {
 	r := &fakeRenderer{forms: []FormAction{{Cancel: true}}}

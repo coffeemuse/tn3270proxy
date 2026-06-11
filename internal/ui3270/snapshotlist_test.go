@@ -32,6 +32,9 @@ type scriptRenderer struct {
 	detailHit int
 	detActs   []ListAction
 	dets      []DetailView
+
+	editorViews []EditorView
+	editorActs  []EditorAction
 }
 
 func (s *scriptRenderer) List(ListView) (ListAction, error) { panic("unused") }
@@ -53,6 +56,16 @@ func (s *scriptRenderer) Snapshot(v SnapshotView) (ListAction, error) {
 	}
 	a := s.acts[0]
 	s.acts = s.acts[1:]
+	return a, nil
+}
+
+func (s *scriptRenderer) Editor(v EditorView) (EditorAction, error) {
+	s.editorViews = append(s.editorViews, v)
+	if len(s.editorActs) == 0 {
+		return EditorAction{PF: 12}, nil
+	}
+	a := s.editorActs[0]
+	s.editorActs = s.editorActs[1:]
 	return a, nil
 }
 

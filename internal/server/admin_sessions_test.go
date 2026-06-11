@@ -56,6 +56,9 @@ type sessRenderer struct {
 func (r *sessRenderer) List(ui3270.ListView) (ui3270.ListAction, error) { panic("unused") }
 func (r *sessRenderer) Form(ui3270.FormView) (ui3270.FormAction, error) { panic("unused") }
 func (r *sessRenderer) Detail(ui3270.DetailView) error                  { return nil }
+func (r *sessRenderer) Editor(ui3270.EditorView) (ui3270.EditorAction, error) {
+	return ui3270.EditorAction{PF: 12}, nil
+}
 func (r *sessRenderer) DetailAct(v ui3270.DetailView, _ int) (ui3270.ListAction, error) {
 	r.dets = append(r.dets, v)
 	if len(r.detActs) == 0 {

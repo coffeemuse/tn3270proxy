@@ -142,3 +142,6 @@ func (r *recordPFRenderer) DetailAct(_ DetailView, actPF int) (ListAction, error
 	r.detActs = r.detActs[1:]
 	return a, nil
 }
+func (r *recordPFRenderer) Editor(EditorView) (EditorAction, error) {
+	return EditorAction{PF: 12}, nil
+}
