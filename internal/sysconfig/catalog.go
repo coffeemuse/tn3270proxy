@@ -38,13 +38,15 @@ type Entry struct {
 	Validate  func(string) string // returns an errMsg (uppercase) or "" if valid
 }
 
-// KeyMOTDFile is the system_config key whose value is the absolute path to the
-// MOTD/NEWS file shown after login. Empty disables the feature.
+// KeyMOTDFile is the system_config key whose value is the DEFAULT IMPORT PATH
+// for the MOTD document: the admin Documents import screen pre-fills from it,
+// and the v3 migration did its one-time cutover import from it. The rendered
+// content itself lives in the documents table (store.DocMOTD), not on disk.
 const KeyMOTDFile = "MOTD_FILE"
 
-// KeyBrandingFile is the system_config key whose value is the absolute path to
-// the login branding/art file rendered in the login screen body. Empty disables
-// the feature (blank region). Mirrors KeyMOTDFile.
+// KeyBrandingFile is the system_config key whose value is the DEFAULT IMPORT
+// PATH for the BRANDING document (mirrors KeyMOTDFile). Content lives in the
+// documents table (store.DocBranding).
 const KeyBrandingFile = "BRANDING_FILE"
 
 // KeyMFAIssuer is the system_config key holding the TOTP issuer label shown in
@@ -91,8 +93,8 @@ const (
 // seeds every key with its Default via INSERT OR IGNORE; admins may change the
 // values through the admin UI. Keys are canonical uppercase.
 // Order is grouped for the System Parameters form: identity (System ID, MOTD
-// File, Branding File), then the four auth parameters (the three failed-auth
-// throttle knobs plus the MFA issuer), then the audit parameters.
+// Import Path, Branding Import Path), then the four auth parameters (the three
+// failed-auth throttle knobs plus the MFA issuer), then the audit parameters.
 var Catalog = []Entry{
 	{
 		Key:       KeySystemID,
@@ -104,18 +106,17 @@ var Catalog = []Entry{
 	},
 	{
 		Key:     KeyMOTDFile,
-		Label:   "MOTD File:",
+		Label:   "MOTD Import Path:",
 		Default: "",
-		// Empty value disables the feature; any non-empty path is accepted.
-		// Existence/readability of the file is checked at read time, not here.
+		// Default source path for the admin Documents import screen. Empty just
+		// leaves the import form blank; existence is checked at import time.
 		Validate: func(_ string) string { return "" },
 	},
 	{
 		Key:     KeyBrandingFile,
-		Label:   "Branding File:",
+		Label:   "Branding Import Path:",
 		Default: "",
-		// Empty disables (blank region); any non-empty path is accepted.
-		// Existence/readability is checked at read time, not here (matches MOTD).
+		// Mirrors MOTD Import Path for the BRANDING document.
 		Validate: func(_ string) string { return "" },
 	},
 	{
