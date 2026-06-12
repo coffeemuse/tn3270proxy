@@ -377,7 +377,8 @@ func (s *Store) reconcileDefaults(ctx context.Context) error {
 	}
 	for _, name := range KnownDocuments {
 		if _, err := s.db.ExecContext(ctx,
-			"INSERT OR IGNORE INTO documents (name) VALUES (?)", name); err != nil {
+			"INSERT OR IGNORE INTO documents (name, content) VALUES (?, ?)",
+			name, documentDefaults[name]); err != nil {
 			return fmt.Errorf("seed document %s: %w", name, err)
 		}
 	}

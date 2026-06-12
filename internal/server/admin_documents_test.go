@@ -31,8 +31,8 @@ import (
 	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
 
-// Documents list orders by name: BRANDING is row 0, MOTD is row 1.
-const motdRow = 1
+// Documents list orders by name: BRANDING row 0, HELP-MENU row 1, MOTD row 2.
+const motdRow = 2
 
 // docStore unwraps the fixture's real *store.Store for document seeding.
 func docStore(t *testing.T, f *adminFlow) *store.Store {

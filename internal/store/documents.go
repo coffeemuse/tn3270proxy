@@ -40,14 +40,54 @@ const MaxDocumentBytes = 8 << 10 // 8 KiB
 var ErrDocumentTooLarge = errors.New("document too large (max 8 KiB)")
 
 // Known document names. The set is code-defined: reconcileDefaults seeds one
-// empty row per name so the admin member list always shows them all.
+// row per name so the admin member list always shows them all.
 const (
 	DocMOTD     = "MOTD"
 	DocBranding = "BRANDING"
+	// DocHelpMenu is the service-menu help text shown by PF1. The HELP-<panel>
+	// prefix is the naming convention for future per-panel help documents.
+	DocHelpMenu = "HELP-MENU"
 )
 
 // KnownDocuments lists every valid document name.
-var KnownDocuments = []string{DocMOTD, DocBranding}
+var KnownDocuments = []string{DocMOTD, DocBranding, DocHelpMenu}
+
+// DefaultHelpMenuContent is the stock HELP-MENU text seeded when the row is
+// first created (see reconcileDefaults). The menu conventions it documents are
+// app-defined, not site-specific, so every install gets working PF1 help out
+// of the box; admins may edit or blank it and the edit sticks. Lines stay
+// within the editor's 76 editable columns.
+const DefaultHelpMenuContent = `The menu lists the services your account may use, one per row:
+a selection number, the service name, and a description.
+
+SELECTING A SERVICE
+
+  Type the service's number in the Option field and press ENTER.
+  Your terminal is connected to that service in a bridged session.
+
+WHILE CONNECTED TO A SERVICE
+
+  PA3  ends the bridged session and returns to this menu.
+       Every other key belongs to the service you are using.
+
+MENU KEYS
+
+  PF1  shows this help.
+  PF3  logs off and returns to the sign-on screen.
+  PF7  pages up when the service list spans multiple pages.
+  PF8  pages down.
+
+OTHER MENU ENTRIES
+
+  0    User Settings - change your password or manage MFA.
+  A    Administration - shown only to administrators.
+
+Ask your administrator if you need access to another service.`
+
+// documentDefaults maps a document name to the content seeded when its row is
+// first created. MOTD and BRANDING are site-specific and seed empty (absent
+// from the map); HELP-MENU seeds the stock help text.
+var documentDefaults = map[string]string{DocHelpMenu: DefaultHelpMenuContent}
 
 // Document is one DB-resident text document.
 type Document struct {
