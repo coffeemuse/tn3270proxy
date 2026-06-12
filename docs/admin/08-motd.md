@@ -79,7 +79,7 @@ install without any admin action.
 The Documents member list (option 8) shows it alongside MOTD and BRANDING:
 
     Name        Lines  Changed (UTC)      ID
-    HELP-MENU      10  2026-06-01 00:00   SYSTEM
+    HELP-MENU      26                     
 
 Edit and import work identically to the other documents — **E** opens the
 ISPF line editor, **I** opens the import form. Note that the import form's
