@@ -250,6 +250,10 @@ func (s *Session) loginBranding(ctx context.Context) []string {
 func (s *Session) helpMenuLines(ctx context.Context) ([]string, error) {
 	doc, err := s.Store.GetDocument(ctx, store.DocHelpMenu)
 	if err != nil {
+		// The presenter folds this into the same inline NO HELP AVAILABLE
+		// message as an empty document; log so an operator can tell a read
+		// failure from a deliberately blanked document.
+		s.log().Warn("help document unreadable", "error", err)
 		return nil, err
 	}
 	return doc.Lines(), nil
