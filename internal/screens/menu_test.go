@@ -110,10 +110,12 @@ func TestMenuScreenAdminEntryClampedWithManyServices(t *testing.T) {
 	}
 }
 
-func TestMenuScreenHelpSaysLogoff(t *testing.T) {
+func TestMenuScreenHelpAdvertisesKeys(t *testing.T) {
 	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, false, MenuStatus{}, "", 0)
-	if !screenContains(screen, "PF3=Logoff") {
-		t.Errorf("menu help should say PF3=Logoff")
+	for _, want := range []string{"PF1=Help", "PF3=Logoff", "PF7=PgUp", "PF8=PgDn", "PA3 returns here"} {
+		if !screenContains(screen, want) {
+			t.Errorf("menu help row should contain %q", want)
+		}
 	}
 }
 

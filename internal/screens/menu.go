@@ -175,7 +175,7 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLoc
 		selection,
 		stopF,
 		go3270.Field{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		go3270.Field{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Logoff   PF7=PgUp  PF8=PgDn   (PA3 returns here from a session)"},
+		go3270.Field{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF1=Help  PF3=Logoff  PF7=PgUp  PF8=PgDn  (PA3 returns here from a session)"},
 	)
 	return screen, mapping, cursorAt(selection)
 }
