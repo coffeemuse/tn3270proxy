@@ -576,3 +576,22 @@ func TestMenuScreenMetaBandFlowsOnSparseFinalPage(t *testing.T) {
 		t.Errorf("page 1: User Settings row = %d ok=%v, want %d", us.Row, ok, lastSvc+2)
 	}
 }
+
+// GH #133: locked non-admin with services — the band is empty, so nothing
+// renders in the band columns below the last service row (the right-hand
+// status block and the PF legend legitimately occupy other columns/rows).
+func TestMenuScreenLockedNonAdminNoBandWithServices(t *testing.T) {
+	g := DefaultGeometry
+	svcs := []store.Service{
+		{ID: 1, Name: "PROD", Description: "Production CICS", Host: "h", Port: 23},
+		{ID: 2, Name: "TEST", Description: "Test CICS", Host: "h", Port: 23},
+		{ID: 3, Name: "DEMO", Description: "Demo backend", Host: "h", Port: 23},
+	}
+	lastSvc := g.BodyTopRow() + 3 // service rows 4..6 on MOD 2
+	screen, _, _ := MenuScreen(g, svcs, false, true, MenuStatus{}, "", 0)
+	for _, f := range screen {
+		if f.Row > lastSvc && f.Row <= g.BodyBottomRow() && (f.Col == 0 || f.Col == 17) && f.Content != "" {
+			t.Errorf("locked non-admin: unexpected band-column field below service list: %+v", f)
+		}
+	}
+}

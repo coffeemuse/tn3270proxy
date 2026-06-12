@@ -54,7 +54,7 @@ func TestGeometryMenuCapacity(t *testing.T) {
 		admin bool
 		want  int
 	}{
-		{Geometry{Rows: 24, Cols: 80}, false, 17}, // body rows 4..21 minus "0 User Settings"; row 22 is the blank separator
+		{Geometry{Rows: 24, Cols: 80}, false, 17}, // body rows 4..21; "0" lands on row 22 (BodyBottomRow) when the page is full
 		{Geometry{Rows: 24, Cols: 80}, true, 16},  // one more row reserved for the A entry
 		{Geometry{Rows: 32, Cols: 80}, false, 25},
 		{Geometry{Rows: 43, Cols: 80}, true, 35},
