@@ -98,7 +98,7 @@ func (go3270Presenter) Login(conn net.Conn, term Term, status screens.MenuStatus
 		resp.Values[screens.FieldPassword], false, nil
 }
 
-func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string) (*store.Service, menuChoice, error) {
+func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string, help func() ([]string, error)) (*store.Service, menuChoice, error) {
 	geom := term.Geometry()
 	status.TermType = term.Type // presenter owns the terminal-derived field
 	page := 0
@@ -112,7 +112,7 @@ func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admi
 			return go3270.HandleScreenAlt(
 				screen, nil, map[string]string{},
 				[]go3270.AID{go3270.AIDEnter},
-				withSilentExits([]go3270.AID{go3270.AIDPF3, go3270.AIDPF7, go3270.AIDPF8}),
+				withSilentExits([]go3270.AID{go3270.AIDPF1, go3270.AIDPF3, go3270.AIDPF7, go3270.AIDPF8}),
 				screens.FieldError, cur.Row, cur.Col, conn, term.dev, term.codepage(),
 			)
 		})
@@ -127,6 +127,17 @@ func (go3270Presenter) Menu(conn net.Conn, term Term, svcs []store.Service, admi
 			continue
 		case go3270.AIDPF8:
 			page++ // clamped to the last page on the next render
+			continue
+		case go3270.AIDPF1:
+			lines, herr := fetchHelp(help)
+			if herr != nil || len(lines) == 0 {
+				errMsg = "NO HELP AVAILABLE"
+				continue
+			}
+			if verr := runHelpViewer(conn, term, helpMenuTitle, lines); verr != nil {
+				return nil, menuReprompt, verr // disconnect/idle, classified by the session
+			}
+			errMsg = ""
 			continue
 		}
 		key := strings.ToUpper(strings.TrimSpace(resp.Values[screens.FieldSelection]))
@@ -198,6 +209,53 @@ func (go3270Presenter) News(conn net.Conn, term Term, pages [][]string) error {
 		}
 	}
 	return nil
+}
+
+// helpMenuTitle is the service-menu help panel's title; per-panel titles
+// arrive with future per-panel help documents.
+const helpMenuTitle = "SERVICE MENU HELP"
+
+// fetchHelp guards the lazy fetcher (a nil func means no help is wired).
+func fetchHelp(help func() ([]string, error)) ([]string, error) {
+	if help == nil {
+		return nil, nil
+	}
+	return help()
+}
+
+// runHelpViewer drives the read-only help viewer over an already-fetched
+// document: PF7/PF8 page (clamped by HelpPageBounds), Enter or PF3 return to
+// the caller, PA keys are silent no-ops (handleScreen). A non-nil error is a
+// disconnect or an idle timeout — the caller classifies it like any other
+// menu render error.
+func runHelpViewer(conn net.Conn, term Term, title string, lines []string) error {
+	geom := term.Geometry()
+	page := 0
+	for {
+		// Clamp the stored page each render so PF7 at the top / PF8 at the
+		// bottom re-present the same page — the menu's paging convention.
+		page, _, _, _ = screens.HelpPageBounds(geom, len(lines), page)
+		screen, cur := screens.HelpScreen(geom, title, lines, page)
+		resp, err := handleScreen(func() (go3270.Response, error) {
+			return go3270.HandleScreenAlt(
+				screen, nil, map[string]string{},
+				[]go3270.AID{go3270.AIDEnter},
+				withSilentExits([]go3270.AID{go3270.AIDPF3, go3270.AIDPF7, go3270.AIDPF8}),
+				"", cur.Row, cur.Col, conn, term.dev, term.codepage(),
+			)
+		})
+		if err != nil {
+			return err
+		}
+		switch resp.AID {
+		case go3270.AIDPF7:
+			page--
+		case go3270.AIDPF8:
+			page++
+		default: // Enter or PF3 — back to the menu (no input to submit)
+			return nil
+		}
+	}
 }
 
 // realBridger adapts bridge.Bridge to the Bridger interface.
