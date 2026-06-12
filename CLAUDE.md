@@ -165,13 +165,14 @@ internal/screens  Pure go3270 screen builders: LoginScreen(geom, status, brandin
                   input reaches col 78); HelpRow() shows PF3=Disconnect. Cursor homes to
                   (BodyBottomRow(), 16). Deliberate exception — see docs/dev/ispf-style-guide.md §6.8.
                   MenuScreen(geom, svcs,
-                  admin, status, errMsg, page). The menu paginates (PF7/PF8) via
+                  admin, settingsLocked, status, errMsg, page). The menu paginates (PF7/PF8) via
                   MenuPageBounds: global/stable numbering (the returned mapping covers ALL
                   services; only the current page's window renders, each row keeping its
                   global number), an `ITEMS x TO y OF z` indicator right-aligned on the
-                  title row, and the `0`/`A` meta band bottom-anchored on every page above a
-                  blank separator row (menuBottomRow = BodyBottomRow-1; `0` is omitted for
-                  settings-locked users, `A` unaffected). It renders an
+                  title row, and the `0`/`A` meta band flowing directly below the page's service rows
+                  (one blank separator row after the last service row; no separator after the
+                  empty-list placeholder; `0` omitted for settings-locked users; `A` takes the
+                  anchor row when `0` is hidden — GH #133). It renders an
                   ISPF-style fixed grid (number col 0 / name col 6 / description col 17,
                   hard-cut 40) plus a
                   right-hand status block (MenuStatus: User ID / Date / Time / Terminal /
