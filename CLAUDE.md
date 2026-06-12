@@ -157,7 +157,7 @@ internal/screens  Pure go3270 screen builders: LoginScreen(geom, status, brandin
                   input reaches col 78); HelpRow() shows PF3=Disconnect. Cursor homes to
                   (BodyBottomRow(), 16). Deliberate exception — see docs/dev/ispf-style-guide.md §6.8.
                   MenuScreen(geom, svcs,
-                  admin, status, errMsg, page). The menu paginates (PF7/PF8) via
+                  admin, settingsLocked, status, errMsg, page). The menu paginates (PF7/PF8) via
                   MenuPageBounds: global/stable numbering (the returned mapping covers ALL
                   services; only the current page's window renders, each row keeping its
                   global number), an `ITEMS x TO y OF z` indicator right-aligned on the

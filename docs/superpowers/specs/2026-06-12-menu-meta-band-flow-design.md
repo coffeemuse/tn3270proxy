@@ -86,7 +86,7 @@ mapping and paging for no benefit).
 ## Testing (TDD)
 
 1. **Rewrite the bottom-anchor assertions** in
-   `internal/screens/menu_paging_test.go` (the `us.Row ==
+   `internal/screens/menu_test.go` (the `us.Row ==
    menuBottomRow()-1` / `admin.Row == menuBottomRow()` checks) to the new
    contract: band row = last service row + 2 on pages with services.
 2. **New unit cases** (assert rows relative to the geometry formulas, not
