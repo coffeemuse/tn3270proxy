@@ -84,7 +84,8 @@ read-only **three-band ISPF screen** per `docs/dev/ispf-style-guide.md`
 (deliberately NOT the chrome-less MOTD/news pager; the news pager stays the
 documented exception):
 
-- Row 0: centered title — `HELP — Service Menu` — with a `PAGE x OF y`
+- Row 0: centered title — `SERVICE MENU HELP` (all-caps ASCII, matching the
+  house title style; an em dash is not codepage-safe) — with a `PAGE x OF y`
   indicator right-aligned on the same row (mirroring the menu's
   `ITEMS x TO y OF z` convention).
 - Row 2: red message line, reserved (unused by this screen).
