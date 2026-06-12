@@ -132,31 +132,36 @@ tagged releases with `SHA256SUMS`, plus a ready-to-run `docker-compose` example.
 
 ## Side-by-side comparison
 
+The two projects are built for different environments: `proxy3270` is
+deliberately lean and assumes a trusted internal network, while TN3270Proxy is
+built for untrusted edges. Most ❌ entries below are simply outside
+`proxy3270`'s design scope — they are differences in goals, not defects.
+
 | Capability | **TN3270Proxy** | proxy3270 |
 |---|:---:|:---:|
 | Pick-a-host menu + bridge | ✅ | ✅ |
 | TLS inbound listener | ✅ | ✅ |
 | Backend (server-side) TLS + cert-verify toggle | ✅ | ✅ |
 | Paginated menu (PF7/PF8) | ✅ | ✅ |
-| **User authentication** | ✅ bcrypt accounts | ❌ none — anyone who connects gets the menu |
-| **Per-user / group-based menus** | ✅ | ❌ one flat menu for everyone |
+| **User authentication** | ✅ bcrypt accounts | ❌ open access (trusted-network model) |
+| **Per-user / group-based menus** | ✅ | ❌ one shared menu |
 | **Multi-factor auth (TOTP)** | ✅ encrypted at rest | ❌ |
 | **In-app admin UI (users/groups/services)** | ✅ live 3270 CRUD | ❌ edit JSON + restart |
 | **In-app runtime parameters (MOTD/branding/system ID/throttling)** | ✅ live 3270 Sysparms | ❌ |
 | **In-app audit browser** | ✅ 3270 screen | ❌ |
 | **Live session monitoring + disconnect** | ✅ 3270 Active Sessions | ❌ |
-| **Live config changes (no restart, no dropped sessions)** | ✅ | ❌ restart drops all connections |
+| **Live config changes (no restart, no dropped sessions)** | ✅ | ❌ restart required |
 | **Self-service password / MFA** | ✅ | ❌ |
-| **Durable audit trail (queryable)** | ✅ SQLite table + CLI | ❌ log lines only |
+| **Durable audit trail (queryable)** | ✅ SQLite table + CLI | ➖ connection logging |
 | **Failed-auth throttling / lockout** | ✅ per-user backoff | ❌ |
 | **Connection caps (global + per-IP)** | ✅ | ❌ |
 | **Idle timeouts / pre-auth ceiling** | ✅ phase-aware regimes | ❌ |
 | **Trusted-network bypass list** | ✅ DB-backed, live-managed | ❌ |
-| **Return to menu after host session** | ✅ PA3 + re-login | ⚠️ session ends (menu recovery unsolved upstream) |
+| **Return to menu after host session** | ✅ PA3 + re-login | ❌ session ends; reconnect to choose again |
 | Embedded database (no external DB) | ✅ SQLite | ➖ JSON config file |
 | Structured logging (slog, levels, JSON file) | ✅ | ➖ zerolog text, debug/trace |
 | Larger terminal models (MOD 3/4/5) | ✅ | ✅ |
-| ISPF-style layout + style guide | ✅ | ➖ minimal menu |
+| ISPF-style layout + style guide | ✅ | ➖ deliberately simple menu |
 | Status block (user/date/terminal/release) | ✅ | ❌ |
 | Login disclaimer / banner | ✅ MOTD/NEWS | ✅ 2-line disclaimer |
 | Custom login branding art (`BRANDING_FILE`) | ✅ | ❌ |
@@ -164,7 +169,7 @@ tagged releases with `SHA256SUMS`, plus a ready-to-run `docker-compose` example.
 | Container image / multi-arch releases | ✅ distroless + GHCR | ❌ |
 | Telnet "un-negotiation" handoff option | ➖ unnecessary by design¹ | ✅ flag |
 
-✅ = full support · ⚠️ = partial / known limitation · ➖ = present but minimal · ❌ = not available
+✅ = full support · ➖ = present but minimal · ❌ = not available / out of scope
 
 ¹ *proxy3270 relays the two Telnet legs raw, so it offers an `-unnegotiate`
 flag (and a tunable timeout) to untangle double-negotiation for stricter
@@ -180,10 +185,10 @@ structurally impossible.*
 | | **TN3270Proxy** | proxy3270 |
 |---|---|---|
 | **What it is** | A 3270 *access gateway* | A static 3270 *forwarder* |
-| **Who can connect** | Authenticated, authorized users only | Anyone on the network |
-| **Who sees what** | Each user sees only their group's hosts | Everyone sees every host |
-| **How you manage it** | Live 3270 admin console, zero downtime | Edit JSON, restart, drop everyone |
-| **What you can prove** | A durable, queryable audit trail | What the logs happened to catch |
+| **Who can connect** | Authenticated, authorized users only | Any client on the (trusted) network |
+| **Who sees what** | Each user sees only their group's hosts | Everyone sees the same menu |
+| **How you manage it** | Live 3270 admin console, zero downtime | Edit a JSON config and restart |
+| **What you can prove** | A durable, queryable audit trail | Standard application logs |
 | **Designed for** | A public-facing edge | A trusted LAN |
 
 proxy3270 is an excellent, focused tool for getting users in front of a list of
