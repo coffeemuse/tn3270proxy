@@ -106,7 +106,10 @@ func (f *adminFlow) documentEditor(ctx context.Context, r ui3270.Renderer, d sto
 // document's import-path sysconfig param) and replaces d's content with the
 // file's contents. Audited as doc_import with the path in the detail.
 func (f *adminFlow) documentImport(ctx context.Context, r ui3270.Renderer, d store.Document) (string, error) {
-	defaultPath, _ := f.store.GetConfig(ctx, docImportPathKey(d.Name)) // "": blank pre-fill
+	defaultPath := ""
+	if key := docImportPathKey(d.Name); key != "" {
+		defaultPath, _ = f.store.GetConfig(ctx, key) // "": blank pre-fill
+	}
 	imported := ""
 	fields := []ui3270.FormField{
 		{Name: screens.FieldPath, Label: "Server file path. .", Value: defaultPath, Length: 56},
@@ -133,10 +136,15 @@ func (f *adminFlow) documentImport(ctx context.Context, r ui3270.Renderer, d sto
 	return imported, err
 }
 
-// docImportPathKey maps a document name to its import-path sysconfig key.
+// docImportPathKey maps a document name to its import-path sysconfig key, or
+// "" when the document has no configured default path (HELP-MENU; only the
+// legacy MOTD/BRANDING cutover params exist — see internal/sysconfig).
 func docImportPathKey(doc string) string {
-	if doc == store.DocBranding {
+	switch doc {
+	case store.DocBranding:
 		return sysconfig.KeyBrandingFile
+	case store.DocMOTD:
+		return sysconfig.KeyMOTDFile
 	}
-	return sysconfig.KeyMOTDFile
+	return ""
 }

@@ -24,8 +24,9 @@ entry — with a small CLI for lifecycle and maintenance tasks.
    requiring/clearing MFA, the issuer label.
 7. [System Parameters](07-system-parameters.md) — runtime settings: system
    ID, MOTD/branding import paths, auth throttling, audit view options.
-8. [Documents: MOTD & login branding](08-motd.md) — the in-database editor
-   and import workflow for MOTD text and login-screen branding art.
+8. [Documents: MOTD, login branding, and help text](08-motd.md) — the
+   in-database editor and import workflow for MOTD text, login-screen
+   branding art, and the service menu help document (HELP-MENU).
 
 **Platform protection**
 

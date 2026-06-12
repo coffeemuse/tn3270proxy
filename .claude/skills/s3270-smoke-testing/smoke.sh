@@ -495,7 +495,8 @@ fi
 #
 # The MOTD renders from the MOTD document in the DB (GH #126), so activate the
 # gate by importing the fixture via the Documents admin flow: admin menu 8 →
-# member list → Tab to the MOTD row (BRANDING sorts first; cursor home is row 0)
+# member list → Tab twice to the MOTD row (rows sort BRANDING, HELP-MENU, MOTD;
+# cursor home is row 0)
 # → I = import. The import form pre-fills from the MOTD Import Path sysparam
 # (scenario 12 left it at /etc/motd.smoke), so EraseEOF() clears it before
 # typing the real fixture path. The path is interpolated into the macro here
@@ -514,6 +515,7 @@ Wait(5,InputField)
 String(8)
 Enter()
 Wait(5,InputField)
+Tab()
 Tab()
 String(I)
 Enter()
@@ -710,6 +712,7 @@ Wait(5,InputField)
 String(8)
 Enter()
 Wait(5,InputField)
+Tab()
 Tab()
 String(I)
 Enter()
@@ -920,7 +923,8 @@ fi
 # UNPADDED so the field's trailing positions stay NUL — native 3270 insert mode
 # depends on it (padding with spaces locks the keyboard on Insert).
 #
-# Walk: login admin -> A -> 8 (member list; capture) -> Tab to the MOTD row ->
+# Walk: login admin -> A -> 8 (member list; capture) -> Tab twice to the MOTD
+# row (HELP-MENU sits between BRANDING and MOTD) ->
 # E (editor; capture: title, ruler, cursor on the first prefix field (4,1)) ->
 # Tab to the text field -> type line one -> PF3 (save; capture "MOTD SAVED" +
 # Lines column = 1) -> E again -> Tab, Right x5 (mid-line), Insert(), type X
@@ -944,6 +948,7 @@ Enter()
 Wait(5,InputField)
 Ascii()
 Tab()
+Tab()
 String(E)
 Enter()
 Wait(5,InputField)
@@ -953,6 +958,7 @@ String("  SMOKE EDIT LINE ONE")
 PF(3)
 Wait(5,InputField)
 Ascii()
+Tab()
 Tab()
 String(E)
 Enter()
@@ -988,6 +994,7 @@ EOF
 check "19a Documents member list renders" "TN3270 GATEWAY ADMIN: DOCUMENTS" "$WORK/t19.out"
 check "19b member list shows BRANDING row" "BRANDING" "$WORK/t19.out"
 check "19c member list shows MOTD row" "MOTD" "$WORK/t19.out"
+check "19c2 member list shows HELP-MENU row" "HELP-MENU" "$WORK/t19.out"
 check "19d member list cursor on first CMD field (4,3)" "I 2 24 80 4 3 " "$WORK/t19.out"
 check "19e editor title EDIT MOTD" "EDIT MOTD" "$WORK/t19.out"
 # The ISPF column ruler row (blue, cols 4-79) over the text area. (grep -- :
@@ -1014,7 +1021,7 @@ check "19j insert mode shifts content (no keyboard lock)" "SMOKEX EDIT LINE ONE"
 ncheck "19k no s3270 action errors (keyboard never locked)" "^error" "$WORK/t19.out"
 # Prefix I inserted a blank line: the editor row indicator goes to 2 lines.
 # Title and RowInfo share screen row 0, so a single-line match ("EDIT MOTD ...
-# ROW x TO y") is unambiguous — the member list's own "ROW 1 TO 2 OF 2" (two
+# ROW x TO y") is unambiguous — the member list's own "ROW 1 TO 3 OF 3" (three
 # documents) sits on the DOCUMENTS title line and can't satisfy it.
 check "19l prefix I inserts a line (editor ROW 1 TO 2 OF 2)" "EDIT MOTD.*ROW 1 TO 2 OF 2" "$WORK/t19.out"
 # Prefix D removed it again: an editor 1-line indicator AFTER the 2-line one
@@ -1076,6 +1083,54 @@ check "19r ENTER clears the gate to the menu" "TN3270 GATEWAY MENU" "$WORK/t19ne
 # attribute byte at col 0) + the 2-space indent = exactly 4 spaces before SMOKE.
 # Without KeepSpaces the indent is eaten and only 2 spaces remain — no match.
 check "19s leading whitespace survives editor save" "^data:    SMOKE EDIT LINE ONE" "$WORK/t19news.out"
+
+# --- 20. PF1 help viewer (GH #132): the stock HELP-MENU document (26 lines →
+# 2 pages at MOD 2's 20-line help page size) opens from the service menu. The
+# viewer is all protected text with the cursor homed to {0,0} — no input field
+# — so use Wait(Unlock)+Wait(1,seconds) after AID keys, like the MOTD gate.
+# Uses the pager user ON MENU PAGE 2 so the return check proves the menu page
+# survives the help round-trip. NOTE: scenario 19 re-populated the MOTD (1
+# line = a 1-page gate), so the login needs one ENTER to clear it. ---
+s3 t20 <<EOF
+Connect(127.0.0.1:$FRONT_PORT)
+Wait(5,InputField)
+String(pager)
+Tab()
+String(changeme)
+Enter()
+Wait(Unlock)
+Wait(1,seconds)
+Enter()
+Wait(5,InputField)
+PF(8)
+Wait(5,InputField)
+PF(1)
+Wait(Unlock)
+Wait(1,seconds)
+Ascii()
+PF(8)
+Wait(Unlock)
+Wait(1,seconds)
+Ascii()
+PF(8)
+Wait(Unlock)
+Wait(1,seconds)
+Ascii()
+PF(3)
+Wait(5,InputField)
+Ascii()
+Quit()
+EOF
+check  "20a PF1 opens the help viewer"      "SERVICE MENU HELP"    "$WORK/t20.out"
+check  "20b help page 1 indicator"          "PAGE 1 OF 2"          "$WORK/t20.out"
+check  "20c help page 1 stock content"      "SELECTING A SERVICE"  "$WORK/t20.out"
+check  "20d help cursor homed (0,0)"        "I 2 24 80 0 0 "       "$WORK/t20.out"
+check  "20e PF8 pages to help page 2"       "PAGE 2 OF 2"          "$WORK/t20.out"
+check  "20f help page 2 stock content"      "OTHER MENU ENTRIES"   "$WORK/t20.out"
+ncheck "20g PF8 clamps at the last page"    "PAGE 3 OF"            "$WORK/t20.out"
+# The menu was on page 2 (ITEMS 18 TO 22) before PF1; PF3 must restore it.
+check  "20h PF3 returns to menu page 2"     "ITEMS 18 TO 22 OF 22" "$WORK/t20.out"
+check  "20i menu help row advertises PF1"   "PF1=Help"             "$WORK/t20.out"
 
 echo
 echo "=== $PASS passed, $FAIL failed (evidence in $WORK) ==="

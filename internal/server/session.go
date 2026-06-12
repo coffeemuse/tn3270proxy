@@ -45,7 +45,11 @@ import (
 type Presenter interface {
 	Negotiate(conn net.Conn) (Term, error)
 	Login(conn net.Conn, term Term, status screens.MenuStatus, branding []string, errMsg string) (username, password string, quit bool, err error)
-	Menu(conn net.Conn, term Term, services []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string) (selected *store.Service, choice menuChoice, err error)
+	// Menu renders the service menu and returns the user's selection. help is
+	// the lazy PF1 fetcher: invoked only when PF1 is pressed, returning the
+	// help-document lines; nil/empty lines or an error render an inline
+	// NO HELP AVAILABLE message on the menu instead of opening the viewer.
+	Menu(conn net.Conn, term Term, services []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string, help func() ([]string, error)) (selected *store.Service, choice menuChoice, err error)
 	// UserSettings renders the self-service settings menu with the given
 	// adaptive rows and returns the typed option key (e.g. "1"); back=true on
 	// PF3 (return to the service menu). It loops internally on invalid input.
@@ -239,6 +243,22 @@ func (s *Session) loginBranding(ctx context.Context) []string {
 	return screens.SplitBranding(doc.Content)
 }
 
+// helpMenuLines resolves the service-menu help text fresh for one PF1 press
+// from the HELP-MENU document (one SQLite row read; admin edits take effect on
+// the next press, no restart). Empty means "no help available" — the presenter
+// renders an inline message instead of the viewer.
+func (s *Session) helpMenuLines(ctx context.Context) ([]string, error) {
+	doc, err := s.Store.GetDocument(ctx, store.DocHelpMenu)
+	if err != nil {
+		// The presenter folds this into the same inline NO HELP AVAILABLE
+		// message as an empty document; log so an operator can tell a read
+		// failure from a deliberately blanked document.
+		s.log().Warn("help document unreadable", "error", err)
+		return nil, err
+	}
+	return doc.Lines(), nil
+}
+
 // idleRegime is implemented by *idleConn (and test fakes); the session switches
 // the connection's idle regime at each lifecycle transition. A connection that
 // doesn't implement it (idle hardening disabled) is left untouched.
@@ -386,6 +406,7 @@ func (s *Session) Run(conn net.Conn) {
 			settingsLocked = lu.UserSettingsLocked
 		}
 		errMsg := ""
+		help := func() ([]string, error) { return s.helpMenuLines(ctx) }
 	menu:
 		for {
 			services, err := s.Store.ListServicesForGroups(ctx, identity.Groups)
@@ -399,7 +420,7 @@ func (s *Session) Run(conn net.Conn) {
 				SystemID: s.systemID(ctx),
 				Release:  s.Release,
 			}
-			selected, choice, err := s.Presenter.Menu(conn, term, services, isAdmin, settingsLocked, status, errMsg)
+			selected, choice, err := s.Presenter.Menu(conn, term, services, isAdmin, settingsLocked, status, errMsg, help)
 			if err != nil {
 				if isTimeoutErr(err) {
 					aud.record(ctx, store.AuditEvent{

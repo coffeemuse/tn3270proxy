@@ -81,6 +81,10 @@ func (g Geometry) MenuCapacity(admin bool) int {
 // row); see NewsScreen.
 func (g Geometry) NewsLinesPerPage() int { return g.norm().Rows - 2 }
 
+// HelpPageSize is how many help-viewer text lines fit on one page: the full
+// body band, rows BodyTopRow..BodyBottomRow (20 on MOD 2).
+func (g Geometry) HelpPageSize() int { return g.BodyBottomRow() - g.BodyTopRow() + 1 }
+
 // Top-band layout rows (ISPF style guide §2). The title/command/message band is
 // fixed at rows 0–2; the body fills row 3 down to BodyBottomRow; PF-key help
 // stays on the last row. See docs/dev/ispf-style-guide.md.

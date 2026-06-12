@@ -24,6 +24,13 @@ nothing.
 > in c3270/x3270 it's available as the `PA(3)` action, and most emulators
 > let you bind it to a key.
 
+## PF1 — service menu help
+
+At the service menu, **PF1** opens a help screen describing how to use the
+menu. Use **PF7/PF8** to page through the help text. Press **PF3** or
+**ENTER** to return — you'll land back on the same page of the service menu
+you were on.
+
 ## If you walk away
 
 - **At the menu or other gateway screens**: after a period of inactivity

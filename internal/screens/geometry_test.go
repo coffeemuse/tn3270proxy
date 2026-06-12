@@ -137,6 +137,15 @@ func TestCenterCol(t *testing.T) {
 	}
 }
 
+func TestHelpPageSize(t *testing.T) {
+	if got := DefaultGeometry.HelpPageSize(); got != 20 {
+		t.Errorf("MOD 2 help page size = %d, want 20", got)
+	}
+	if got := (Geometry{Rows: 43, Cols: 80}).HelpPageSize(); got != 39 {
+		t.Errorf("MOD 4 help page size = %d, want 39", got)
+	}
+}
+
 func TestLoginBrandingGeometry(t *testing.T) {
 	cases := []struct {
 		g          Geometry

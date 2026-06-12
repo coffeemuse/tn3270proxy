@@ -443,6 +443,25 @@ func TestMigrationAddsAndBackfillsAuditActor(t *testing.T) {
 	}
 }
 
+// A DB that predates the HELP-MENU entry gains the stock seed on Open via
+// reconcileDefaults — no migration step involved.
+func TestExistingDBGainsHelpMenuDocument(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	buildV2DB(t, dbPath, map[string]string{})
+	st, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	d, err := st.GetDocument(context.Background(), DocHelpMenu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Content != DefaultHelpMenuContent {
+		t.Errorf("pre-existing DB should gain the stock HELP-MENU on open, got %q", d.Content)
+	}
+}
+
 // TestSecondOpenIsNoOp confirms reopening a current DB neither changes the
 // version nor writes a new backup.
 func TestSecondOpenIsNoOp(t *testing.T) {

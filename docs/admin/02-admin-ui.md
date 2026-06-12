@@ -12,7 +12,7 @@ Selecting it opens the **TN3270 GATEWAY ADMIN** menu:
 | 5 | Networks — trusted networks (DoS allow-list) | [Trusted Networks](09-trusted-networks.md) |
 | 6 | Audit — browse the audit trail | [Audit trail](12-audit.md) |
 | 7 | Sessions — active client sessions | [Active Sessions](11-sessions.md) |
-| 8 | Documents — MOTD and login branding text | [Documents](08-motd.md) |
+| 8 | Documents — MOTD, login branding, and help text | [Documents](08-motd.md) |
 
 Type the option number at `Option ===>` and press Enter. PF3 returns to the
 service menu.

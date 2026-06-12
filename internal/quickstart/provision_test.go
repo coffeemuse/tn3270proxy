@@ -124,4 +124,12 @@ func TestProvisionSeedsDocuments(t *testing.T) {
 			t.Errorf("%s: content match=%v updated_by=%q", name, d.Content == want, d.UpdatedBy)
 		}
 	}
+	// HELP-MENU is seeded by reconcileDefaults (stock text), not by quickstart.
+	h, err := st.GetDocument(context.Background(), store.DocHelpMenu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Content == "" {
+		t.Error("HELP-MENU should hold the stock help text after provisioning")
+	}
 }

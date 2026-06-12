@@ -37,6 +37,7 @@ func TestNormalizeDocName(t *testing.T) {
 		{"motd", DocMOTD, true},
 		{" Branding ", DocBranding, true},
 		{"MOTD", DocMOTD, true},
+		{"help-menu", DocHelpMenu, true},
 		{"bogus", "", false},
 		{"", "", false},
 	} {
@@ -110,11 +111,49 @@ func TestListDocumentsAlwaysShowsKnownDocs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(docs) != 2 || docs[0].Name != DocBranding || docs[1].Name != DocMOTD {
-		t.Errorf("got %+v, want [BRANDING, MOTD] (alphabetical)", docs)
+	if len(docs) != 3 || docs[0].Name != DocBranding || docs[1].Name != DocHelpMenu || docs[2].Name != DocMOTD {
+		t.Errorf("got %+v, want [BRANDING, HELP-MENU, MOTD] (alphabetical)", docs)
 	}
 	if docs[0].Content != "" || docs[0].LineCount() != 0 {
-		t.Errorf("fresh doc should be empty: %+v", docs[0])
+		t.Errorf("fresh BRANDING should be empty: %+v", docs[0])
+	}
+	if docs[1].Content != DefaultHelpMenuContent {
+		t.Errorf("fresh HELP-MENU should hold the stock text, got %q", docs[1].Content)
+	}
+}
+
+// The stock HELP-MENU seed lands exactly once: a fresh DB gets it, and an
+// admin edit — including deliberately blanking the document — survives a
+// reopen (the seed is INSERT OR IGNORE, never an update).
+func TestHelpMenuStockSeedAndEditDurability(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "t.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	d, err := st.GetDocument(ctx, DocHelpMenu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Content != DefaultHelpMenuContent || d.UpdatedBy != "" {
+		t.Errorf("fresh seed: content match=%v updated_by=%q", d.Content == DefaultHelpMenuContent, d.UpdatedBy)
+	}
+	if err := st.SetDocument(ctx, DocHelpMenu, "", "ADMIN"); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	st2, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st2.Close()
+	d, err = st2.GetDocument(ctx, DocHelpMenu)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Content != "" {
+		t.Errorf("blank edit did not survive reopen: %q", d.Content)
 	}
 }
 

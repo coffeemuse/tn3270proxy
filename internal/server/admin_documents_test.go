@@ -31,8 +31,8 @@ import (
 	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
 
-// Documents list orders by name: BRANDING is row 0, MOTD is row 1.
-const motdRow = 1
+// Documents list orders by name: BRANDING row 0, HELP-MENU row 1, MOTD row 2.
+const motdRow = 2
 
 // docStore unwraps the fixture's real *store.Store for document seeding.
 func docStore(t *testing.T, f *adminFlow) *store.Store {
@@ -203,6 +203,18 @@ func TestAdminDocumentImportBadPath(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("audit = %+v, want no events for a rejected import", got)
+	}
+}
+
+func TestDocImportPathKey(t *testing.T) {
+	if k := docImportPathKey(store.DocMOTD); k != sysconfig.KeyMOTDFile {
+		t.Errorf("MOTD key = %q, want %q", k, sysconfig.KeyMOTDFile)
+	}
+	if k := docImportPathKey(store.DocBranding); k != sysconfig.KeyBrandingFile {
+		t.Errorf("BRANDING key = %q, want %q", k, sysconfig.KeyBrandingFile)
+	}
+	if k := docImportPathKey(store.DocHelpMenu); k != "" {
+		t.Errorf("HELP-MENU key = %q, want \"\" (blank pre-fill, no sysconfig param)", k)
 	}
 }
 

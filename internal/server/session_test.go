@@ -50,13 +50,14 @@ type fakePresenter struct {
 	loginErrors       []string
 	gotAdminFlag      []bool
 	gotSettingsLocked []bool
-	gotTerms          []Term               // every term passed to Login/Menu, in call order
-	gotStatus         []screens.MenuStatus // every status passed to Menu, in call order
-	loginStatuses     []screens.MenuStatus // every status passed to Login, in call order
-	gotBranding       [][]string           // branding lines passed to each Login call
-	loginHook         func(call int)       // optional: runs after Login paint #call (0-based) is recorded
-	newsCalls         [][][]string         // pages passed to each News call, in order
-	newsResults       []error              // queued News return values; default nil
+	gotTerms          []Term                     // every term passed to Login/Menu, in call order
+	gotStatus         []screens.MenuStatus       // every status passed to Menu, in call order
+	loginStatuses     []screens.MenuStatus       // every status passed to Login, in call order
+	gotBranding       [][]string                 // branding lines passed to each Login call
+	loginHook         func(call int)             // optional: runs after Login paint #call (0-based) is recorded
+	gotHelpFns        []func() ([]string, error) // help fetcher passed to each Menu call
+	newsCalls         [][][]string               // pages passed to each News call, in order
+	newsResults       []error                    // queued News return values; default nil
 	enrolls           []mfaResult
 	verifies          []mfaResult
 	enrollErrors      []string // errMsg passed to each EnrollMFA call
@@ -112,12 +113,13 @@ func (f *fakePresenter) Login(conn net.Conn, term Term, status screens.MenuStatu
 	return r.user, r.pass, r.quit, r.err
 }
 
-func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string) (*store.Service, menuChoice, error) {
+func (f *fakePresenter) Menu(conn net.Conn, term Term, svcs []store.Service, admin bool, settingsLocked bool, status screens.MenuStatus, errMsg string, help func() ([]string, error)) (*store.Service, menuChoice, error) {
 	f.gotTerms = append(f.gotTerms, term)
 	f.menuErrors = append(f.menuErrors, errMsg)
 	f.gotAdminFlag = append(f.gotAdminFlag, admin)
 	f.gotSettingsLocked = append(f.gotSettingsLocked, settingsLocked)
 	f.gotStatus = append(f.gotStatus, status)
+	f.gotHelpFns = append(f.gotHelpFns, help)
 	r := f.menuPicks[0]
 	f.menuPicks = f.menuPicks[1:]
 	ch := r.choice
