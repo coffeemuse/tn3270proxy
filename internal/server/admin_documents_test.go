@@ -206,6 +206,18 @@ func TestAdminDocumentImportBadPath(t *testing.T) {
 	}
 }
 
+func TestDocImportPathKey(t *testing.T) {
+	if k := docImportPathKey(store.DocMOTD); k != sysconfig.KeyMOTDFile {
+		t.Errorf("MOTD key = %q, want %q", k, sysconfig.KeyMOTDFile)
+	}
+	if k := docImportPathKey(store.DocBranding); k != sysconfig.KeyBrandingFile {
+		t.Errorf("BRANDING key = %q, want %q", k, sysconfig.KeyBrandingFile)
+	}
+	if k := docImportPathKey(store.DocHelpMenu); k != "" {
+		t.Errorf("HELP-MENU key = %q, want \"\" (blank pre-fill, no sysconfig param)", k)
+	}
+}
+
 func TestAdminDocumentOversizeSaveRejected(t *testing.T) {
 	// Seed MOTD with one 5000-byte line; an R (repeat) prefix doubles it to
 	// 10001 bytes (> 8 KiB cap), so the PF3 save must be rejected by the store
