@@ -89,7 +89,7 @@ documented exception):
   indicator right-aligned on the same row (mirroring the menu's
   `ITEMS x TO y OF z` convention).
 - Row 2: red message line, reserved (unused by this screen).
-- Body from row 3: the current page's lines, protected text, default color,
+- Body from row 3: the current page's lines, protected text, green,
   truncated at column 79.
 - `geom.HelpRow()`: `PF3=Return  PF7=PgUp  PF8=PgDn`.
 
@@ -172,10 +172,14 @@ numbers; positioning is verified in a real emulator.
 - **screens:** `HelpScreen` builder — title text, `PAGE x OF y` indicator,
   body content per page, PF-row text, paging clamp math, cursor value,
   geometry-driven page size (MOD 2 vs MOD 4).
-- **presenter:** PF1 flow against a scripted connection/fake — fetcher
-  invoked only on PF1; empty/error → menu re-presented with
-  `NO HELP AVAILABLE`; non-empty → viewer renders; PF8/PF7 page; PF3 and
-  Enter return; menu page preserved across the help round-trip.
+- **presenter/session:** `helpMenuLines` unit-tested against a real store
+  (stock seed, fresh-read-after-edit, blanked → empty). The PF1 case and
+  `runHelpViewer` are thin go3270 driver loops, which this repo verifies
+  via the s3270 smoke suite rather than scripted-connection unit tests
+  (no such harness exists in the server package); smoke scenario 20
+  covers open, paging, clamping, return-with-page-intact, and the
+  empty/error → `NO HELP AVAILABLE` branch is covered at the fetcher
+  layer plus compile-enforced wiring.
 - **store:** `HELP-MENU` in `KnownDocuments`; reconcile seeds the stock
   content on a fresh DB **and** on an existing DB that predates the entry;
   reconcile twice is idempotent; an admin edit (including blanking)
