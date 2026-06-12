@@ -68,3 +68,32 @@ back out for offline editing:
 
 Saves and imports are audited (`doc_update` / `doc_import`) with the actor,
 line count, and (for imports) the source path.
+
+## HELP-MENU — service menu help text
+
+A third document, **HELP-MENU**, holds the text displayed when a user presses
+**PF1** at the service menu. Unlike MOTD and BRANDING (which seed empty), this
+document ships with **stock content** so PF1 works immediately on a fresh
+install without any admin action.
+
+The Documents member list (option 8) shows it alongside MOTD and BRANDING:
+
+    Name        Lines  Changed (UTC)      ID
+    HELP-MENU      10  2026-06-01 00:00   SYSTEM
+
+Edit and import work identically to the other documents — **E** opens the
+ISPF line editor, **I** opens the import form. Note that the import form's
+path field starts **blank** for HELP-MENU (there is no system parameter for a
+default import path — unlike MOTD and BRANDING, HELP-MENU has no matching
+sysconfig import-path entry).
+
+The CLI verbs work the same way:
+
+    tn3270proxy doc export -db proxy.db -name HELP-MENU -file help-menu.txt
+    tn3270proxy doc import -db proxy.db -name HELP-MENU -file help-menu.txt
+
+**Blanking the document disables help**: if the content is cleared to empty,
+pressing PF1 shows `NO HELP AVAILABLE` on the menu's message line instead of
+opening a viewer. This is intentional — operators can suppress help by
+clearing the document. Edits, including blanking, survive restarts and
+upgrades (the stock seed uses INSERT OR IGNORE, so it only runs once).

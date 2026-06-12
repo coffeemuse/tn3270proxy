@@ -18,12 +18,16 @@ user (e.g. a shared/guest account): it hides the `0` self-service entry and free
 account's MFA as admin-managed — a stored secret is still verified at login, but the
 account is never force-enrolled (so a shared login can't be hijacked into holding the only
 TOTP).
-MOTD and login branding live in the DB (`documents` table, names `MOTD` / `BRANDING`),
-managed via the admin **Documents** member list (admin menu option 8) — an ISPF-style
-line editor with I/D/R prefix commands, a 76-column editable width, and over-wide lines
-rendered read-only (yellow, re-import to change) — plus an import-from-server-file form
-(pre-filled from the `MOTD_FILE` / `BRANDING_FILE` sysconfig paths) and the `doc
-import`/`doc export` CLI verbs for provisioning and offline editing.
+MOTD and login branding live in the DB (`documents` table, names `MOTD` / `BRANDING` /
+`HELP-MENU`), managed via the admin **Documents** member list (admin menu option 8) — an
+ISPF-style line editor with I/D/R prefix commands, a 76-column editable width, and
+over-wide lines rendered read-only (yellow, re-import to change) — plus an
+import-from-server-file form (pre-filled from the `MOTD_FILE` / `BRANDING_FILE` sysconfig
+paths) and the `doc import`/`doc export` CLI verbs for provisioning and offline editing.
+PF1 at the service menu opens a pageable help viewer rendering the `HELP-MENU` document
+(stock text seeded at first run; admin-edited like the others; blank → inline NO HELP
+AVAILABLE on the menu message line; `HELP-<panel>` is the naming convention for future
+per-panel help).
 
 The connect → login → menu → bridge core loop (the MVP) is **complete and on `main`**.
 Remaining work is in `docs/superpowers/ROADMAP.md`.
@@ -115,12 +119,16 @@ internal/store    SQLite (modernc, pure-Go). Store + users/groups/services + gro
                   Vacuum/IntegrityCheck/SchemaVersion). trusted_networks.go owns the
                   DB-backed trusted-network records (ParseTrustedCIDR normalizes a bare
                   IP to a host route; LoadTrustedPrefixes feeds the live trust check).
-                  documents.go owns DB-resident text documents (MOTD / BRANDING):
-                  Document{Name,Content,Lines(),LineCount()}, GetDocument/SetDocument/
-                  ListDocuments, NormalizeDocName (the single choke point, canonical
-                  uppercase, rejects unknown names), ReadDocumentFile (absolute-path
-                  required; rejects over MaxDocumentBytes — 8 KiB — rather than
-                  truncating); reconcileDefaults seeds the two empty rows; migration v3
+                  documents.go owns DB-resident text documents (MOTD / BRANDING /
+                  HELP-MENU): Document{Name,Content,Lines(),LineCount()},
+                  GetDocument/SetDocument/ListDocuments, NormalizeDocName (the single
+                  choke point, canonical uppercase, rejects unknown names),
+                  ReadDocumentFile (absolute-path required; rejects over
+                  MaxDocumentBytes — 8 KiB — rather than truncating);
+                  reconcileDefaults seeds MOTD and BRANDING as empty rows and
+                  HELP-MENU with stock content via `documentDefaults` (INSERT OR IGNORE
+                  at row creation — admin edits including blanking survive restarts and
+                  upgrades, unlike MOTD/BRANDING which seed empty); migration v3
                   creates the documents table and does the one-time cutover import from
                   the legacy MOTD_FILE/BRANDING_FILE paths (truncating, non-fatal skip
                   for missing/unreadable/relative paths).
@@ -183,6 +191,11 @@ internal/screens  Pure go3270 screen builders: LoginScreen(geom, status, brandin
                   unlocked users always see the `0` row. UserSettingsScreen renders the
                   self-scoped settings sub-menu (FieldUSOption); FieldCurrentPassword is
                   the step-up / change-password input.
+                  Help viewer: HelpScreen (help.go) + HelpPageBounds build the PF1
+                  help overlay — three-band ISPF, right-aligned `PAGE x OF y` indicator
+                  on the title row, no input fields, cursor homes to {0,0};
+                  Geometry.HelpPageSize drives pagination (PF7/PF8 with clamping; PF3
+                  or ENTER returns to the menu on the same page).
 internal/ui3270   Generic 3270 driver layer behind a Renderer seam (NewGo3270Renderer):
                   RunForm/RunList/RunSnapshotList drive form/list/detail screens + row
                   helpers, so the admin and self-service flows share one paging/line-command
@@ -261,6 +274,11 @@ internal/server   Session state machine (Negotiate→Login→Menu→Bridge loop)
                   login paint; maybeShowNews reads the MOTD document fresh on each
                   post-login MOTD gate. The old file-based BrandingRead/MOTDRead seams
                   are gone — content comes exclusively from the documents table.
+                  PF1 is handled inside go3270Presenter.Menu via a lazy `help func()
+                  ([]string, error)` param (Session.helpMenuLines, fresh DB read per
+                  press) + runHelpViewer (presenter.go); empty or error result → inline
+                  NO HELP AVAILABLE on the menu message line; the menu page the user was
+                  on is preserved across the help round-trip.
                   adminFlow (admin.go, admin_users.go, admin_groups.go, admin_services.go,
                   admin_system.go sysparms form, admin_networks.go trusted networks,
                   admin_audit.go 72h RECENT-activity viewer + PTR detail, admin_sessions.go
