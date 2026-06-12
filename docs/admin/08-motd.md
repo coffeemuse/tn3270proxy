@@ -1,4 +1,4 @@
-# Documents: MOTD and Login Branding
+# Documents: MOTD, Login Branding, and Help Text
 
 The post-login **MOTD/NEWS** text and the **login-screen branding** art are
 stored in the database and managed from the admin UI: admin menu →
@@ -79,7 +79,7 @@ install without any admin action.
 The Documents member list (option 8) shows it alongside MOTD and BRANDING:
 
     Name        Lines  Changed (UTC)      ID
-    HELP-MENU      26                     
+    HELP-MENU      26
 
 Edit and import work identically to the other documents — **E** opens the
 ISPF line editor, **I** opens the import form. Note that the import form's

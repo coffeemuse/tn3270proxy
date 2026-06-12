@@ -19,7 +19,7 @@ The menu is home base — every service you're allowed to reach, numbered:
 
    0              User Settings
 
-   PF3=Logoff   PF7=PgUp  PF8=PgDn   (PA3 returns here from a session)
+   PF1=Help  PF3=Logoff  PF7=PgUp  PF8=PgDn  (PA3 returns here from a session)
 ```
 
 Each row is a number, the service's short name, and its description. The
@@ -42,6 +42,9 @@ Two special entries sit at the bottom:
 If you have more services than fit on one screen, **PF7/PF8** page up and
 down; the `ITEMS x TO y OF z` indicator in the corner shows where you are,
 and the numbers stay stable across pages (item 17 is `17` on every page).
+
+Press **PF1** for a help screen describing the menu — see
+[Keys and timeouts](07-navigation.md).
 
 **PF3 here is logoff** — back to the login screen. You only see services
 your groups grant; if something you need is missing, that's an access
