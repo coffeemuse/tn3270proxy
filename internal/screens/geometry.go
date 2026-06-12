@@ -57,16 +57,20 @@ func (g Geometry) ListPageSize() int { return g.norm().Rows - 10 }
 // 9 on MOD 2).
 func (g Geometry) FormMaxFields() int { return (g.norm().Rows-8)/2 + 1 }
 
-// menuBottomRow is the menu's effective bottom content row: one above
-// BodyBottomRow, leaving a blank separator line above the PF-key legend
-// (menu-only; other screens use BodyBottomRow directly).
+// menuBottomRow is the menu page window's row-budget floor used by
+// MenuCapacity: one above BodyBottomRow, reserving the blank separator row
+// between the service list and the meta band (GH #133). It no longer anchors
+// the band — MenuScreen flows the band below the list, so on a full page the
+// band ends exactly on BodyBottomRow (menu-only; other screens use
+// BodyBottomRow directly).
 func (g Geometry) menuBottomRow() int { return g.BodyBottomRow() - 1 }
 
 // MenuCapacity is how many service lines fit on one menu page: body rows
 // BodyTopRow+1 .. menuBottomRow (row BodyTopRow is the instruction line), minus
 // one for the "0 User Settings" meta row (reserved even when hidden by
 // settingsLocked, so paging math is stable) and one more for the admin "A" row.
-// The blank separator above the PF legend is excluded via menuBottomRow.
+// The blank separator between the list and the meta band is excluded via
+// menuBottomRow.
 func (g Geometry) MenuCapacity(admin bool) int {
 	n := g.menuBottomRow() - (g.BodyTopRow() + 1) + 1 - 1 // body rows minus the "0" meta row
 	if admin {

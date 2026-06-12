@@ -103,8 +103,9 @@ func MenuPageBounds(geom Geometry, total int, admin bool, page int) (clamped, st
 // they never collide with the right-hand status block (StatusBlockCol). status
 // supplies the block's values; an empty MenuStatus renders blank values. The
 // "0 User Settings" meta row (omitted when settingsLocked) and, when admin,
-// "A Administration" are bottom-anchored on every page. An "ITEMS x TO y OF z"
-// indicator sits on the title row. errMsg, if non-empty, shows on the message
+// "A Administration" flow directly below the page's service rows on every page,
+// after one blank separator row (no separator below the empty-list placeholder).
+// An "ITEMS x TO y OF z" indicator sits on the title row. errMsg, if non-empty, shows on the message
 // line. PF7/PF8 page; out-of-range pages clamp (see MenuPageBounds).
 func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLocked bool, status MenuStatus, errMsg string, page int) (go3270.Screen, map[string]store.Service, Cursor) {
 	_, start, end, indicator := MenuPageBounds(geom, len(services), admin, page)
@@ -143,25 +144,26 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLoc
 		screen = append(screen, go3270.Field{Row: geom.BodyTopRow() + 1, Col: 6, Content: "(no services available for your account)"})
 	}
 
-	// Meta band: bottom-anchored. Non-admin unlocked: "0" on menuBottomRow.
-	// Admin: "A" on menuBottomRow, "0" one row above. A locked user has no "0"
-	// row at all (self-service is hidden). The page window is capped at
-	// MenuCapacity, so service rows never reach the meta band.
-	metaRow := geom.menuBottomRow()
-	if admin {
-		metaRow-- // leave the bottom row for the "A" entry
-	}
+	// Meta band: flows directly below the page's service rows (GH #133) — one
+	// blank separator row after the last service row, none after the
+	// empty-list placeholder (a message, not a service row: `row` still sits
+	// on it, so row+1 lands directly beneath). "0 User Settings" renders first
+	// unless settingsLocked; "A Administration" (admins) takes the next row,
+	// or the anchor row itself when "0" is hidden. MenuCapacity reserves the
+	// separator + band rows, so a full page's band ends exactly on
+	// BodyBottomRow and never collides with the page window or PF legend.
+	metaRow := row + 1
 	if !settingsLocked {
 		screen = append(screen,
 			go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  0"},
 			go3270.Field{Row: metaRow, Col: 17, Color: go3270.Green, Content: "User Settings"},
 		)
+		metaRow++
 	}
 	if admin {
-		adminRow := metaRow + 1
 		screen = append(screen,
-			go3270.Field{Row: adminRow, Col: 0, Intense: true, Content: "  A"},
-			go3270.Field{Row: adminRow, Col: 17, Color: go3270.Green, Content: "Administration"},
+			go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  A"},
+			go3270.Field{Row: metaRow, Col: 17, Color: go3270.Green, Content: "Administration"},
 		)
 	}
 
