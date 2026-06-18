@@ -329,6 +329,9 @@ func (f *adminFlow) applyMFAEdit(ctx context.Context, u store.User, vals map[str
 		}
 	}
 	if strings.ToUpper(strings.TrimSpace(vals[screens.FieldMFAClear])) == "Y" {
+		if !strings.EqualFold(strings.TrimSpace(vals[screens.FieldMFAClearConfirm]), "CLEAR") {
+			return "TYPE CLEAR TO CONFIRM MFA WIPE", nil
+		}
 		if err := f.store.ClearMFA(ctx, u.ID); err != nil {
 			return f.storeErr("clear mfa", err), nil
 		}
