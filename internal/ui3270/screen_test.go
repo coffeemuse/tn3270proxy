@@ -331,3 +331,43 @@ func TestBuildFormScreenPalette(t *testing.T) {
 		t.Errorf("message = %+v ok=%v, want row 2 red intense", msg, ok)
 	}
 }
+
+func TestBuildFormScreenCompactFirstSectionNoGutter(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8, Section: "Identity"},
+	}})
+	bannerRow := -1
+	for _, f := range screen {
+		if strings.HasPrefix(f.Content, "--- Identity") {
+			bannerRow = f.Row
+		}
+	}
+	if bannerRow != 2 {
+		t.Errorf("banner row = %d, want 2 (no gutter before the first section)", bannerRow)
+	}
+	a, _ := fieldByName(screen, "a")
+	if a.Row != 3 {
+		t.Errorf("field row = %d, want 3", a.Row)
+	}
+}
+
+func TestBuildFormScreenCompactSectionGutter(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8},                  // row 2
+		{Name: "b", Label: "B", Length: 8, Section: "Sect"}, // gutter 3, banner 4, field 5
+	}})
+	a, _ := fieldByName(screen, "a")
+	b, _ := fieldByName(screen, "b")
+	if a.Row != 2 || b.Row != 5 {
+		t.Errorf("rows = %d,%d, want 2,5", a.Row, b.Row)
+	}
+	bannerRow := -1
+	for _, f := range screen {
+		if strings.HasPrefix(f.Content, "--- Sect") {
+			bannerRow = f.Row
+		}
+	}
+	if bannerRow != 4 {
+		t.Errorf("banner row = %d, want 4 (gutter at 3)", bannerRow)
+	}
+}
