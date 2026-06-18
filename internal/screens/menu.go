@@ -120,7 +120,6 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLoc
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len("TN3270 GATEWAY MENU")), Color: go3270.White, Intense: true, Content: "TN3270 GATEWAY MENU"},
 		{Row: geom.TitleRow(), Col: indicatorCol, Color: go3270.Turquoise, Content: indicator},
-		{Row: geom.BodyTopRow(), Col: 2, Color: go3270.Turquoise, Content: "Select a service and press ENTER:"},
 	}
 
 	// Global mapping: every service is selectable by its global number, even one
@@ -136,7 +135,7 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLoc
 	// on later pages (it is "before 1", which lives only on page 0). The slot it
 	// occupies is reserved by MenuCapacity on every page, so global numbering and
 	// paging math stay stable. "0" remains typeable on any page regardless.
-	row := geom.BodyTopRow() + 1
+	row := geom.BodyTopRow()
 	if clamped == 0 && !settingsLocked {
 		screen = append(screen,
 			go3270.Field{Row: row, Col: 0, Intense: true, Content: "  0"},
@@ -185,7 +184,7 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLoc
 		selection,
 		stopF,
 		go3270.Field{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		go3270.Field{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF1=Help  PF3=Logoff  PF7=PgUp  PF8=PgDn  (PA3 returns here from a session)"},
+		go3270.Field{Row: geom.HelpRow(), Col: 0, Color: go3270.Blue, Content: "PF1=Help  PF3=Logoff  PF7=PgUp  PF8=PgDn  (PA3 returns here from a session)"},
 	)
 	return screen, mapping, cursorAt(selection)
 }
@@ -213,9 +212,9 @@ func statusBlock(geom Geometry, startRow int, rows []statusRow) go3270.Screen {
 
 // statusBlockFields builds the menu's right-hand status block: six rows
 // (User ID / Date / Time / Terminal / System ID / Release) starting at the
-// first service row (row 4). Values are hard-cut to 7 runes.
+// first service row (BodyTopRow, row 3). Values are hard-cut to 7 runes.
 func statusBlockFields(geom Geometry, status MenuStatus) go3270.Screen {
-	return statusBlock(geom, 4, []statusRow{
+	return statusBlock(geom, geom.BodyTopRow(), []statusRow{
 		{"User ID. :", truncateRunes(strings.ToUpper(status.Username), 7)},
 		{"Date . . :", julianDate(status.Now)},
 		{"Time . . :", clockHM(status.Now)},

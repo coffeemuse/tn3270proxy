@@ -27,9 +27,9 @@ import "github.com/racingmars/go3270"
 // fields separately so callers can tune the input (e.g. NumericOnly) and compute
 // the cursor with cursorAt(input). See docs/dev/ispf-style-guide.md §2.
 func commandLine(geom Geometry, prompt, fieldName string) (promptF, input, stop go3270.Field) {
-	const promptAttrCol = 2
-	// Prompt content runs cols 3..(2+len); the next field's attribute byte sits
-	// one past it, giving a one-column gap.
+	const promptAttrCol = 0
+	// Prompt content runs cols 1..len (attribute byte at col 0, flush left); the
+	// next field's attribute byte sits one past it, giving a one-column gap.
 	inputCol := promptAttrCol + 1 + len([]rune(prompt))
 	promptF = go3270.Field{Row: geom.CommandRow(), Col: promptAttrCol, Color: go3270.Turquoise, Content: prompt}
 	input = go3270.Field{Row: geom.CommandRow(), Col: inputCol, Name: fieldName, Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}

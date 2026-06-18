@@ -90,8 +90,8 @@ func TestAdminMenuTriColor(t *testing.T) {
 	if opt.Row != 1 {
 		t.Errorf("option input row = %d, want 1", opt.Row)
 	}
-	if cur.Row != 1 || cur.Col != 15 {
-		t.Errorf("cursor = %+v, want (1,15)", cur)
+	if cur.Row != 1 || cur.Col != 13 {
+		t.Errorf("cursor = %+v, want (1,13)", cur)
 	}
 }
 

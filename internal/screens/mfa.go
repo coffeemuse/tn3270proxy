@@ -45,7 +45,7 @@ func EnrollMFAScreen(geom Geometry, issuer, account, chunkedSecret, errMsg strin
 		code,
 		{Row: 12, Col: 32}, // stop field
 		{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "Enter=Confirm   PF3=Cancel"},
+		{Row: geom.HelpRow(), Col: 0, Color: go3270.Blue, Content: "Enter=Confirm   PF3=Cancel"},
 	}
 	rules := go3270.Rules{
 		FieldMFACode: {Validator: go3270.NonBlank, ErrorText: "Code is required"},
@@ -64,7 +64,7 @@ func VerifyMFAScreen(geom Geometry, errMsg string) (go3270.Screen, go3270.Rules,
 		code,
 		{Row: 5, Col: 19}, // stop field
 		{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "Enter=Verify   PF3=Cancel"},
+		{Row: geom.HelpRow(), Col: 0, Color: go3270.Blue, Content: "Enter=Verify   PF3=Cancel"},
 	}
 	rules := go3270.Rules{
 		FieldMFACode: {Validator: go3270.NonBlank, ErrorText: "Code is required"},

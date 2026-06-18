@@ -66,13 +66,13 @@ func (g Geometry) FormMaxFields() int { return (g.norm().Rows-8)/2 + 1 }
 func (g Geometry) menuBottomRow() int { return g.BodyBottomRow() - 1 }
 
 // MenuCapacity is how many service lines fit on one menu page: body rows
-// BodyTopRow+1 .. menuBottomRow (row BodyTopRow is the instruction line), minus
-// one for the "0 Settings" row (which leads the list on page 0; the slot is
-// reserved on every page so paging math is stable) and one more for the admin
-// "A" row. The blank separator between the list and the meta band is excluded
-// via menuBottomRow.
+// BodyTopRow .. menuBottomRow (the list starts at BodyTopRow — the instruction
+// line was removed, GH #130), minus one for the "0 Settings" row (which leads
+// the list on page 0; the slot is reserved on every page so paging math is
+// stable) and one more for the admin "A" row. The blank separator between the
+// list and the meta band is excluded via menuBottomRow.
 func (g Geometry) MenuCapacity(admin bool) int {
-	n := g.menuBottomRow() - (g.BodyTopRow() + 1) + 1 - 1 // body rows minus the "0" row
+	n := g.menuBottomRow() - g.BodyTopRow() + 1 - 1 // body rows minus the "0" row
 	if admin {
 		n--
 	}

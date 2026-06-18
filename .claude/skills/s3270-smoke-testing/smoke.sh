@@ -192,10 +192,10 @@ check "3f status block Release row"  "Release. :" "$WORK/t3.out"
 check "3g status block Terminal row" "Terminal :" "$WORK/t3.out"
 check "3h wide description renders"        "1234567890123456789012345678901234567890" "$WORK/t3.out"
 check "3i status block coexists with wide desc" "User ID. :" "$WORK/t3.out"
-# Cursor on the selection input (top "Option ===>" command line, row 1 col 15 on
-# a MOD 2 after the #65 band rework); login now reports 22 16 (branding-forward
-# layout), so 1 15 unambiguously identifies the menu.
-check "3j menu cursor on selection input (1,15)" "I 2 24 80 1 15 " "$WORK/t3.out"
+# Cursor on the selection input (top "Option ===>" command line, row 1 col 13 on
+# a MOD 2 after the #130 col-0 command-line shift); login now reports 22 16
+# (branding-forward layout), so 1 13 unambiguously identifies the menu.
+check "3j menu cursor on selection input (1,13)" "I 2 24 80 1 13 " "$WORK/t3.out"
 
 # --- 4. select 1 + ENTER bridges to the dummy backend ---
 s3 t4 <<EOF
@@ -330,9 +330,9 @@ Ascii()
 Quit()
 EOF
 check "9a admin menu renders" "TN3270 GATEWAY ADMIN" "$WORK/t9.out"
-# Admin menu option field at the top "Option ===>" command line, row 1 col 15
-# (same row as the service menu — both report 1 15 after the #65 band rework).
-check "9b admin/menu cursor on option field (1,15)" "I 2 24 80 1 15 " "$WORK/t9.out"
+# Admin menu option field at the top "Option ===>" command line, row 1 col 13
+# (same row as the service menu — both report 1 13 after the #130 col-0 shift).
+check "9b admin/menu cursor on option field (1,13)" "I 2 24 80 1 13 " "$WORK/t9.out"
 # Users list: first CMD field at row 4 col 3 — produced only by the list.
 check "9c users list cursor on first CMD field (4,3)" "I 2 24 80 4 3 " "$WORK/t9.out"
 # Add-user form: first input at row 3 col 17. Login now reports 22 16 (branding-
@@ -372,9 +372,9 @@ if awk '/TN3270 GATEWAY MENU/{seen=1} seen && /TN3270 GATEWAY LOGIN/{ok=1} END{e
 else
   FAIL=$((FAIL+1)); echo "FAIL: 10b post-auth idle did not return to login screen"
 fi
-# Cursor homed: menu cursor (1 15) then the re-rendered login cursor (22 16) after
+# Cursor homed: menu cursor (1 13) then the re-rendered login cursor (22 16) after
 # (branding-forward layout: BodyBottomRow()=22, userid input col=16).
-if awk '/I 2 24 80 1 15 /{seen=1} seen && /I 2 24 80 22 16 /{ok=1} END{exit !ok}' "$WORK/t10.out"; then
+if awk '/I 2 24 80 1 13 /{seen=1} seen && /I 2 24 80 22 16 /{ok=1} END{exit !ok}' "$WORK/t10.out"; then
   PASS=$((PASS+1)); echo "PASS: 10c login cursor homes to userid after idle-logout"
 else
   FAIL=$((FAIL+1)); echo "FAIL: 10c cursor not homed to (22,16) after idle-logout"
@@ -416,8 +416,8 @@ check "11b MOTD Import Path label present" "MOTD Import Path" "$WORK/t11.out"
 # input column is dynamic (GH #71): it sits past the longest label
 # ("Auth Fail Window (min):", 23 chars) at attribute col 27, so the cursor lands
 # at col 28 — and every field, including MOTD File, aligns there. Assert 3 28
-# AFTER the admin menu's 1 15 line so the earlier login screen (3 17) can't match.
-if awk '/I 2 24 80 1 15 /{seen=1} seen && /I 2 24 80 3 28 /{ok=1} END{exit !ok}' "$WORK/t11.out"; then
+# AFTER the admin menu's 1 13 line so the earlier login screen (3 17) can't match.
+if awk '/I 2 24 80 1 13 /{seen=1} seen && /I 2 24 80 3 28 /{ok=1} END{exit !ok}' "$WORK/t11.out"; then
   PASS=$((PASS+1)); echo "PASS: 11c form cursor on first input (3,28) after admin menu"
 else
   FAIL=$((FAIL+1)); echo "FAIL: 11c form cursor not at (3,28) after admin menu"
@@ -670,12 +670,12 @@ EOF
 check "15a service menu shows '0 Settings' entry leading the list" "User and security parameters" "$WORK/t15.out"
 check "15b User Settings screen renders (title)" "USER SETTINGS" "$WORK/t15.out"
 check "15c User Settings shows Change Password option" "Change your sign-on password" "$WORK/t15.out"
-# Cursor on the option input field at (1,15): FieldUSOption sits on the top
-# "Option ===>" command line after the #65 band rework. Assert a 1 15 cursor line
-# AFTER the service menu's 1 15 line so the earlier menu rendering can't satisfy
+# Cursor on the option input field at (1,13): FieldUSOption sits on the top
+# "Option ===>" command line (col-0 shift, #130). Assert a 1 13 cursor line
+# AFTER the service menu's 1 13 line so the earlier menu rendering can't satisfy
 # it vacuously (awk tracks first-seen then second-seen).
-if awk '/I 2 24 80 1 15 /{count++} count==2{ok=1; exit} END{exit !ok}' "$WORK/t15.out"; then
-  PASS=$((PASS+1)); echo "PASS: 15d User Settings cursor on option field (1,15)"
+if awk '/I 2 24 80 1 13 /{count++} count==2{ok=1; exit} END{exit !ok}' "$WORK/t15.out"; then
+  PASS=$((PASS+1)); echo "PASS: 15d User Settings cursor on option field (1,13)"
 else
   FAIL=$((FAIL+1)); echo "FAIL: 15d User Settings cursor not at (1,15) after service menu"
 fi
@@ -742,12 +742,12 @@ Ascii()
 ReadBuffer(Ascii)
 Quit()
 EOF
-check  "16a page 1 indicator" "ITEMS 1 TO 17 OF 22" "$WORK/t16p1.out"
+check  "16a page 1 indicator" "ITEMS 1 TO 18 OF 22" "$WORK/t16p1.out"
 check  "16b page 1 first service"  "PAGE01" "$WORK/t16p1.out"
-check  "16c page 1 last on-page service" "PAGE17" "$WORK/t16p1.out"
-ncheck "16d page 1 hides overflow service" "PAGE18" "$WORK/t16p1.out"
+check  "16c page 1 last on-page service" "PAGE18" "$WORK/t16p1.out"
+ncheck "16d page 1 hides overflow service" "PAGE19" "$WORK/t16p1.out"
 check  "16e '0 Settings' leads the list on page 1" "User and security parameters" "$WORK/t16p1.out"
-check  "16f menu cursor on selection input (1,15)" "I 2 24 80 1 15 " "$WORK/t16p1.out"
+check  "16f menu cursor on selection input (1,13)" "I 2 24 80 1 13 " "$WORK/t16p1.out"
 
 s3 t16p2 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
@@ -762,7 +762,7 @@ Wait(5,InputField)
 Ascii()
 Quit()
 EOF
-check  "16g PF8 -> page 2 indicator" "ITEMS 18 TO 22 OF 22" "$WORK/t16p2.out"
+check  "16g PF8 -> page 2 indicator" "ITEMS 19 TO 22 OF 22" "$WORK/t16p2.out"
 check  "16h page 2 shows overflow service" "PAGE22" "$WORK/t16p2.out"
 ncheck "16i page 2 hides page-1 service" "PAGE01" "$WORK/t16p2.out"
 ncheck "16j '0 Settings' is page-1-only (absent on page 2)" "User and security parameters" "$WORK/t16p2.out"
@@ -784,7 +784,7 @@ Ascii()
 ReadBuffer(Ascii)
 Quit()
 EOF
-check  "16k PF8 at last page is a no-op" "ITEMS 18 TO 22 OF 22" "$WORK/t16p3.out"
+check  "16k PF8 at last page is a no-op" "ITEMS 19 TO 22 OF 22" "$WORK/t16p3.out"
 
 s3 t16p4 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
@@ -801,7 +801,7 @@ Wait(5,InputField)
 Ascii()
 Quit()
 EOF
-check  "16l PF7 returns to page 1" "ITEMS 1 TO 17 OF 22" "$WORK/t16p4.out"
+check  "16l PF7 returns to page 1" "ITEMS 1 TO 18 OF 22" "$WORK/t16p4.out"
 
 # --- 17. Active Sessions admin screen (GH #91): admin -> A -> 7. The admin's own
 # connection is a live session marked *YOU*; the screen renders the column
@@ -1129,8 +1129,8 @@ check  "20d help cursor homed (0,0)"        "I 2 24 80 0 0 "       "$WORK/t20.ou
 check  "20e PF8 pages to help page 2"       "PAGE 2 OF 2"          "$WORK/t20.out"
 check  "20f help page 2 stock content"      "OTHER MENU ENTRIES"   "$WORK/t20.out"
 ncheck "20g PF8 clamps at the last page"    "PAGE 3 OF"            "$WORK/t20.out"
-# The menu was on page 2 (ITEMS 18 TO 22) before PF1; PF3 must restore it.
-check  "20h PF3 returns to menu page 2"     "ITEMS 18 TO 22 OF 22" "$WORK/t20.out"
+# The menu was on page 2 (ITEMS 19 TO 22) before PF1; PF3 must restore it.
+check  "20h PF3 returns to menu page 2"     "ITEMS 19 TO 22 OF 22" "$WORK/t20.out"
 check  "20i menu help row advertises PF1"   "PF1=Help"             "$WORK/t20.out"
 
 echo

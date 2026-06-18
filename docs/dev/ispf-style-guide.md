@@ -32,7 +32,7 @@ is the house palette; apply it uniformly across all ISPF-layer screens.
 | Command-line prompt (`Option ===>`) | PIN | **Turquoise** | — | row 1 |
 | Input / entry fields | EE (Entry, unprotected) | **Green** | Write + Underscore | user-typed fields |
 | Field prompts / labels | FP (Field Prompt) | **Turquoise** | — | `Userid . . .`, `Issuer:` |
-| Column headings (lists) | CH | **Blue** | — | list heading row |
+| Column headings (lists) | CH | **Blue** | — | list heading row; **PF-key help row** |
 | Selectable option key (digit/letter) | PS (point-and-shoot) | **White** | Intense | `1`, `0`, `A` |
 | Normal text / values | NT (Normal Text) | **Green** | — | descriptions, status values |
 | Instruction text | PIN (Panel Instruction) | **Turquoise** | — | "Select a service and press ENTER" |
@@ -56,7 +56,7 @@ Exact `go3270.Field` attributes per role, so every builder paints identically:
 | Instruction text | `Turquoise` | — | — | — | — |
 | Caution / warning | `Yellow` | `true` | — | — | — |
 | Error message | `Red` | `true` | — | — | — |
-| PF-key help row | `Turquoise` | — | — | — | — |
+| PF-key help row | `Blue` | — | — | — | — |
 
 Notes:
 - `DefaultColor` is avoided for semantic text: it leaves the emulator to apply
@@ -92,8 +92,10 @@ and bottom bands stay anchored. Content always stays within columns 0–79.
   - **r0** Panel title, centered, White-intense. Lists also show a right-justified
     `ROW x TO y OF z` row indicator on r0.
   - **r1** Command line. Menus use `Option ===>`; list panels use `Command ===>`.
-    **Entry panels (login, MFA, forms) leave r1 blank** — they have no command line
-    (see deviation 1).
+    The prompt is **flush left** (attribute byte at col 0, prompt text at col 1),
+    matching the PF-key row; the green input field follows one column past the
+    prompt and runs to col 79. **Entry panels (login, MFA, forms) leave r1 blank**
+    — they have no command line (see deviation 1).
   - **r2** Message line: Red-intense, blank unless there is an error/message. Field
     name remains `errormsg` (and `screens.FieldError`) so presenters and unit tests
     are unaffected by the move from the old bottom position.
@@ -102,7 +104,7 @@ and bottom bands stay anchored. Content always stays within columns 0–79.
 - **Bottom band**:
   - **rN−2** Legend row (list line-command help, e.g. `S=Select  D=Delete`). Lists
     only; other screens leave it blank.
-  - **rN−1** PF-key help row, Turquoise (see §3).
+  - **rN−1** PF-key help row, Blue, attribute at col 0 / text at col 1 (see §3).
 
 ### Geometry helpers
 
@@ -179,6 +181,9 @@ stable regardless of which page renders it.
 
 ## 3. PF-key help row
 
+- **Color & position:** **Blue**, attribute byte at **col 0** so the legend text
+  begins at **col 1** (flush left, no indent). Applies to every screen's help row,
+  including the entry-panel and branding-forward exceptions.
 - **Format:** `PFn=Verb` — **no spaces** around `=`, **two spaces** between entries,
   terse **Title-case** verb. (Fixes today's `Enter = save    PF3 = cancel` outlier.)
 - State `Enter=...` only when the Enter action is non-obvious — `Enter=Save` on
@@ -206,7 +211,7 @@ Keep / change / deviate for every existing screen. ✔ = conforms after this wor
 | Screen | File | Command line | Key changes from pre-#65 | Deviation |
 |---|---|---|---|---|
 | **Login** | `screens/login.go` | none | center title; message→r2; turquoise labels; green inputs; keep `Userid . . .` dot-leader | entry panel: no command line |
-| **Service menu** | `screens/menu.go` | `Option ===>` r1 | command line→top; message→r2; instruction line turquoise; already on the tri-color grid; **`0 Settings` leads the list on page 1 (GH #130)** | — |
+| **Service menu** | `screens/menu.go` | `Option ===>` r1 | command line→top; message→r2; **instruction line removed — list starts at BodyTopRow (GH #130)**; tri-color grid; **`0 Settings` leads the list on page 1 (GH #130)** | — |
 | **Admin menu** | `screens/admin.go` | `Option ===>` r1 | center title; command line→top; message→r2; **adopt tri-color grid** + ISPF keywords (see §2 mapping) | — |
 | **User Settings** | `screens/usersettings.go` | `Option ===>` r1 | center title; command line→top; message→r2; **adopt tri-color grid** (name + description per row) | — |
 | **MFA enroll** | `screens/mfa.go` | none | center title; "MFA now required" → **yellow caution**; `Key:` intense; message→r2 | entry panel: no command line |

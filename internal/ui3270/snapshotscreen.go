@@ -91,7 +91,7 @@ func buildSnapshotScreen(rows int, v SnapshotView) (go3270.Screen, Cursor) {
 	screen = append(screen,
 		go3270.Field{Row: legendRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.Legend},
 		go3270.Field{Row: messageRow(), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: helpRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.PFHelp},
+		go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: v.PFHelp},
 	)
 	return screen, cur
 }
@@ -180,6 +180,6 @@ func buildDetailScreen(rows int, v DetailView) (go3270.Screen, Cursor) {
 		screen = append(screen, go3270.Field{Row: row, Col: 2, Content: line})
 		row++
 	}
-	screen = append(screen, go3270.Field{Row: helpRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.PFHelp})
+	screen = append(screen, go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: v.PFHelp})
 	return screen, Cursor{Row: 0, Col: 0}
 }

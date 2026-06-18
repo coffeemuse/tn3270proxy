@@ -59,7 +59,7 @@ func UserSettingsScreen(geom Geometry, username string, rows []UserSettingsRow, 
 		option,
 		stopF,
 		go3270.Field{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
-		go3270.Field{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Service Menu"},
+		go3270.Field{Row: geom.HelpRow(), Col: 0, Color: go3270.Blue, Content: "PF3=Service Menu"},
 	)
 	return screen, cursorAt(option)
 }
