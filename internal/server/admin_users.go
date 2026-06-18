@@ -180,14 +180,17 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 		if u.MFARequired {
 			mfaReq = "Y"
 		}
+		// Secret-first: any stored secret is enforced at login regardless of the
+		// mfa_required flag (opt-in MFA), so an enrolled secret is ENROLLED even
+		// when not required. PENDING = required but not yet enrolled.
 		status := "NONE"
 		switch {
-		case !u.MFARequired:
-			status = "NONE"
-		case u.MFASecret == "":
+		case u.MFASecret != "":
+			status = "ENROLLED"
+		case u.MFARequired:
 			status = "PENDING"
 		default:
-			status = "ENROLLED"
+			status = "NONE"
 		}
 		fields = append(fields,
 			ui3270.FormField{Name: screens.FieldMFARequired, Label: "MFA required", Length: 1, Value: mfaReq, Suffix: "Y/N"},
@@ -276,6 +279,13 @@ func (f *adminFlow) userCreate(ctx context.Context, vals map[string]string, full
 // userSaveEdit handles the edit-mode submit: optionally changes the password
 // (blank = keep), always writes the details, and audits a single edit record.
 func (f *adminFlow) userSaveEdit(ctx context.Context, u store.User, vals map[string]string, fullName, email string) (string, error) {
+	// Reject a Clear-MFA request that lacks its typed confirmation BEFORE
+	// committing password/details, so a fat-fingered wipe can't partially save.
+	// (applyMFAEdit re-checks this as the authoritative gate before the wipe.)
+	if strings.ToUpper(strings.TrimSpace(vals[screens.FieldMFAClear])) == "Y" &&
+		!strings.EqualFold(strings.TrimSpace(vals[screens.FieldMFAClearConfirm]), "CLEAR") {
+		return "TYPE CLEAR TO CONFIRM MFA WIPE", nil
+	}
 	pass, change, msg := passwordFromForm(vals, false)
 	if msg != "" {
 		return msg, nil

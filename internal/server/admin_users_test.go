@@ -150,6 +150,40 @@ func TestApplyLockEditRejectsBadValue(t *testing.T) {
 	}
 }
 
+func TestUserSaveEditRejectsClearWithoutConfirmBeforeCommit(t *testing.T) {
+	st, err := store.Open(t.TempDir() + "/s.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	origHash, _ := auth.HashPassword("orig")
+	uid, _ := st.CreateUser(ctx, "alice", origHash)
+	st.StoreMFAEnrollment(ctx, uid, "ct", "t", 3)
+	u, _ := st.GetUserByUsername(ctx, "alice")
+
+	f := &adminFlow{store: st, identity: auth.Identity{UserID: 99, Username: "admin"}}
+
+	// New password supplied AND Clear-MFA=Y but no typed CLEAR -> must reject and
+	// NOT change the password (no partial commit).
+	msg, err := f.userSaveEdit(ctx, u, map[string]string{
+		screens.FieldPassword:        "newpass",
+		screens.FieldRetype:          "newpass",
+		screens.FieldMFAClear:        "Y",
+		screens.FieldMFAClearConfirm: "",
+	}, "Alice Example", "alice@example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg != "TYPE CLEAR TO CONFIRM MFA WIPE" {
+		t.Errorf("msg = %q, want the confirm prompt", msg)
+	}
+	got, _ := st.GetUserByUsername(ctx, "alice")
+	if got.PasswordHash != origHash {
+		t.Errorf("password was changed despite the rejected submit")
+	}
+}
+
 func TestApplyMFAEditClearRequiresTypedConfirm(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/s.db")
 	if err != nil {

@@ -20,6 +20,7 @@
 package ui3270
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -406,5 +407,35 @@ func TestBuildFormScreenCompactSameRow(t *testing.T) {
 	}
 	if statCol != sameRowInputCol {
 		t.Errorf("status value col = %d, want %d", statCol, sameRowInputCol)
+	}
+}
+
+func TestBuildFormScreenCompactNoOverlapMessageRow(t *testing.T) {
+	var fields []FormField
+	for i := 0; i < 18; i++ {
+		f := FormField{Name: fmt.Sprintf("f%d", i), Label: "L", Length: 4}
+		if i == 16 {
+			f.Section = "Late"
+		}
+		fields = append(fields, f)
+	}
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: fields})
+	msgRow := compactMessageRow(24)
+	const helpContent = "Enter=Save    PF3=Cancel"
+	for _, fld := range screen {
+		// Skip the message field itself (it legitimately sits at msgRow).
+		if fld.Name == fieldError {
+			continue
+		}
+		// Skip the help line (Blue, row 23 on MOD2, content matches the help string).
+		if fld.Content == helpContent {
+			continue
+		}
+		if fld.Color == go3270.Blue && fld.Row >= msgRow {
+			t.Errorf("banner at row %d overlaps message row %d: %q", fld.Row, msgRow, fld.Content)
+		}
+		if fld.Write && fld.Row >= msgRow {
+			t.Errorf("input field %q at row %d overlaps message row %d", fld.Name, fld.Row, msgRow)
+		}
 	}
 }

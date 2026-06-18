@@ -175,11 +175,15 @@ func buildCompactFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 			if !first {
 				row++ // blank gutter row before the section banner
 			}
+			// Out of vertical room for the banner: stop before the message line.
+			if row > limit {
+				break
+			}
 			screen = append(screen, go3270.Field{Row: row, Col: labelAttrCol, Color: go3270.Blue, Content: sectionBanner(f.Section)})
 			row++
 		}
-		// Out of vertical room: stop before overlapping the message line. We
-		// break (not continue), so leaving `first` unset here is harmless.
+		// Out of vertical room for the field: stop before overlapping the message
+		// line. We break (not continue), so leaving `first` unset here is harmless.
 		if row > limit {
 			break
 		}
