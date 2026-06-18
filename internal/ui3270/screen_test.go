@@ -257,6 +257,34 @@ func TestBuildFormScreenDotLeaderOffUnchanged(t *testing.T) {
 	}
 }
 
+func TestBuildFormScreenCompactSingleSpaced(t *testing.T) {
+	screen, cur := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8},
+		{Name: "b", Label: "B", Length: 8},
+	}})
+	a, _ := fieldByName(screen, "a")
+	b, _ := fieldByName(screen, "b")
+	if a.Row != 2 || b.Row != 3 {
+		t.Errorf("rows = %d,%d, want 2,3 (single-spaced from row 2)", a.Row, b.Row)
+	}
+	if cur != (Cursor{Row: 2, Col: a.Col + 1}) {
+		t.Errorf("cursor = %+v, want first writable input", cur)
+	}
+}
+
+func TestBuildFormScreenCompactMessageRowAtBottom(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8},
+	}})
+	msg, ok := fieldByName(screen, fieldError)
+	if !ok {
+		t.Fatal("error field not found")
+	}
+	if msg.Row != 22 {
+		t.Errorf("message row = %d, want 22", msg.Row)
+	}
+}
+
 func TestBuildListScreenPalette(t *testing.T) {
 	screen, cur := buildListScreen(24, ListView{
 		Title: "USER ADMINISTRATION", RowInfo: "ROW 1 TO 2 OF 2",
