@@ -40,6 +40,7 @@ const (
 	FieldMFARequired        = "mfarequired"     // edit-user form: MFA enforce toggle (Y/N)
 	FieldMFAStatus          = "mfastatus"       // edit-user form: display-only NONE/PENDING/ENROLLED
 	FieldMFAClear           = "mfaclear"        // edit-user form: Y wipes the secret
+	FieldMFAClearConfirm    = "mfaclearconf"    // edit-user form: typed "CLEAR" confirmation for the wipe
 	FieldUserSettingsLocked = "usettingslocked" // edit-user form: Y locks self-service
 	FieldPath               = "path"            // documents import form: server file path
 )

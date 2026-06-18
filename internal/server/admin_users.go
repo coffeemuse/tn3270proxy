@@ -159,13 +159,22 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 	}
 	// Rebuilt-by-reference so a rejected submit re-seeds typed input on the next
 	// render (RunForm re-sends the same slice each loop).
+	// Identity. User ID stands alone above the Identity banner (it is the key:
+	// read-only in edit, editable in create).
 	fields := []ui3270.FormField{
-		{Name: screens.FieldUsername, Label: "User ID. . .", Length: 32, Value: username, ReadOnly: !create},
-		{Name: screens.FieldFullName, Label: "Full name .", Length: 40, Value: fullName},
-		{Name: screens.FieldEmail, Label: "Email  . . .", Length: 40, Value: email},
-		{Name: screens.FieldPassword, Label: "Password . .", Hidden: true, Length: 32},
-		{Name: screens.FieldRetype, Label: "Retype . . .", Hidden: true, Length: 32},
+		{Name: screens.FieldUsername, Label: "User ID", Length: 32, Value: username, ReadOnly: !create},
+		{Name: screens.FieldFullName, Label: "Full name", Length: 40, Value: fullName, Section: "Identity"},
+		{Name: screens.FieldEmail, Label: "Email", Length: 40, Value: email},
 	}
+	// Authentication. The "blank = no change" hint applies only in edit mode.
+	pwSuffix := ""
+	if !create {
+		pwSuffix = "(blank = no change)"
+	}
+	fields = append(fields,
+		ui3270.FormField{Name: screens.FieldPassword, Label: "New password", Hidden: true, Length: 32, Section: "Authentication", Suffix: pwSuffix},
+		ui3270.FormField{Name: screens.FieldRetype, Label: "Confirm password", Hidden: true, Length: 32},
+	)
 	if !create {
 		mfaReq := "N"
 		if u.MFARequired {
@@ -181,29 +190,36 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 			status = "ENROLLED"
 		}
 		fields = append(fields,
-			ui3270.FormField{Name: screens.FieldMFARequired, Label: "MFA req Y/N", Length: 1, Value: mfaReq},
-			ui3270.FormField{Name: screens.FieldMFAStatus, Label: "MFA status .", Length: 10, Value: status, ReadOnly: true},
-			ui3270.FormField{Name: screens.FieldMFAClear, Label: "Clear MFA Y.", Length: 1, Value: ""},
+			ui3270.FormField{Name: screens.FieldMFARequired, Label: "MFA required", Length: 1, Value: mfaReq, Suffix: "Y/N"},
+			ui3270.FormField{Name: screens.FieldMFAStatus, Label: "MFA status", Length: 10, Value: status, ReadOnly: true, SameRow: true},
 		)
+		// Account policy.
 		lock := "N"
 		if u.UserSettingsLocked {
 			lock = "Y"
 		}
 		fields = append(fields,
-			ui3270.FormField{Name: screens.FieldUserSettingsLocked, Label: "Lock self Y.", Length: 1, Value: lock},
+			ui3270.FormField{Name: screens.FieldUserSettingsLocked, Label: "Block self-service", Length: 1, Value: lock, Section: "Account policy", Suffix: "(blocks user-initiated changes)"},
+		)
+		// Account actions: a Clear-MFA wipe requires the toggle AND a typed CLEAR.
+		fields = append(fields,
+			ui3270.FormField{Name: screens.FieldMFAClear, Label: "Clear MFA", Length: 1, Value: "", Section: "Account actions", Suffix: "Y/N"},
+			ui3270.FormField{Name: screens.FieldMFAClearConfirm, Label: "Confirm: type CLEAR", Length: 7, Value: ""},
 		)
 		// Hint: when MFA is required but no secret is enrolled, locking makes
 		// mfa_required a no-op (a locked account is never force-enrolled).
 		if u.UserSettingsLocked && u.MFARequired && u.MFASecret == "" {
 			fields = append(fields,
-				ui3270.FormField{Name: "lockhint", Label: "Note . . . .", Length: 40,
+				ui3270.FormField{Name: "lockhint", Label: "Note", Length: 40,
 					Value: "MFA REQ INERT WHILE LOCKED W/O SECRET", ReadOnly: true},
 			)
 		}
 	}
 	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
-		Title:  title,
-		Fields: fields,
+		Title:     title,
+		Fields:    fields,
+		Compact:   true,
+		DotLeader: true,
 		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
 			fullNameVal := vals[screens.FieldFullName]
 			emailVal := vals[screens.FieldEmail]
