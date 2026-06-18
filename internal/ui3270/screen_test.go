@@ -371,3 +371,20 @@ func TestBuildFormScreenCompactSectionGutter(t *testing.T) {
 		t.Errorf("banner row = %d, want 4 (gutter at 3)", bannerRow)
 	}
 }
+
+func TestBuildFormScreenCompactSuffix(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 1, Suffix: "Y/N"},
+	}})
+	a, _ := fieldByName(screen, "a")
+	stop := a.Col + 1 + 1 // inputCol + 1 + Length
+	sawSuffix := false
+	for _, f := range screen {
+		if f.Content == "Y/N" && f.Row == a.Row && f.Col == stop+1 {
+			sawSuffix = true
+		}
+	}
+	if !sawSuffix {
+		t.Errorf("suffix Y/N not found at row %d col %d", a.Row, stop+1)
+	}
+}
