@@ -79,7 +79,7 @@ MENU KEYS
 
 OTHER MENU ENTRIES
 
-  0    User Settings - change your password or manage MFA.
+  0    Settings - change your password or manage MFA.
   A    Administration - shown only to administrators.
 
 Ask your administrator if you need access to another service.`

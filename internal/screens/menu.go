@@ -102,13 +102,14 @@ func MenuPageBounds(geom Geometry, total int, admin bool, page int) (clamped, st
 // on a fixed grid (number col 0, name col 6, description col 17, hard-cut 40) so
 // they never collide with the right-hand status block (StatusBlockCol). status
 // supplies the block's values; an empty MenuStatus renders blank values. The
-// "0 User Settings" meta row (omitted when settingsLocked) and, when admin,
-// "A Administration" flow directly below the page's service rows on every page,
-// after one blank separator row (no separator below the empty-list placeholder).
+// "0 Settings" option leads the list on the first page only (GH #130; omitted
+// when settingsLocked), and "A Administration" (admins) flows directly below the
+// page's service rows on every page, after one blank separator row (no separator
+// below the empty-list placeholder).
 // An "ITEMS x TO y OF z" indicator sits on the title row. errMsg, if non-empty, shows on the message
 // line. PF7/PF8 page; out-of-range pages clamp (see MenuPageBounds).
 func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLocked bool, status MenuStatus, errMsg string, page int) (go3270.Screen, map[string]store.Service, Cursor) {
-	_, start, end, indicator := MenuPageBounds(geom, len(services), admin, page)
+	clamped, start, end, indicator := MenuPageBounds(geom, len(services), admin, page)
 
 	// Right-align the page indicator so its content ends at the screen's right
 	// margin (col 79); this guarantees the full "ITEMS x TO y OF z" never clips
@@ -129,8 +130,23 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLoc
 		mapping[fmt.Sprintf("%d", i+1)] = svc
 	}
 
-	// Render only the current page's window, with global (stable) numbers.
+	// The "0 Settings" option leads the list on the FIRST page only (GH #130),
+	// rendered as a full tri-color grid row immediately above service 1 — the
+	// ISPF Primary Option Menu convention. It is omitted when settingsLocked and
+	// on later pages (it is "before 1", which lives only on page 0). The slot it
+	// occupies is reserved by MenuCapacity on every page, so global numbering and
+	// paging math stay stable. "0" remains typeable on any page regardless.
 	row := geom.BodyTopRow() + 1
+	if clamped == 0 && !settingsLocked {
+		screen = append(screen,
+			go3270.Field{Row: row, Col: 0, Intense: true, Content: "  0"},
+			go3270.Field{Row: row, Col: 6, Color: go3270.Turquoise, Content: "Settings"},
+			go3270.Field{Row: row, Col: 17, Color: go3270.Green, Content: "User and security parameters"},
+		)
+		row++
+	}
+
+	// Render only the current page's window, with global (stable) numbers.
 	for i := start; i < end; i++ {
 		svc := services[i]
 		screen = append(screen,
@@ -141,25 +157,17 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLoc
 		row++
 	}
 	if len(services) == 0 {
-		screen = append(screen, go3270.Field{Row: geom.BodyTopRow() + 1, Col: 6, Content: "(no services available for your account)"})
+		screen = append(screen, go3270.Field{Row: row, Col: 6, Content: "(no services available for your account)"})
 	}
 
-	// Meta band: flows directly below the page's service rows (GH #133) — one
-	// blank separator row after the last service row, none after the
-	// empty-list placeholder (a message, not a service row: `row` still sits
-	// on it, so row+1 lands directly beneath). "0 User Settings" renders first
-	// unless settingsLocked; "A Administration" (admins) takes the next row,
-	// or the anchor row itself when "0" is hidden. MenuCapacity reserves the
-	// separator + band rows, so a full page's band ends exactly on
-	// BodyBottomRow and never collides with the page window or PF legend.
+	// Bottom meta band: "A Administration" (admins only) flows directly below the
+	// page's service rows on every page (GH #133) — one blank separator row after
+	// the last service row, or directly beneath the empty-list placeholder (a
+	// message, not a service row: `row` still sits on it, so row+1 lands directly
+	// beneath). MenuCapacity reserves the separator + band row, so a full page's
+	// band ends exactly on BodyBottomRow and never collides with the page window
+	// or PF legend.
 	metaRow := row + 1
-	if !settingsLocked {
-		screen = append(screen,
-			go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  0"},
-			go3270.Field{Row: metaRow, Col: 17, Color: go3270.Green, Content: "User Settings"},
-		)
-		metaRow++
-	}
 	if admin {
 		screen = append(screen,
 			go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  A"},

@@ -136,9 +136,10 @@ Menu look:
 | Description | 17 | **Green** | — | `User accounts and group membership` |
 
 (Three blank columns separate number↔name and name↔description — names are hard-cut
-to 8, so the description column clears the widest name. The `0`/`A` meta-row labels
-sit in the description column. On the service menu the right-hand status block sits
-at col 60, clearing a full 40-char description.)
+to 8, so the description column clears the widest name. The trailing `A Administration`
+meta-row carries only the option key + a description-column label; the leading
+`0 Settings` row (see below) is a full three-field grid row. On the service menu the
+right-hand status block sits at col 60, clearing a full 40-char description.)
 
 The service menu already renders this exactly (number/`Service.Name`/
 `Service.Description`). The admin and User Settings menus adopt the same grid using
@@ -161,8 +162,18 @@ description.
 The User Settings menu is adaptive (its rows depend on MFA state), so its
 `UserSettingsRow` carries a short `Name` plus a `Description` rendered on the same
 grid — e.g. `Password / Change your sign-on password`, `MFA / Enroll in multi-factor
-authentication`. The `0`/`A` meta-rows on the service menu (User Settings /
-Administration) follow the grid too.
+authentication`.
+
+**`0 Settings` leads the service list (GH #130).** Matching the real ISPF Primary
+Option Menu (`0  Settings   Terminal and user parameters`), the self-service entry
+renders as a full grid row — `0` / `Settings` (turquoise name, col 6) / `User and
+security parameters` (green description, col 17) — at the **top** of the list,
+immediately above service `1`, on the **first page only** (it is "before 1", which
+lives only on page 0; `0` stays typeable from any page). It is omitted entirely for
+settings-locked users. `A Administration` keeps the letters-at-the-end convention and
+flows in the trailing meta-row on every page. The capacity math (`MenuCapacity`)
+reserves the `0` slot on every page so global numbering and PF7/PF8 paging stay
+stable regardless of which page renders it.
 
 ---
 
@@ -195,7 +206,7 @@ Keep / change / deviate for every existing screen. ✔ = conforms after this wor
 | Screen | File | Command line | Key changes from pre-#65 | Deviation |
 |---|---|---|---|---|
 | **Login** | `screens/login.go` | none | center title; message→r2; turquoise labels; green inputs; keep `Userid . . .` dot-leader | entry panel: no command line |
-| **Service menu** | `screens/menu.go` | `Option ===>` r1 | command line→top; message→r2; instruction line turquoise; already on the tri-color grid | — |
+| **Service menu** | `screens/menu.go` | `Option ===>` r1 | command line→top; message→r2; instruction line turquoise; already on the tri-color grid; **`0 Settings` leads the list on page 1 (GH #130)** | — |
 | **Admin menu** | `screens/admin.go` | `Option ===>` r1 | center title; command line→top; message→r2; **adopt tri-color grid** + ISPF keywords (see §2 mapping) | — |
 | **User Settings** | `screens/usersettings.go` | `Option ===>` r1 | center title; command line→top; message→r2; **adopt tri-color grid** (name + description per row) | — |
 | **MFA enroll** | `screens/mfa.go` | none | center title; "MFA now required" → **yellow caution**; `Key:` intense; message→r2 | entry panel: no command line |
