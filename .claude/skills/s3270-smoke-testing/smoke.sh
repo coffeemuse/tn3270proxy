@@ -333,15 +333,17 @@ check "9a admin menu renders" "TN3270 GATEWAY ADMIN" "$WORK/t9.out"
 # Admin menu option field at the top "Option ===>" command line, row 1 col 13
 # (same row as the service menu — both report 1 13 after the #130 col-0 shift).
 check "9b admin/menu cursor on option field (1,13)" "I 2 24 80 1 13 " "$WORK/t9.out"
-# Users list: first CMD field at row 4 col 3 — produced only by the list.
-check "9c users list cursor on first CMD field (4,3)" "I 2 24 80 4 3 " "$WORK/t9.out"
-# Add-user form: first input at row 3 col 17. Login now reports 22 16 (branding-
-# forward layout), so 3 17 unambiguously identifies the add-user form; assert it
-# AFTER the list's 4 3 line to prove ordering.
-if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 3 17 /{ok=1} END{exit !ok}' "$WORK/t9.out"; then
-  PASS=$((PASS+1)); echo "PASS: 9d add-user form cursor (3,17) after users list"
+# Users list: first CMD field at row 4 col 1 (the #137/#138 col-0 flush-left
+# shift moved the CMD attribute to col 0, so input begins at col 1).
+check "9c users list cursor on first CMD field (4,1)" "I 2 24 80 4 1 " "$WORK/t9.out"
+# Add-user form (compact layout, #130): User ID is editable in create mode and
+# stands alone at the top, so the cursor homes to it at row 2 col 21 (input
+# column past the longest label "Confirm password"). The "ADD USER" title
+# uniquely identifies the form, so assert the 2 21 cursor after it.
+if awk '/ADD USER/{seen=1} seen && /I 2 24 80 2 21 /{ok=1} END{exit !ok}' "$WORK/t9.out"; then
+  PASS=$((PASS+1)); echo "PASS: 9d add-user form cursor on User ID (2,21)"
 else
-  FAIL=$((FAIL+1)); echo "FAIL: 9d add-user form cursor not at (3,17) after users list"
+  FAIL=$((FAIL+1)); echo "FAIL: 9d add-user form cursor not at (2,21)"
 fi
 
 # --- 10. post-auth idle LOGS OUT to the login screen (GH #18), not disconnect.
@@ -573,10 +575,12 @@ Quit()
 EOF
 check "13c ENTER pages through MOTD to the menu" "TN3270 GATEWAY MENU" "$WORK/t13b.out"
 
-# --- 14. Edit User Details form (GH #46): the user-list `S` line command opens
-# a unified edit form whose USERNAME is display-only, so the cursor lands on the
-# first EDITABLE field (Full name, row 5) — distinct from every other form's
-# (3,17). NOTE: scenario 13 activated the MOTD gate (the MOTD document in
+# --- 14. Edit User Details form (GH #46, #130): the user-list `S` line command
+# opens a unified edit form in the sectioned compact layout (#130). USERNAME is
+# display-only and stands alone above the "--- Identity" banner, so the cursor
+# lands on the first EDITABLE field (Full name, row 5, col 24 — the input column
+# is pushed right by the longest label "Confirm: type CLEAR"). NOTE: scenario 13
+# activated the MOTD gate (the MOTD document in
 # front.db now holds a 2-page fixture), so every login here must clear the gate with
 # two ENTERs (Wait(Unlock) after each — the MOTD page has no input field) before
 # reaching the service menu. Walk: login admin -> clear MOTD -> A -> users list
@@ -617,14 +621,29 @@ EOF
 check "14a edit-user form renders" "EDIT USER" "$WORK/t14.out"
 check "14b full name label present" "Full name" "$WORK/t14.out"
 check "14c email label present" "Email" "$WORK/t14.out"
-# Username is display-only, so the cursor homes to Full name at row 5 col 17.
-# Assert a 5 17 cursor line AFTER the users-list 4 3 line so nothing earlier can
+# Username is display-only, so the cursor homes to Full name at row 5 col 24
+# (compact layout: input column past the longest label "Confirm: type CLEAR").
+# Assert a 5 24 cursor line AFTER the users-list 4 3 line so nothing earlier can
 # satisfy it vacuously.
-if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 5 17 /{ok=1} END{exit !ok}' "$WORK/t14.out"; then
-  PASS=$((PASS+1)); echo "PASS: 14d edit-user cursor on Full name (5,17), username read-only"
+if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 5 24 /{ok=1} END{exit !ok}' "$WORK/t14.out"; then
+  PASS=$((PASS+1)); echo "PASS: 14d edit-user cursor on Full name (5,24), username read-only"
 else
-  FAIL=$((FAIL+1)); echo "FAIL: 14d edit-user cursor not at (5,17) after users list"
+  FAIL=$((FAIL+1)); echo "FAIL: 14d edit-user cursor not at (5,24) after users list"
 fi
+# Compact layout (#130): the four section banners group the form's fields.
+# (grep -- : the banner patterns start with dashes, so the plain check() helper
+# can't take them — same as the 19f column-ruler check below.)
+for sect in Identity Authentication "Account policy" "Account actions"; do
+  if grep -q -- "--- $sect" "$WORK/t14.out"; then
+    PASS=$((PASS+1)); echo "PASS: 14f section banner: $sect"
+  else
+    FAIL=$((FAIL+1)); echo "FAIL: 14f section banner not found: $sect"
+  fi
+done
+# Destructive Clear-MFA needs both a Y toggle and a typed CLEAR confirm (#130);
+# the form must surface the confirmation field. (The reject/accept logic itself
+# is covered by the applyMFAEdit unit tests.)
+check "14g clear-MFA typed-confirm field present" "Confirm: type CLEAR" "$WORK/t14.out"
 # PF3 on the form returns to the users list: the edit-form title appears first,
 # then the list's distinctive legend ("S = edit user") reappears after it.
 if awk '/EDIT USER/{seen=1} seen && /S = edit user/{ok=1} END{exit !ok}' "$WORK/t14.out"; then
@@ -996,7 +1015,7 @@ check "19a Documents member list renders" "TN3270 GATEWAY ADMIN: DOCUMENTS" "$WO
 check "19b member list shows BRANDING row" "BRANDING" "$WORK/t19.out"
 check "19c member list shows MOTD row" "MOTD" "$WORK/t19.out"
 check "19c2 member list shows HELP-MENU row" "HELP-MENU" "$WORK/t19.out"
-check "19d member list cursor on first CMD field (4,3)" "I 2 24 80 4 3 " "$WORK/t19.out"
+check "19d member list cursor on first CMD field (4,1)" "I 2 24 80 4 1 " "$WORK/t19.out"
 check "19e editor title EDIT MOTD" "EDIT MOTD" "$WORK/t19.out"
 # The ISPF column ruler row (blue, cols 4-79) over the text area. (grep -- :
 # the pattern starts with a dash, so the plain check() helper can't take it.)
@@ -1006,8 +1025,9 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 19f editor column ruler not found"
 fi
 # Editor cursor on the first prefix input: attr col 0 => input col 1 (row 4).
-# Assert it AFTER the member list's 4 3 cursor line so ordering is proven.
-if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 4 1 /{ok=1} END{exit !ok}' "$WORK/t19.out"; then
+# The member list now also homes to (4,1) after the col-0 shift, so disambiguate
+# the editor by its unique "EDIT MOTD" title rather than the list cursor line.
+if awk '/EDIT MOTD/{seen=1} seen && /I 2 24 80 4 1 /{ok=1} END{exit !ok}' "$WORK/t19.out"; then
   PASS=$((PASS+1)); echo "PASS: 19g editor cursor on first prefix field (4,1)"
 else
   FAIL=$((FAIL+1)); echo "FAIL: 19g editor cursor not at (4,1) after member list"
