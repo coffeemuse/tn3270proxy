@@ -61,7 +61,7 @@ func buildListScreen(rows int, v ListView) (go3270.Screen, Cursor) {
 	screen = append(screen,
 		go3270.Field{Row: legendRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.Legend},
 		go3270.Field{Row: messageRow(), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: helpRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.PFHelp},
+		go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: v.PFHelp},
 	)
 	return screen, cur
 }
@@ -116,7 +116,7 @@ func buildFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 	}
 	screen = append(screen,
 		go3270.Field{Row: messageRow(), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: helpRow(rows), Col: 2, Color: go3270.Turquoise, Content: "Enter=Save    PF3=Cancel"},
+		go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: "Enter=Save    PF3=Cancel"},
 	)
 	return screen, cur
 }

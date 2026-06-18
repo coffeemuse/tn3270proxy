@@ -64,7 +64,7 @@ func LoginScreen(geom Geometry, status MenuStatus, branding []string, errMsg str
 		{Row: row, Col: 30, Color: go3270.Turquoise, Content: "Password . . :"},
 		{Row: row, Col: 44, Name: FieldPassword, Write: true, Hidden: true, Color: go3270.Green, Highlighting: go3270.Underscore},
 		{Row: row, Col: 79}, // stop field: password input runs cols 45-78
-		{Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise, Content: "PF3=Disconnect"},
+		{Row: geom.HelpRow(), Col: 0, Color: go3270.Blue, Content: "PF3=Disconnect"},
 	}
 	// Status header on rows 0-3 at StatusBlockCol (startRow 0 places the four
 	// rows consecutively). No User ID (pre-login) and no Terminal, by design.

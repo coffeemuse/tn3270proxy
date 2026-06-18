@@ -261,9 +261,11 @@ func TestLoginScreenBrandingClipsTopAligned(t *testing.T) {
 	if !ok || first.Row != g.LoginBrandingTop() {
 		t.Errorf("first branding line = %+v, want row %d", first, g.LoginBrandingTop())
 	}
-	// ...and nothing renders past the row above the credential row.
+	// ...and nothing renders past the row above the credential row. The
+	// PF-key help row legitimately sits at col 0 on HelpRow() (below the
+	// credential row), so it is not a branding overrun — exclude it.
 	for _, f := range screen {
-		if f.Col == 0 && f.Content != "" && f.Row >= g.BodyBottomRow() {
+		if f.Col == 0 && f.Content != "" && f.Row >= g.BodyBottomRow() && f.Row != g.HelpRow() {
 			t.Errorf("branding line %q on row %d overruns input row %d", f.Content, f.Row, g.BodyBottomRow())
 		}
 	}

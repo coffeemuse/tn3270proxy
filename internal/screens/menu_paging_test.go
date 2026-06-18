@@ -22,7 +22,7 @@ package screens
 import "testing"
 
 func TestMenuPageBounds(t *testing.T) {
-	g := DefaultGeometry // MOD 2: capacity 17 non-admin, 16 admin
+	g := DefaultGeometry // MOD 2: capacity 18 non-admin, 17 admin
 	cases := []struct {
 		name                string
 		total, page         int
@@ -35,11 +35,11 @@ func TestMenuPageBounds(t *testing.T) {
 		{"empty ignores page", 0, 3, false, 0, 0, 0, "ITEMS 0 OF 0"},
 		{"single page", 5, 0, false, 0, 0, 5, "ITEMS 1 TO 5 OF 5"},
 		{"single page over-clamps", 5, 9, false, 0, 0, 5, "ITEMS 1 TO 5 OF 5"},
-		{"two pages first", 22, 0, false, 0, 0, 17, "ITEMS 1 TO 17 OF 22"},
-		{"two pages second", 22, 1, false, 1, 17, 22, "ITEMS 18 TO 22 OF 22"},
-		{"over-clamp to last", 22, 9, false, 1, 17, 22, "ITEMS 18 TO 22 OF 22"},
-		{"under-clamp to first", 22, -3, false, 0, 0, 17, "ITEMS 1 TO 17 OF 22"},
-		{"admin smaller page", 22, 1, true, 1, 16, 22, "ITEMS 17 TO 22 OF 22"},
+		{"two pages first", 22, 0, false, 0, 0, 18, "ITEMS 1 TO 18 OF 22"},
+		{"two pages second", 22, 1, false, 1, 18, 22, "ITEMS 19 TO 22 OF 22"},
+		{"over-clamp to last", 22, 9, false, 1, 18, 22, "ITEMS 19 TO 22 OF 22"},
+		{"under-clamp to first", 22, -3, false, 0, 0, 18, "ITEMS 1 TO 18 OF 22"},
+		{"admin smaller page", 22, 1, true, 1, 17, 22, "ITEMS 18 TO 22 OF 22"},
 	}
 	for _, c := range cases {
 		gotPage, gotStart, gotEnd, gotInd := MenuPageBounds(g, c.total, c.admin, c.page)

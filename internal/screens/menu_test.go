@@ -127,22 +127,20 @@ func TestMenuScreenTopBand(t *testing.T) {
 	if !ok {
 		t.Fatal("missing selection field")
 	}
-	if sel.Row != g.CommandRow() || sel.Col != 14 {
-		t.Errorf("selection = row %d col %d, want row %d col 14", sel.Row, sel.Col, g.CommandRow())
+	if sel.Row != g.CommandRow() || sel.Col != 12 {
+		t.Errorf("selection = row %d col %d, want row %d col 12", sel.Row, sel.Col, g.CommandRow())
 	}
-	if cur.Row != 1 || cur.Col != 15 {
-		t.Errorf("cursor = %+v, want (1,15)", cur)
+	if cur.Row != 1 || cur.Col != 13 {
+		t.Errorf("cursor = %+v, want (1,13)", cur)
 	}
 	msg, _ := fieldByName(screen, FieldError)
 	if msg.Row != g.MessageRow() {
 		t.Errorf("message row = %d, want %d", msg.Row, g.MessageRow())
 	}
-	instr, ok := fieldByContent(screen, "Select a service and press ENTER:")
-	if !ok {
-		t.Fatal("missing instruction line")
-	}
-	if instr.Row != g.BodyTopRow() || instr.Color != go3270.Turquoise {
-		t.Errorf("instruction = row %d color %v, want row %d turquoise", instr.Row, instr.Color, g.BodyTopRow())
+	// The "Select a service and press ENTER:" instruction line was removed
+	// (GH #130); the service list now starts at BodyTopRow().
+	if screenContains(screen, "Select a service and press ENTER:") {
+		t.Error("obsolete instruction line still present")
 	}
 }
 
@@ -348,36 +346,36 @@ func TestMenuScreenPagesWithGlobalNumbers(t *testing.T) {
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i+1), Host: "h", Port: 23}
 	}
-	g := DefaultGeometry // capacity 17 non-admin
+	g := DefaultGeometry // capacity 18 non-admin
 
-	// Page 0: shows global numbers 1..17, the page-1 indicator, and NOT item 18.
+	// Page 0: shows global numbers 1..18, the page-1 indicator, and NOT item 19.
 	p0, mapping, _ := MenuScreen(g, svcs, false, false, MenuStatus{}, "", 0)
 	if len(mapping) != 22 {
 		t.Fatalf("mapping = %d, want 22 (full list)", len(mapping))
 	}
-	if mapping["18"].Name != "SVC18" {
-		t.Errorf(`mapping["18"] = %q, want SVC18 (off-page but selectable)`, mapping["18"].Name)
+	if mapping["19"].Name != "SVC19" {
+		t.Errorf(`mapping["19"] = %q, want SVC19 (off-page but selectable)`, mapping["19"].Name)
 	}
 	if !hasContent(p0, fmt.Sprintf("%3d", 1)) {
 		t.Errorf("page 0 missing global number 1")
 	}
-	if hasContent(p0, fmt.Sprintf("%3d", 18)) {
-		t.Errorf("page 0 should not render global number 18")
+	if hasContent(p0, fmt.Sprintf("%3d", 19)) {
+		t.Errorf("page 0 should not render global number 19")
 	}
-	if !hasContent(p0, "ITEMS 1 TO 17 OF 22") {
-		t.Errorf("page 0 missing indicator 'ITEMS 1 TO 17 OF 22'")
+	if !hasContent(p0, "ITEMS 1 TO 18 OF 22") {
+		t.Errorf("page 0 missing indicator 'ITEMS 1 TO 18 OF 22'")
 	}
 
-	// Page 1: shows global numbers 18..22, the page-2 indicator, and NOT item 1.
+	// Page 1: shows global numbers 19..22, the page-2 indicator, and NOT item 1.
 	p1, _, _ := MenuScreen(g, svcs, false, false, MenuStatus{}, "", 1)
-	if !hasContent(p1, fmt.Sprintf("%3d", 18)) {
-		t.Errorf("page 1 missing global number 18")
+	if !hasContent(p1, fmt.Sprintf("%3d", 19)) {
+		t.Errorf("page 1 missing global number 19")
 	}
 	if hasContent(p1, fmt.Sprintf("%3d", 1)) {
 		t.Errorf("page 1 should not render global number 1")
 	}
-	if !hasContent(p1, "ITEMS 18 TO 22 OF 22") {
-		t.Errorf("page 1 missing indicator 'ITEMS 18 TO 22 OF 22'")
+	if !hasContent(p1, "ITEMS 19 TO 22 OF 22") {
+		t.Errorf("page 1 missing indicator 'ITEMS 19 TO 22 OF 22'")
 	}
 }
 
@@ -388,14 +386,14 @@ func TestMenuScreenMetaBandOnEveryPage(t *testing.T) {
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i+1), Host: "h", Port: 23}
 	}
-	g := DefaultGeometry // admin capacity 16: page 0 renders 16 services, page 1 renders 6
+	g := DefaultGeometry // admin capacity 17: page 0 renders 17 services, page 1 renders 5
 	for _, c := range []struct {
 		page         int
 		svcRows      int
 		wantSettings bool
 	}{
-		{0, 16, true},
-		{1, 6, false},
+		{0, 17, true},
+		{1, 5, false},
 	} {
 		screen, _, _ := MenuScreen(g, svcs, true, false, MenuStatus{}, "", c.page)
 		if got := screenContains(screen, "Settings"); got != c.wantSettings {
@@ -404,12 +402,12 @@ func TestMenuScreenMetaBandOnEveryPage(t *testing.T) {
 		if !screenContains(screen, "Administration") {
 			t.Errorf("page %d missing 'A Administration' meta entry", c.page)
 		}
-		// First service row is BodyTopRow()+1, shifted down by one on page 0 by
-		// the leading "0 Settings" row. "A" flows one blank separator row below
-		// the last service row.
-		firstSvc := g.BodyTopRow() + 1
+		// First service row is BodyTopRow(), shifted down by one on page 0 by the
+		// leading "0 Settings" row. "A" flows one blank separator row below the
+		// last service row.
+		firstSvc := g.BodyTopRow()
 		if c.wantSettings {
-			firstSvc++ // the settings row occupies BodyTopRow()+1
+			firstSvc++ // the settings row occupies BodyTopRow()
 		}
 		lastSvc := firstSvc + c.svcRows - 1
 		admin, _ := fieldByContent(screen, "Administration")
@@ -426,10 +424,10 @@ func TestMenuScreenSeparatorBetweenListAndBand(t *testing.T) {
 	}
 	g := DefaultGeometry
 	screen, _, _ := MenuScreen(g, svcs, true, false, MenuStatus{}, "", 0)
-	// Full admin page 0: "0 Settings" (row 4) + 16 services (rows 5..20), so the
+	// Full admin page 0: "0 Settings" (row 3) + 17 services (rows 4..20), so the
 	// blank separator is row 21 and "A" rides BodyBottomRow (22). Row 21 is below
-	// the right-hand status block (rows 4..9), so the whole row is blank.
-	sep := g.BodyTopRow() + g.MenuCapacity(true) + 2
+	// the right-hand status block (rows 3..8), so the whole row is blank.
+	sep := g.BodyTopRow() + g.MenuCapacity(true) + 1
 	for _, f := range screen {
 		if f.Row == sep && f.Content != "" {
 			t.Errorf("separator row %d should be blank, found %+v", sep, f)
@@ -450,7 +448,7 @@ func TestMenuSettingsRowAtTopOfFirstPage(t *testing.T) {
 	}
 	screen, _, _ := MenuScreen(g, svcs, false, false, MenuStatus{}, "", 0)
 
-	top := g.BodyTopRow() + 1 // first body row, above service 1
+	top := g.BodyTopRow() // first body row, above service 1
 
 	num, ok := fieldByContent(screen, "  0")
 	if !ok || num.Row != top || num.Col != 0 {
@@ -490,8 +488,8 @@ func TestMenuSettingsRowOnlyOnFirstPage(t *testing.T) {
 	// First service of page 1 sits at the first body row (no settings row above).
 	first := fmt.Sprintf("SVC%02d", g.MenuCapacity(false)+1)
 	f, ok := fieldByContent(screen, first)
-	if !ok || f.Row != g.BodyTopRow()+1 {
-		t.Errorf("page 1 first service %q row = %d ok=%v, want %d", first, f.Row, ok, g.BodyTopRow()+1)
+	if !ok || f.Row != g.BodyTopRow() {
+		t.Errorf("page 1 first service %q row = %d ok=%v, want %d", first, f.Row, ok, g.BodyTopRow())
 	}
 }
 
@@ -576,8 +574,8 @@ func TestMenuScreenMetaBandFlowsBelowSparseList(t *testing.T) {
 		{ID: 2, Name: "TEST", Description: "Test CICS", Host: "h", Port: 23},
 		{ID: 3, Name: "DEMO", Description: "Demo backend", Host: "h", Port: 23},
 	}
-	settingsRow := g.BodyTopRow() + 1 // "0 Settings" leads the list
-	lastSvc := settingsRow + 3        // 3 services directly below the settings row
+	settingsRow := g.BodyTopRow() // "0 Settings" leads the list
+	lastSvc := settingsRow + 3    // 3 services directly below the settings row
 
 	// admin, unlocked: settings leads at the top; "A" one blank row below the list.
 	screen, _, _ := MenuScreen(g, svcs, true, false, MenuStatus{}, "", 0)
@@ -606,7 +604,7 @@ func TestMenuScreenMetaBandFlowsBelowSparseList(t *testing.T) {
 func TestMenuScreenLockedAdminBandTakesAnchorRow(t *testing.T) {
 	g := DefaultGeometry
 	svcs := []store.Service{{ID: 1, Name: "PROD", Description: "Production CICS", Host: "h", Port: 23}}
-	lastSvc := g.BodyTopRow() + 1 // single service at the first body row (no settings row)
+	lastSvc := g.BodyTopRow() // single service at the first body row (no settings row)
 	screen, _, _ := MenuScreen(g, svcs, true, true, MenuStatus{}, "", 0)
 	if screenContains(screen, "Settings") {
 		t.Error("locked admin must not see Settings entry")
@@ -624,8 +622,8 @@ func TestMenuScreenMetaBandHugsEmptyPlaceholder(t *testing.T) {
 	g := DefaultGeometry
 	screen, _, _ := MenuScreen(g, nil, true, false, MenuStatus{}, "", 0)
 	s, ok := fieldByContent(screen, "Settings")
-	if !ok || s.Row != g.BodyTopRow()+1 {
-		t.Fatalf("Settings row = %d ok=%v, want %d", s.Row, ok, g.BodyTopRow()+1)
+	if !ok || s.Row != g.BodyTopRow() {
+		t.Fatalf("Settings row = %d ok=%v, want %d", s.Row, ok, g.BodyTopRow())
 	}
 	ph, ok := fieldByContent(screen, "(no services available for your account)")
 	if !ok || ph.Row != s.Row+1 {
@@ -649,7 +647,7 @@ func TestMenuScreenMetaBandFlowsOnSparseFinalPage(t *testing.T) {
 	if screenContains(screen, "Settings") {
 		t.Error("final page must not show the Settings row")
 	}
-	lastSvc := g.BodyTopRow() + 5 // 5 services starting at the first body row
+	lastSvc := g.BodyTopRow() + 4 // 5 services starting at the first body row (rows 3..7)
 	adm, ok := fieldByContent(screen, "Administration")
 	if !ok || adm.Row != lastSvc+2 {
 		t.Errorf("page 1: Administration row = %d ok=%v, want %d", adm.Row, ok, lastSvc+2)

@@ -78,7 +78,7 @@ func buildEditorScreen(rows int, v EditorView) (go3270.Screen, Cursor) {
 		go3270.Field{Row: legendRow(rows), Col: 2, Color: go3270.Turquoise,
 			Content: "Prefix: I=Insert  D=Delete  R=Repeat    Yellow lines: re-import to change"},
 		go3270.Field{Row: messageRow(), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: helpRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.PFHelp},
+		go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: v.PFHelp},
 	)
 	return screen, cur
 }

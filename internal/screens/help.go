@@ -73,7 +73,7 @@ func HelpScreen(geom Geometry, title string, lines []string, page int) (go3270.S
 		row++
 	}
 	screen = append(screen, go3270.Field{
-		Row: geom.HelpRow(), Col: 2, Color: go3270.Turquoise,
+		Row: geom.HelpRow(), Col: 0, Color: go3270.Blue,
 		Content: "PF3=Return   PF7=PgUp  PF8=PgDn",
 	})
 	return screen, Cursor{Row: 0, Col: 0}
