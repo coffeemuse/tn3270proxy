@@ -165,6 +165,9 @@ func buildCompactFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 	first := true
 	for _, f := range v.Fields {
 		if f.SameRow {
+			if first {
+				continue // no preceding primary field to share a row with
+			}
 			placeFormField(&screen, &cur, f, lastRow, sameRowLabelCol, sameRowInputCol, sameRowLabelMax, v.DotLeader)
 			continue
 		}
@@ -175,8 +178,10 @@ func buildCompactFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 			screen = append(screen, go3270.Field{Row: row, Col: labelAttrCol, Color: go3270.Blue, Content: sectionBanner(f.Section)})
 			row++
 		}
+		// Out of vertical room: stop before overlapping the message line. We
+		// break (not continue), so leaving `first` unset here is harmless.
 		if row > limit {
-			break // out of vertical room; never overlap the message line
+			break
 		}
 		placeFormField(&screen, &cur, f, row, labelAttrCol, inputCol, labelMax, v.DotLeader)
 		lastRow = row
