@@ -388,3 +388,23 @@ func TestBuildFormScreenCompactSuffix(t *testing.T) {
 		t.Errorf("suffix Y/N not found at row %d col %d", a.Row, stop+1)
 	}
 }
+
+func TestBuildFormScreenCompactSameRow(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, DotLeader: true, Fields: []FormField{
+		{Name: "req", Label: "MFA required", Length: 1, Suffix: "Y/N"},
+		{Name: "stat", Label: "MFA status", Value: "ENROLLED", ReadOnly: true, SameRow: true},
+	}})
+	req, _ := fieldByName(screen, "req")
+	statRow, statCol := -1, -1
+	for _, f := range screen {
+		if f.Content == "ENROLLED" && !f.Write {
+			statRow, statCol = f.Row, f.Col
+		}
+	}
+	if statRow != req.Row {
+		t.Errorf("status row = %d, want same as req row %d", statRow, req.Row)
+	}
+	if statCol != sameRowInputCol {
+		t.Errorf("status value col = %d, want %d", statCol, sameRowInputCol)
+	}
+}
