@@ -310,10 +310,13 @@ func TestMenuScreenGridDescription(t *testing.T) {
 	}
 }
 
-func TestMenuShowsUserSettingsEntry(t *testing.T) {
+func TestMenuShowsSettingsEntry(t *testing.T) {
 	screen, _, _ := MenuScreen(Geometry{}, nil, false, false, MenuStatus{}, "", 0)
-	if !screenContains(screen, "User Settings") {
-		t.Errorf("menu missing '0 User Settings' meta entry")
+	if !screenContains(screen, "Settings") {
+		t.Errorf("menu missing '0 Settings' option")
+	}
+	if !screenContains(screen, "User and security parameters") {
+		t.Errorf("menu missing Settings description")
 	}
 }
 
@@ -330,9 +333,13 @@ func TestMenuGridColumns(t *testing.T) {
 	if !ok || desc.Col != 17 {
 		t.Errorf("service desc col = %d ok=%v, want 17", desc.Col, ok)
 	}
-	us, ok := fieldByContent(screen, "User Settings")
-	if !ok || us.Col != 17 {
-		t.Errorf("meta label col = %d ok=%v, want 17", us.Col, ok)
+	sName, ok := fieldByContent(screen, "Settings")
+	if !ok || sName.Col != 6 {
+		t.Errorf("settings name col = %d ok=%v, want 6", sName.Col, ok)
+	}
+	sDesc, ok := fieldByContent(screen, "User and security parameters")
+	if !ok || sDesc.Col != 17 {
+		t.Errorf("settings description col = %d ok=%v, want 17", sDesc.Col, ok)
 	}
 }
 
@@ -374,6 +381,8 @@ func TestMenuScreenPagesWithGlobalNumbers(t *testing.T) {
 	}
 }
 
+// GH #130/#133: "0 Settings" leads the list on page 0 only; "A Administration"
+// flows one blank row below the page's service rows on every page.
 func TestMenuScreenMetaBandOnEveryPage(t *testing.T) {
 	svcs := make([]store.Service, 22)
 	for i := range svcs {
@@ -381,30 +390,31 @@ func TestMenuScreenMetaBandOnEveryPage(t *testing.T) {
 	}
 	g := DefaultGeometry // admin capacity 16: page 0 renders 16 services, page 1 renders 6
 	for _, c := range []struct {
-		page    int
-		svcRows int
+		page         int
+		svcRows      int
+		wantSettings bool
 	}{
-		{0, 16},
-		{1, 6},
+		{0, 16, true},
+		{1, 6, false},
 	} {
 		screen, _, _ := MenuScreen(g, svcs, true, false, MenuStatus{}, "", c.page)
-		if !screenContains(screen, "User Settings") {
-			t.Errorf("page %d missing '0 User Settings' meta entry", c.page)
+		if got := screenContains(screen, "Settings"); got != c.wantSettings {
+			t.Errorf("page %d: Settings present = %v, want %v", c.page, got, c.wantSettings)
 		}
 		if !screenContains(screen, "Administration") {
 			t.Errorf("page %d missing 'A Administration' meta entry", c.page)
 		}
-		// The band flows below the list (GH #133): last service row, one blank
-		// separator row, then "0", then "A". On the full page 0 that puts "A"
-		// on BodyBottomRow, flush above the PF legend.
-		lastSvc := g.BodyTopRow() + c.svcRows // first service row is BodyTopRow()+1
-		us, _ := fieldByContent(screen, "User Settings")
-		if us.Row != lastSvc+2 {
-			t.Errorf("page %d: User Settings row = %d, want %d", c.page, us.Row, lastSvc+2)
+		// First service row is BodyTopRow()+1, shifted down by one on page 0 by
+		// the leading "0 Settings" row. "A" flows one blank separator row below
+		// the last service row.
+		firstSvc := g.BodyTopRow() + 1
+		if c.wantSettings {
+			firstSvc++ // the settings row occupies BodyTopRow()+1
 		}
+		lastSvc := firstSvc + c.svcRows - 1
 		admin, _ := fieldByContent(screen, "Administration")
-		if admin.Row != lastSvc+3 {
-			t.Errorf("page %d: Administration row = %d, want %d", c.page, admin.Row, lastSvc+3)
+		if admin.Row != lastSvc+2 {
+			t.Errorf("page %d: Administration row = %d, want %d", c.page, admin.Row, lastSvc+2)
 		}
 	}
 }
@@ -416,14 +426,72 @@ func TestMenuScreenSeparatorBetweenListAndBand(t *testing.T) {
 	}
 	g := DefaultGeometry
 	screen, _, _ := MenuScreen(g, svcs, true, false, MenuStatus{}, "", 0)
-	// Full admin page: services fill rows 4..19, so the blank separator is row
-	// 20 and the band occupies 21 ("0") and 22 ("A" = BodyBottomRow). Row 20 is
-	// below the right-hand status block (rows 4..9), so the whole row is blank.
-	sep := g.BodyTopRow() + g.MenuCapacity(true) + 1
+	// Full admin page 0: "0 Settings" (row 4) + 16 services (rows 5..20), so the
+	// blank separator is row 21 and "A" rides BodyBottomRow (22). Row 21 is below
+	// the right-hand status block (rows 4..9), so the whole row is blank.
+	sep := g.BodyTopRow() + g.MenuCapacity(true) + 2
 	for _, f := range screen {
 		if f.Row == sep && f.Content != "" {
 			t.Errorf("separator row %d should be blank, found %+v", sep, f)
 		}
+	}
+}
+
+// GH #130: the "0 Settings" option moves to the TOP of the service list on the
+// first page (immediately above service 1), rendered as a full tri-color grid
+// row — number "  0" / "Settings" name (col 6) / "User and security parameters"
+// description (col 17) — matching the ISPF Primary Option Menu's "0  Settings"
+// convention. The old bottom-band "User Settings" label is gone.
+func TestMenuSettingsRowAtTopOfFirstPage(t *testing.T) {
+	g := DefaultGeometry
+	svcs := []store.Service{
+		{ID: 1, Name: "PROD", Description: "Production CICS", Host: "h", Port: 23},
+		{ID: 2, Name: "TEST", Description: "Test CICS", Host: "h", Port: 23},
+	}
+	screen, _, _ := MenuScreen(g, svcs, false, false, MenuStatus{}, "", 0)
+
+	top := g.BodyTopRow() + 1 // first body row, above service 1
+
+	num, ok := fieldByContent(screen, "  0")
+	if !ok || num.Row != top || num.Col != 0 {
+		t.Errorf(`"  0" number = row %d col %d ok=%v, want row %d col 0`, num.Row, num.Col, ok, top)
+	}
+	name, ok := fieldByContent(screen, "Settings")
+	if !ok || name.Row != top || name.Col != 6 || name.Color != go3270.Turquoise {
+		t.Errorf(`"Settings" name = row %d col %d color %v ok=%v, want row %d col 6 turquoise`, name.Row, name.Col, name.Color, ok, top)
+	}
+	desc, ok := fieldByContent(screen, "User and security parameters")
+	if !ok || desc.Row != top || desc.Col != 17 || desc.Color != go3270.Green {
+		t.Errorf(`settings description = row %d col %d color %v ok=%v, want row %d col 17 green`, desc.Row, desc.Col, desc.Color, ok, top)
+	}
+	// Service 1 now renders directly below the settings row.
+	svc1, ok := fieldByContent(screen, "PROD")
+	if !ok || svc1.Row != top+1 {
+		t.Errorf("service 1 row = %d ok=%v, want %d (below the settings row)", svc1.Row, ok, top+1)
+	}
+	// The old bottom-band "User Settings" label is gone.
+	if screenContains(screen, "User Settings") {
+		t.Error(`obsolete "User Settings" label still present`)
+	}
+}
+
+// GH #130: the top "0 Settings" row appears only on the first page; later pages
+// start their service window at the first body row with no settings row above.
+func TestMenuSettingsRowOnlyOnFirstPage(t *testing.T) {
+	g := DefaultGeometry
+	svcs := make([]store.Service, g.MenuCapacity(false)+3) // forces a 2nd page
+	for i := range svcs {
+		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i+1), Host: "h", Port: 23}
+	}
+	screen, _, _ := MenuScreen(g, svcs, false, false, MenuStatus{}, "", 1)
+	if screenContains(screen, "Settings") {
+		t.Error("page 1 must not show the top Settings row")
+	}
+	// First service of page 1 sits at the first body row (no settings row above).
+	first := fmt.Sprintf("SVC%02d", g.MenuCapacity(false)+1)
+	f, ok := fieldByContent(screen, first)
+	if !ok || f.Row != g.BodyTopRow()+1 {
+		t.Errorf("page 1 first service %q row = %d ok=%v, want %d", first, f.Row, ok, g.BodyTopRow()+1)
 	}
 }
 
@@ -445,25 +513,25 @@ func hasContent(screen go3270.Screen, want string) bool {
 }
 
 func TestMenuScreenLockedHidesUserSettings(t *testing.T) {
-	// non-admin, locked: neither "0 User Settings" nor "Administration".
+	// non-admin, locked: neither "0 Settings" nor "Administration".
 	screen, _, _ := MenuScreen(DefaultGeometry, nil, false, true, MenuStatus{}, "", 0)
-	if screenContains(screen, "User Settings") {
-		t.Error("locked non-admin must not see User Settings entry")
+	if screenContains(screen, "Settings") {
+		t.Error("locked non-admin must not see Settings entry")
 	}
 	if screenContains(screen, "Administration") {
 		t.Error("non-admin must never see Administration")
 	}
 
-	// non-admin, unlocked: User Settings present (regression).
+	// non-admin, unlocked: Settings present (regression).
 	screen, _, _ = MenuScreen(DefaultGeometry, nil, false, false, MenuStatus{}, "", 0)
-	if !screenContains(screen, "User Settings") {
-		t.Error("unlocked non-admin must see User Settings entry")
+	if !screenContains(screen, "Settings") {
+		t.Error("unlocked non-admin must see Settings entry")
 	}
 
-	// admin, locked: Administration present, User Settings hidden.
+	// admin, locked: Administration present, Settings hidden.
 	screen, _, _ = MenuScreen(DefaultGeometry, nil, true, true, MenuStatus{}, "", 0)
-	if screenContains(screen, "User Settings") {
-		t.Error("locked admin must not see User Settings entry")
+	if screenContains(screen, "Settings") {
+		t.Error("locked admin must not see Settings entry")
 	}
 	if !screenContains(screen, "Administration") {
 		t.Error("locked admin must still see Administration")
@@ -471,34 +539,36 @@ func TestMenuScreenLockedHidesUserSettings(t *testing.T) {
 
 	// admin, unlocked: both present.
 	screen, _, _ = MenuScreen(DefaultGeometry, nil, true, false, MenuStatus{}, "", 0)
-	if !screenContains(screen, "User Settings") || !screenContains(screen, "Administration") {
+	if !screenContains(screen, "Settings") || !screenContains(screen, "Administration") {
 		t.Error("unlocked admin must see both entries")
 	}
 }
 
-// TestMenuScreenLockedHidesUserSettingsAcrossPages guards against the "0" entry
-// reappearing on a non-first page when locked (the meta band is rendered every
-// page). Uses enough services to force a second page.
-func TestMenuScreenLockedHidesUserSettingsAcrossPages(t *testing.T) {
+// TestMenuScreenLockedHidesSettingsAcrossPages guards that a settings-locked
+// user never sees the "0 Settings" option — including on page 0, where it would
+// otherwise lead the list. (On later pages it is page-0-only for everyone; see
+// TestMenuSettingsRowOnlyOnFirstPage.)
+func TestMenuScreenLockedHidesSettingsAcrossPages(t *testing.T) {
 	g := DefaultGeometry
 	svcs := make([]store.Service, 2*g.MenuCapacity(false)+1)
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i), Host: "h", Port: 23}
 	}
-	// page 1, locked: still no "0" entry.
-	screen, _, _ := MenuScreen(g, svcs, false, true, MenuStatus{}, "", 1)
-	if screenContains(screen, "User Settings") {
-		t.Error("locked user must not see User Settings entry on page 1")
+	for _, page := range []int{0, 1} {
+		screen, _, _ := MenuScreen(g, svcs, false, true, MenuStatus{}, "", page)
+		if screenContains(screen, "Settings") {
+			t.Errorf("locked user must not see Settings entry on page %d", page)
+		}
 	}
-	// page 1, unlocked: "0" entry still present (regression).
-	screen, _, _ = MenuScreen(g, svcs, false, false, MenuStatus{}, "", 1)
-	if !screenContains(screen, "User Settings") {
-		t.Error("unlocked user must still see User Settings entry on page 1")
+	// page 0, unlocked: Settings present (regression).
+	screen, _, _ := MenuScreen(g, svcs, false, false, MenuStatus{}, "", 0)
+	if !screenContains(screen, "Settings") {
+		t.Error("unlocked user must see Settings entry on page 0")
 	}
 }
 
-// GH #133: the meta band flows directly below the service list with one blank
-// separator row, instead of bottom-anchoring near the PF legend.
+// GH #130/#133: "0 Settings" leads the list (page 0); "A Administration" flows
+// directly below the service list with one blank separator row.
 func TestMenuScreenMetaBandFlowsBelowSparseList(t *testing.T) {
 	g := DefaultGeometry
 	svcs := []store.Service{
@@ -506,76 +576,83 @@ func TestMenuScreenMetaBandFlowsBelowSparseList(t *testing.T) {
 		{ID: 2, Name: "TEST", Description: "Test CICS", Host: "h", Port: 23},
 		{ID: 3, Name: "DEMO", Description: "Demo backend", Host: "h", Port: 23},
 	}
-	lastSvc := g.BodyTopRow() + 3 // service rows 4..6 on MOD 2
+	settingsRow := g.BodyTopRow() + 1 // "0 Settings" leads the list
+	lastSvc := settingsRow + 3        // 3 services directly below the settings row
 
-	// admin, unlocked: blank separator, then "0", then "A".
+	// admin, unlocked: settings leads at the top; "A" one blank row below the list.
 	screen, _, _ := MenuScreen(g, svcs, true, false, MenuStatus{}, "", 0)
-	us, ok := fieldByContent(screen, "User Settings")
-	if !ok || us.Row != lastSvc+2 {
-		t.Errorf("admin: User Settings row = %d ok=%v, want %d", us.Row, ok, lastSvc+2)
-	}
-	adm, ok := fieldByContent(screen, "Administration")
-	if !ok || adm.Row != lastSvc+3 {
-		t.Errorf("admin: Administration row = %d ok=%v, want %d", adm.Row, ok, lastSvc+3)
-	}
-
-	// non-admin, unlocked: "0" on the same anchor row, no "A".
-	screen, _, _ = MenuScreen(g, svcs, false, false, MenuStatus{}, "", 0)
-	us, ok = fieldByContent(screen, "User Settings")
-	if !ok || us.Row != lastSvc+2 {
-		t.Errorf("non-admin: User Settings row = %d ok=%v, want %d", us.Row, ok, lastSvc+2)
-	}
-}
-
-// GH #133: when "0" is hidden (settings-locked), "A" takes the anchor row —
-// no gap where "0" would have been.
-func TestMenuScreenLockedAdminBandTakesAnchorRow(t *testing.T) {
-	g := DefaultGeometry
-	svcs := []store.Service{{ID: 1, Name: "PROD", Description: "Production CICS", Host: "h", Port: 23}}
-	lastSvc := g.BodyTopRow() + 1
-	screen, _, _ := MenuScreen(g, svcs, true, true, MenuStatus{}, "", 0)
-	if screenContains(screen, "User Settings") {
-		t.Error("locked admin must not see User Settings entry")
+	s, ok := fieldByContent(screen, "Settings")
+	if !ok || s.Row != settingsRow {
+		t.Errorf("admin: Settings row = %d ok=%v, want %d", s.Row, ok, settingsRow)
 	}
 	adm, ok := fieldByContent(screen, "Administration")
 	if !ok || adm.Row != lastSvc+2 {
-		t.Errorf("locked admin: Administration row = %d ok=%v, want %d (anchor row)", adm.Row, ok, lastSvc+2)
+		t.Errorf("admin: Administration row = %d ok=%v, want %d", adm.Row, ok, lastSvc+2)
+	}
+
+	// non-admin, unlocked: settings still leads; no "A".
+	screen, _, _ = MenuScreen(g, svcs, false, false, MenuStatus{}, "", 0)
+	s, ok = fieldByContent(screen, "Settings")
+	if !ok || s.Row != settingsRow {
+		t.Errorf("non-admin: Settings row = %d ok=%v, want %d", s.Row, ok, settingsRow)
+	}
+	if screenContains(screen, "Administration") {
+		t.Error("non-admin must not see Administration")
 	}
 }
 
-// GH #133: with an empty list the band starts directly beneath the
-// placeholder — no blank separator (the placeholder is a message, not a
-// service row).
+// GH #130/#133: a settings-locked admin has no "0 Settings" row, so the service
+// list starts at the first body row and "A" flows one blank row below it.
+func TestMenuScreenLockedAdminBandTakesAnchorRow(t *testing.T) {
+	g := DefaultGeometry
+	svcs := []store.Service{{ID: 1, Name: "PROD", Description: "Production CICS", Host: "h", Port: 23}}
+	lastSvc := g.BodyTopRow() + 1 // single service at the first body row (no settings row)
+	screen, _, _ := MenuScreen(g, svcs, true, true, MenuStatus{}, "", 0)
+	if screenContains(screen, "Settings") {
+		t.Error("locked admin must not see Settings entry")
+	}
+	adm, ok := fieldByContent(screen, "Administration")
+	if !ok || adm.Row != lastSvc+2 {
+		t.Errorf("locked admin: Administration row = %d ok=%v, want %d", adm.Row, ok, lastSvc+2)
+	}
+}
+
+// GH #130/#133: with an empty list and the leading "0 Settings" row, the
+// placeholder sits directly below settings and "A" hugs the placeholder (no
+// blank separator — the placeholder is a message, not a service row).
 func TestMenuScreenMetaBandHugsEmptyPlaceholder(t *testing.T) {
 	g := DefaultGeometry
 	screen, _, _ := MenuScreen(g, nil, true, false, MenuStatus{}, "", 0)
-	ph, ok := fieldByContent(screen, "(no services available for your account)")
-	if !ok || ph.Row != g.BodyTopRow()+1 {
-		t.Fatalf("placeholder row = %d ok=%v, want %d", ph.Row, ok, g.BodyTopRow()+1)
+	s, ok := fieldByContent(screen, "Settings")
+	if !ok || s.Row != g.BodyTopRow()+1 {
+		t.Fatalf("Settings row = %d ok=%v, want %d", s.Row, ok, g.BodyTopRow()+1)
 	}
-	us, ok := fieldByContent(screen, "User Settings")
-	if !ok || us.Row != ph.Row+1 {
-		t.Errorf("User Settings row = %d ok=%v, want %d (directly below placeholder)", us.Row, ok, ph.Row+1)
+	ph, ok := fieldByContent(screen, "(no services available for your account)")
+	if !ok || ph.Row != s.Row+1 {
+		t.Fatalf("placeholder row = %d ok=%v, want %d (below settings)", ph.Row, ok, s.Row+1)
 	}
 	adm, ok := fieldByContent(screen, "Administration")
-	if !ok || adm.Row != ph.Row+2 {
-		t.Errorf("Administration row = %d ok=%v, want %d", adm.Row, ok, ph.Row+2)
+	if !ok || adm.Row != ph.Row+1 {
+		t.Errorf("Administration row = %d ok=%v, want %d (hugs placeholder)", adm.Row, ok, ph.Row+1)
 	}
 }
 
-// GH #133: a sparse final page hugs its short list just like a sparse
-// single-page menu.
+// GH #130/#133: a sparse final page has no "0 Settings" row (page-0-only); for
+// an admin, "A" flows one blank row below the short final-page list.
 func TestMenuScreenMetaBandFlowsOnSparseFinalPage(t *testing.T) {
 	g := DefaultGeometry
-	svcs := make([]store.Service, g.MenuCapacity(false)+5) // page 1 renders 5
+	svcs := make([]store.Service, g.MenuCapacity(true)+5) // admin page 1 renders 5
 	for i := range svcs {
 		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i+1), Host: "h", Port: 23}
 	}
-	screen, _, _ := MenuScreen(g, svcs, false, false, MenuStatus{}, "", 1)
-	lastSvc := g.BodyTopRow() + 5
-	us, ok := fieldByContent(screen, "User Settings")
-	if !ok || us.Row != lastSvc+2 {
-		t.Errorf("page 1: User Settings row = %d ok=%v, want %d", us.Row, ok, lastSvc+2)
+	screen, _, _ := MenuScreen(g, svcs, true, false, MenuStatus{}, "", 1)
+	if screenContains(screen, "Settings") {
+		t.Error("final page must not show the Settings row")
+	}
+	lastSvc := g.BodyTopRow() + 5 // 5 services starting at the first body row
+	adm, ok := fieldByContent(screen, "Administration")
+	if !ok || adm.Row != lastSvc+2 {
+		t.Errorf("page 1: Administration row = %d ok=%v, want %d", adm.Row, ok, lastSvc+2)
 	}
 }
 

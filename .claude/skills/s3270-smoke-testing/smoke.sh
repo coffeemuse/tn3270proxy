@@ -633,14 +633,15 @@ else
   FAIL=$((FAIL+1)); echo "FAIL: 14e PF3 on edit form did not return to users list"
 fi
 
-# --- 15. User Settings menu entry (GH #63): the service menu shows a "0 User
-# Settings" meta-row for every user; selecting "0" opens the User Settings
+# --- 15. Settings menu entry (GH #63/#130): the service menu shows a "0 Settings"
+# option leading the list on the first page (GH #130 — "User and security
+# parameters" description); selecting "0" opens the User Settings
 # screen whose first row is "1 Password" / "Change your sign-on password"; PF3 returns to the service
 # menu. Scenario 13 activated the MOTD gate (the MOTD document in front.db now
 # holds a 2-page fixture), so this login must clear the gate with two ENTERs
 # (Wait(Unlock) after each — the MOTD page has no input field) before reaching
 # the service menu. Walk: login alice -> clear MOTD (2x Enter) -> service menu
-# (check "0 User Settings") -> type "0", Enter -> User Settings screen ->
+# (check "0 Settings") -> type "0", Enter -> User Settings screen ->
 # assert title + change-password row + cursor at (1,15) -> PF3 -> service menu.
 s3 t15 <<EOF
 Connect(127.0.0.1:$FRONT_PORT)
@@ -666,7 +667,7 @@ Wait(5,InputField)
 Ascii()
 Quit()
 EOF
-check "15a service menu shows '0 User Settings' entry" "User Settings" "$WORK/t15.out"
+check "15a service menu shows '0 Settings' entry leading the list" "User and security parameters" "$WORK/t15.out"
 check "15b User Settings screen renders (title)" "USER SETTINGS" "$WORK/t15.out"
 check "15c User Settings shows Change Password option" "Change your sign-on password" "$WORK/t15.out"
 # Cursor on the option input field at (1,15): FieldUSOption sits on the top
@@ -745,7 +746,7 @@ check  "16a page 1 indicator" "ITEMS 1 TO 17 OF 22" "$WORK/t16p1.out"
 check  "16b page 1 first service"  "PAGE01" "$WORK/t16p1.out"
 check  "16c page 1 last on-page service" "PAGE17" "$WORK/t16p1.out"
 ncheck "16d page 1 hides overflow service" "PAGE18" "$WORK/t16p1.out"
-check  "16e meta entry present on page 1" "User Settings" "$WORK/t16p1.out"
+check  "16e '0 Settings' leads the list on page 1" "User and security parameters" "$WORK/t16p1.out"
 check  "16f menu cursor on selection input (1,15)" "I 2 24 80 1 15 " "$WORK/t16p1.out"
 
 s3 t16p2 <<EOF
@@ -764,7 +765,7 @@ EOF
 check  "16g PF8 -> page 2 indicator" "ITEMS 18 TO 22 OF 22" "$WORK/t16p2.out"
 check  "16h page 2 shows overflow service" "PAGE22" "$WORK/t16p2.out"
 ncheck "16i page 2 hides page-1 service" "PAGE01" "$WORK/t16p2.out"
-check  "16j meta entry present on page 2" "User Settings" "$WORK/t16p2.out"
+ncheck "16j '0 Settings' is page-1-only (absent on page 2)" "User and security parameters" "$WORK/t16p2.out"
 
 # PF8 at the last page is a no-op (still page 2); PF7 then returns to page 1.
 s3 t16p3 <<EOF
