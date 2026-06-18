@@ -80,7 +80,7 @@ MENU KEYS
 OTHER MENU ENTRIES
 
   0    Settings - change your password or manage MFA.
-  A    Administration - shown only to administrators.
+  A    Admin - system administration; shown only to administrators.
 
 Ask your administrator if you need access to another service.`
 

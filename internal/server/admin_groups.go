@@ -41,7 +41,7 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 	r := f.renderer(conn)
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.Group]{
 		Title:  "TN3270 GATEWAY ADMIN: GROUPS",
-		Header: "CMD  GROUP                MEMBERS  SERVICES",
+		Header: "CMD GROUP                MEMBERS  SERVICES",
 		Legend: "M = members   D = delete   PF4 = add group",
 		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = admin menu",
 		Rows:   f.term.Rows,
@@ -93,7 +93,7 @@ func (f *adminFlow) groups(ctx context.Context, conn net.Conn) error {
 func (f *adminFlow) groupMembers(ctx context.Context, r ui3270.Renderer, g store.Group) error {
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.User]{
 		Title:  "TN3270 GATEWAY ADMIN: MEMBERS OF " + g.Name,
-		Header: "CMD  USERNAME         MEMBER",
+		Header: "CMD USERNAME         MEMBER",
 		Legend: "A = add to group   R = remove from group",
 		PFHelp: "PF3=Back    PF7=PgUp    PF8=PgDn",
 		Rows:   f.term.Rows,

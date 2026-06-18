@@ -38,7 +38,7 @@ func (f *adminFlow) documents(ctx context.Context, conn net.Conn) error {
 	r := f.renderer(conn)
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.Document]{
 		Title:  "TN3270 GATEWAY ADMIN: DOCUMENTS",
-		Header: "CMD  NAME       LINES  CHANGED (UTC)     ID",
+		Header: "CMD NAME       LINES  CHANGED (UTC)     ID",
 		Legend: "E = edit   I = import from server file",
 		PFHelp: "PF3=Admin Menu    PF7=PgUp    PF8=PgDn",
 		Rows:   f.term.Rows,

@@ -38,7 +38,7 @@ func (f *adminFlow) users(ctx context.Context, conn net.Conn) error {
 	r := f.renderer(conn)
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.User]{
 		Title:  "TN3270 GATEWAY ADMIN: USERS",
-		Header: "CMD  USERNAME         GROUPS",
+		Header: "CMD USERNAME         GROUPS",
 		Legend: "S = edit user   G = groups   D = delete",
 		PFHelp: "PF3=Admin Menu    PF4=Add User    PF7=PgUp    PF8=PgDn",
 		Rows:   f.term.Rows,
@@ -357,7 +357,7 @@ func (f *adminFlow) applyLockEdit(ctx context.Context, u store.User, vals map[st
 func (f *adminFlow) userGroups(ctx context.Context, r ui3270.Renderer, u store.User) error {
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.Group]{
 		Title:  "TN3270 GATEWAY ADMIN: GROUPS FOR " + u.Username,
-		Header: "CMD  GROUP                MEMBER",
+		Header: "CMD GROUP                MEMBER",
 		Legend: "A = add to group   R = remove from group",
 		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = back",
 		Rows:   f.term.Rows,
