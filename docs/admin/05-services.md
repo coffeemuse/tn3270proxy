@@ -11,7 +11,7 @@ delete (confirm-gated). **PF4** adds a service.
 | Field | Rules |
 |---|---|
 | Name | required; A–Z and 0–9 only, max 8; stored uppercase; unique |
-| Descr. | required, max 40 characters — this is the label users see on the menu |
+| Description | required, max 40 characters — this is the label users see on the menu |
 | Host | required; **not** case-folded |
 | Port | 1–65535 |
 | TLS (Y/N) | `Y` = the gateway dials the backend over TLS |

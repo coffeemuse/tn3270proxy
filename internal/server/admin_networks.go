@@ -35,7 +35,7 @@ func (f *adminFlow) networks(ctx context.Context, conn net.Conn) error {
 	r := f.renderer(conn)
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.TrustedNetwork]{
 		Title:  "TN3270 GATEWAY ADMIN: TRUSTED NETWORKS",
-		Header: "CMD  NETWORK          COMMENT",
+		Header: "CMD NETWORK          COMMENT",
 		Legend: "S = edit   D = delete",
 		PFHelp: "PF3=Admin Menu    PF4=Add Network    PF7=PgUp    PF8=PgDn",
 		Rows:   f.term.Rows,

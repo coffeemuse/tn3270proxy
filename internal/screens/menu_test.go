@@ -245,10 +245,11 @@ func TestMenuScreenAdminEntryNeverCollidesWhenFull(t *testing.T) {
 		if adminRow < 0 || adminRow > g.BodyBottomRow() {
 			t.Errorf("%+v: admin entry row = %d, want ≤ %d", g, adminRow, g.BodyBottomRow())
 		}
-		// New grid: admin row has 2 fields ("  A" number + "Administration" label).
-		// More than 2 means a service row is colliding with the admin row.
-		if occupied[adminRow] != 2 {
-			t.Errorf("%+v: admin entry row %d has %d fields, want exactly 2", g, adminRow, occupied[adminRow])
+		// New grid: admin row has 3 fields ("  A" number + "Admin" name +
+		// "System Administration" label). More than 3 means a service row is
+		// colliding with the admin row.
+		if occupied[adminRow] != 3 {
+			t.Errorf("%+v: admin entry row %d has %d fields, want exactly 3", g, adminRow, occupied[adminRow])
 		}
 	}
 }
@@ -410,7 +411,7 @@ func TestMenuScreenMetaBandOnEveryPage(t *testing.T) {
 			firstSvc++ // the settings row occupies BodyTopRow()
 		}
 		lastSvc := firstSvc + c.svcRows - 1
-		admin, _ := fieldByContent(screen, "Administration")
+		admin, _ := fieldByContent(screen, "System Administration")
 		if admin.Row != lastSvc+2 {
 			t.Errorf("page %d: Administration row = %d, want %d", c.page, admin.Row, lastSvc+2)
 		}
@@ -583,7 +584,7 @@ func TestMenuScreenMetaBandFlowsBelowSparseList(t *testing.T) {
 	if !ok || s.Row != settingsRow {
 		t.Errorf("admin: Settings row = %d ok=%v, want %d", s.Row, ok, settingsRow)
 	}
-	adm, ok := fieldByContent(screen, "Administration")
+	adm, ok := fieldByContent(screen, "System Administration")
 	if !ok || adm.Row != lastSvc+2 {
 		t.Errorf("admin: Administration row = %d ok=%v, want %d", adm.Row, ok, lastSvc+2)
 	}
@@ -609,7 +610,7 @@ func TestMenuScreenLockedAdminBandTakesAnchorRow(t *testing.T) {
 	if screenContains(screen, "Settings") {
 		t.Error("locked admin must not see Settings entry")
 	}
-	adm, ok := fieldByContent(screen, "Administration")
+	adm, ok := fieldByContent(screen, "System Administration")
 	if !ok || adm.Row != lastSvc+2 {
 		t.Errorf("locked admin: Administration row = %d ok=%v, want %d", adm.Row, ok, lastSvc+2)
 	}
@@ -629,7 +630,7 @@ func TestMenuScreenMetaBandHugsEmptyPlaceholder(t *testing.T) {
 	if !ok || ph.Row != s.Row+1 {
 		t.Fatalf("placeholder row = %d ok=%v, want %d (below settings)", ph.Row, ok, s.Row+1)
 	}
-	adm, ok := fieldByContent(screen, "Administration")
+	adm, ok := fieldByContent(screen, "System Administration")
 	if !ok || adm.Row != ph.Row+1 {
 		t.Errorf("Administration row = %d ok=%v, want %d (hugs placeholder)", adm.Row, ok, ph.Row+1)
 	}
@@ -648,7 +649,7 @@ func TestMenuScreenMetaBandFlowsOnSparseFinalPage(t *testing.T) {
 		t.Error("final page must not show the Settings row")
 	}
 	lastSvc := g.BodyTopRow() + 4 // 5 services starting at the first body row (rows 3..7)
-	adm, ok := fieldByContent(screen, "Administration")
+	adm, ok := fieldByContent(screen, "System Administration")
 	if !ok || adm.Row != lastSvc+2 {
 		t.Errorf("page 1: Administration row = %d ok=%v, want %d", adm.Row, ok, lastSvc+2)
 	}

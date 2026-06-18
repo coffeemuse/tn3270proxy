@@ -36,7 +36,7 @@ func buildListScreen(rows int, v ListView) (go3270.Screen, Cursor) {
 	screen := go3270.Screen{
 		{Row: 0, Col: centerCol(len(v.Title)), Color: go3270.White, Intense: true, Content: v.Title},
 		{Row: 0, Col: 60, Content: v.RowInfo},
-		{Row: bodyTopRow(), Col: 2, Color: go3270.Blue, Content: v.Header},
+		{Row: bodyTopRow(), Col: 0, Color: go3270.Blue, Content: v.Header},
 	}
 	data := v.Rows
 	if size := listPageSize(rows); len(data) > size {
@@ -45,22 +45,25 @@ func buildListScreen(rows int, v ListView) (go3270.Screen, Cursor) {
 	cur := Cursor{Row: 0, Col: 0}
 	for i, r := range data {
 		row := 4 + i
-		cmd := go3270.Field{Row: row, Col: 2, Name: fmt.Sprintf("%s%d", fieldCmdPrefix, i), Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
+		// CMD line-command field is flush-left (ISPF convention): attribute byte
+		// at col 0, 1-char writable input at col 1, stop field at col 2, then the
+		// row content at col 4. Headers prefix "CMD " (4 cols) to match.
+		cmd := go3270.Field{Row: row, Col: 0, Name: fmt.Sprintf("%s%d", fieldCmdPrefix, i), Write: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 		if i == 0 {
 			cur = Cursor{Row: cmd.Row, Col: cmd.Col + 1}
 		}
 		screen = append(screen,
 			cmd,
-			go3270.Field{Row: row, Col: 4}, // stop field: 1-char command input
-			go3270.Field{Row: row, Col: 7, Color: go3270.Green, Content: r},
+			go3270.Field{Row: row, Col: 2}, // stop field: 1-char command input
+			go3270.Field{Row: row, Col: 4, Color: go3270.Green, Content: r},
 		)
 	}
 	if len(data) == 0 {
-		screen = append(screen, go3270.Field{Row: 4, Col: 7, Content: "(none)"})
+		screen = append(screen, go3270.Field{Row: 4, Col: 4, Content: "(none)"})
 	}
 	screen = append(screen,
-		go3270.Field{Row: legendRow(rows), Col: 2, Color: go3270.Turquoise, Content: v.Legend},
-		go3270.Field{Row: messageRow(), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
+		go3270.Field{Row: legendRow(rows), Col: 0, Color: go3270.Turquoise, Content: v.Legend},
+		go3270.Field{Row: messageRow(), Col: 0, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
 		go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: v.PFHelp},
 	)
 	return screen, cur

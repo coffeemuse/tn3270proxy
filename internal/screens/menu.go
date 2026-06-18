@@ -170,7 +170,8 @@ func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLoc
 	if admin {
 		screen = append(screen,
 			go3270.Field{Row: metaRow, Col: 0, Intense: true, Content: "  A"},
-			go3270.Field{Row: metaRow, Col: 17, Color: go3270.Green, Content: "Administration"},
+			go3270.Field{Row: metaRow, Col: 6, Color: go3270.Turquoise, Content: "Admin"},
+			go3270.Field{Row: metaRow, Col: 17, Color: go3270.Green, Content: "System Administration"},
 		)
 	}
 

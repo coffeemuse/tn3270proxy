@@ -28,9 +28,9 @@ import (
 
 func TestBuildListScreenCursorPopulated(t *testing.T) {
 	_, cur := buildListScreen(24, ListView{Rows: []string{"alice", "bob"}})
-	// first CMD field is attribute byte at (4,2); input one col right.
-	if cur != (Cursor{Row: 4, Col: 3}) {
-		t.Errorf("cursor = %+v, want {4,3}", cur)
+	// first CMD field is the flush-left attribute byte at (4,0); input one col right.
+	if cur != (Cursor{Row: 4, Col: 1}) {
+		t.Errorf("cursor = %+v, want {4,1}", cur)
 	}
 }
 
@@ -267,16 +267,16 @@ func TestBuildListScreenPalette(t *testing.T) {
 	if !ok || title.Content != "USER ADMINISTRATION" || title.Color != go3270.White || !title.Intense {
 		t.Errorf("title = %+v ok=%v, want centered white intense", title, ok)
 	}
-	hdr, ok := fieldAt(screen, bodyTopRow(), 2)
+	hdr, ok := fieldAt(screen, bodyTopRow(), 0)
 	if !ok || hdr.Color != go3270.Blue || hdr.Content != "Userid    Name" {
-		t.Errorf("header = %+v ok=%v, want row 3 blue", hdr, ok)
+		t.Errorf("header = %+v ok=%v, want row 3 col 0 blue", hdr, ok)
 	}
 	msg, ok := fieldByName(screen, fieldError)
 	if !ok || msg.Row != 2 {
 		t.Errorf("message row = %d ok=%v, want 2", msg.Row, ok)
 	}
-	if cur != (Cursor{Row: 4, Col: 3}) {
-		t.Errorf("cursor = %+v, want {4,3} (unchanged)", cur)
+	if cur != (Cursor{Row: 4, Col: 1}) {
+		t.Errorf("cursor = %+v, want {4,1} (flush-left)", cur)
 	}
 }
 

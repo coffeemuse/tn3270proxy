@@ -54,7 +54,7 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 	r := f.renderer(conn)
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.Service]{
 		Title:  "TN3270 GATEWAY ADMIN: SERVICES",
-		Header: "CMD  NAME     DESCRIPTION          HOST:PORT          TLS VERIFY",
+		Header: "CMD NAME     DESCRIPTION                    HOST:PORT                TLS VERIFY",
 		Legend: "S = edit   G = group access   D = delete",
 		PFHelp: "PF3=Admin Menu    PF4=Add Service    PF7=PgUp    PF8=PgDn",
 		Rows:   f.term.Rows,
@@ -66,7 +66,7 @@ func (f *adminFlow) services(ctx context.Context, conn net.Conn) error {
 			rows := make([]ui3270.Row[store.Service], len(svcs))
 			for i, s := range svcs {
 				rows[i] = ui3270.Row[store.Service]{
-					Display: fmt.Sprintf("%-8s %-20.20s %-18.18s %-3s %s",
+					Display: fmt.Sprintf("%-8s %-30.30s %-24.24s %-3s %s",
 						s.Name, s.Description, fmt.Sprintf("%s:%d", s.Host, s.Port), yn(s.TLS), yn(s.TLSVerify)),
 					Item: s,
 				}
@@ -110,7 +110,7 @@ func (f *adminFlow) serviceForm(ctx context.Context, r ui3270.Renderer, existing
 	// (and canonicalized) values on the next render.
 	fields := []ui3270.FormField{
 		{Name: screens.FieldName, Label: "Name . . . .", Value: name, Length: 8},
-		{Name: screens.FieldDescription, Label: "Descr. . . .", Value: description, Length: 40},
+		{Name: screens.FieldDescription, Label: "Description", Value: description, Length: 40},
 		{Name: screens.FieldHost, Label: "Host . . . .", Value: host, Length: 48},
 		{Name: screens.FieldPort, Label: "Port . . . .", Value: port, Length: 5},
 		{Name: screens.FieldTLS, Label: "TLS (Y/N) .", Value: tlsYN, Length: 1},
@@ -187,7 +187,7 @@ func (f *adminFlow) checkServiceNameFree(ctx context.Context, name string, exist
 func (f *adminFlow) serviceGroups(ctx context.Context, r ui3270.Renderer, svc store.Service) error {
 	return ui3270.RunList(ctx, r, ui3270.ListConfig[store.Group]{
 		Title:  "TN3270 GATEWAY ADMIN: ACCESS TO " + svc.Name,
-		Header: "CMD  GROUP                ACCESS",
+		Header: "CMD GROUP                ACCESS",
 		Legend: "A = grant access   R = revoke access",
 		PFHelp: "Enter = process   PF7/PF8 = page   PF3 = back",
 		Rows:   f.term.Rows,
