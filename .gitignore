@@ -36,6 +36,9 @@ go.work.sum
 /bin/
 dist/
 
+# Local QA test-server scaffolding (per-worktree; see qa-test-server memory)
+/qa/
+
 # Runtime SQLite databases (including WAL mode sidecar files)
 *.db
 *.db-wal
