@@ -107,18 +107,21 @@ func (f *adminFlow) serviceForm(ctx context.Context, r ui3270.Renderer, existing
 		tlsYN, verifyYN = yn(existing.TLS), yn(existing.TLSVerify)
 	}
 	// fields is rebuilt-by-reference so a rejected submit re-seeds the typed
-	// (and canonicalized) values on the next render.
+	// (and canonicalized) values on the next render. Compact + DotLeader give the
+	// sectioned, colon-aligned layout shared with the Edit User form (#130).
 	fields := []ui3270.FormField{
-		{Name: screens.FieldName, Label: "Name . . . .", Value: name, Length: 8},
+		{Name: screens.FieldName, Label: "Name", Value: name, Length: 8, Section: "Identity"},
 		{Name: screens.FieldDescription, Label: "Description", Value: description, Length: 40},
-		{Name: screens.FieldHost, Label: "Host . . . .", Value: host, Length: 48},
-		{Name: screens.FieldPort, Label: "Port . . . .", Value: port, Length: 5},
-		{Name: screens.FieldTLS, Label: "TLS (Y/N) .", Value: tlsYN, Length: 1},
-		{Name: screens.FieldVerify, Label: "Verify (Y/N)", Value: verifyYN, Length: 1},
+		{Name: screens.FieldHost, Label: "Host", Value: host, Length: 48, Section: "Connection"},
+		{Name: screens.FieldPort, Label: "Port", Value: port, Length: 5},
+		{Name: screens.FieldTLS, Label: "TLS", Value: tlsYN, Length: 1, Suffix: "Y/N"},
+		{Name: screens.FieldVerify, Label: "Verify TLS", Value: verifyYN, Length: 1, Suffix: "Y/N   (verify server cert; applies only when TLS=Y)"},
 	}
 	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
-		Title:  title,
-		Fields: fields,
+		Title:     title,
+		Fields:    fields,
+		Compact:   true,
+		DotLeader: true,
 		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
 			name := vals[screens.FieldName]
 			description := vals[screens.FieldDescription]
