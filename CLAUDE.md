@@ -422,9 +422,11 @@ so the session is unit-tested with fakes (no live 3270 client needed).
 - Runtime `*.db` files and `/bin/` are gitignored — don't commit them.
 - **MOTD/NEWS screen is deliberately chrome-less** (`internal/screens/news.go`):
   no title row, no PF-key help row — just red protected text and a `***` page
-  gate on the last row, matching classic TSO/READY logon messages. This is an
-  intentional exception to the "title on row 0, PF help on the last row" rule.
-  Lines truncate at column 79; the gate sits on `NewsLinesPerPage()+1`.
+  gate, matching classic TSO/READY logon messages. This is an intentional
+  exception to the "title on row 0, PF help on the last row" rule. Lines truncate
+  at column 79; the gate floats one blank row below the last text line (row
+  `len(page)+1`), so a full page lands it on the bottom row and a short page
+  floats it up just below the content (like real TSO).
 
 ## Verifying a change actually works
 

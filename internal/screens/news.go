@@ -92,11 +92,15 @@ func PaginateNews(geom Geometry, raw string) [][]string {
 }
 
 // NewsScreen renders one MOTD/NEWS page: each text line as a red, protected
-// field at column 0, then the "***" page gate on the last row. There is no
-// title row and no PF-key help row — a deliberate departure from the app's
-// usual screen chrome, matching classic TSO/READY logon messages. The cursor
-// homes to {0,0}; there is no input field. The caller (Presenter.News) drives
-// it with go3270.HandleScreenAlt: AIDEnter advances, PA3/PF3 are silent no-ops.
+// field at column 0, then the "***" page gate one blank row below the last text
+// line (row len(page)+1). A full page leaves exactly one blank row, so the gate
+// lands on the bottom row; a short page floats it up just below the content,
+// matching how TSO/READY logon messages place the gate right after the text
+// rather than pinned to the bottom of the display. There is no title row and no
+// PF-key help row — a deliberate departure from the app's usual screen chrome.
+// The cursor homes to {0,0}; there is no input field. The caller (Presenter.News)
+// drives it with go3270.HandleScreenAlt: AIDEnter advances, PA3/PF3 are silent
+// no-ops.
 func NewsScreen(geom Geometry, page []string) (go3270.Screen, go3270.Rules, Cursor) {
 	screen := make(go3270.Screen, 0, len(page)+1)
 	for i, line := range page {
@@ -105,7 +109,7 @@ func NewsScreen(geom Geometry, page []string) (go3270.Screen, go3270.Rules, Curs
 		})
 	}
 	screen = append(screen, go3270.Field{
-		Row: geom.NewsLinesPerPage() + 1, Col: 0, Color: go3270.Red, Content: "***",
+		Row: len(page) + 1, Col: 0, Color: go3270.Red, Content: "***",
 	})
 	return screen, nil, Cursor{Row: 0, Col: 0}
 }

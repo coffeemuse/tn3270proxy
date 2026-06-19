@@ -81,8 +81,9 @@ func (g Geometry) MenuCapacity(admin bool) int {
 
 // NewsLinesPerPage is how many MOTD/NEWS text lines fit on one page: every row
 // except the bottom row reserved for the "***" page gate and the blank row
-// above it (22 on MOD 2). The "***" sits on row NewsLinesPerPage()+1 (the last
-// row); see NewsScreen.
+// above it (22 on MOD 2). NewsScreen floats the gate one blank row below the
+// last text line, so a full page (NewsLinesPerPage lines) puts it on the bottom
+// row while a short page floats it up; see NewsScreen.
 func (g Geometry) NewsLinesPerPage() int { return g.norm().Rows - 2 }
 
 // HelpPageSize is how many help-viewer text lines fit on one page: the full
