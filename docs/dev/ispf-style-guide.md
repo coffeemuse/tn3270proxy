@@ -319,11 +319,15 @@ Conscious departures from textbook ISPF, with rationale:
      Date / Time / System ID / Release block at the status column (rows 0–3).
    - The red error line moves to **row 1** (col 2), truncated so it cannot collide
      with the Time block at the status column.
-   - Rows 4 .. `BodyBottomRow()-1` render the BRANDING document content (cols 0–79
-     verbatim, no indent), vertically centered when shorter than the region and
-     top-aligned/clipped when taller.
+   - Rows 4 .. `BodyBottomRow()-1` render the BRANDING document content in
+     **turquoise** (cols 0–79 verbatim, no indent), vertically centered when shorter
+     than the region and top-aligned/clipped when taller.
    - The `User ID` and `Password` fields share `BodyBottomRow()` (the password
-     field's input reaches col 78); `PF3=Disconnect` stays on `HelpRow()`.
+     field's input reaches col 78).
+   - `HelpRow()` carries `PF3=Disconnect` (left, blue) and — uniquely, because the
+     login panel only ever lists one PF key — a right-aligned **white** copyright
+     line (`(C) Copyright CoffeeMuse 2026`, ending at col 79). Other screens keep
+     `HelpRow()` for PF-key legends only.
 
    Like MOTD/NEWS, this is an intentional, documented exception — not a model for
    new ISPF-layer screens.

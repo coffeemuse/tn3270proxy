@@ -247,6 +247,28 @@ func TestLoginScreenBrandingCentered(t *testing.T) {
 	if !ok || b.Row != 13 {
 		t.Errorf("BBB = %+v, want row 13", b)
 	}
+	if a.Color != go3270.Turquoise {
+		t.Errorf("branding color = %v, want Turquoise", a.Color)
+	}
+}
+
+func TestLoginScreenCopyright(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	screen, _, _ := LoginScreen(g, MenuStatus{}, nil, "")
+	c, ok := fieldByContent(screen, loginCopyright)
+	if !ok {
+		t.Fatalf("copyright line %q not found", loginCopyright)
+	}
+	if c.Row != g.HelpRow() {
+		t.Errorf("copyright row = %d, want HelpRow %d", c.Row, g.HelpRow())
+	}
+	if c.Color != go3270.White {
+		t.Errorf("copyright color = %v, want White", c.Color)
+	}
+	// Right-aligned: content ends at the screen's right edge (col 79).
+	if got := c.Col + len(loginCopyright); got != 79 {
+		t.Errorf("copyright ends at col %d, want 79", got)
+	}
 }
 
 func TestLoginScreenBrandingClipsTopAligned(t *testing.T) {

@@ -29,6 +29,10 @@ const (
 	FieldError    = "errormsg"
 )
 
+// loginCopyright is the right-aligned copyright line on the login PF-key row
+// (which only ever lists PF3, leaving the right side free).
+const loginCopyright = "(C) Copyright CoffeeMuse 2026"
+
 // LoginScreen returns the branding-forward login screen, its validation rules,
 // and the initial cursor (on the username field), sized for geom. Layout
 // (0-based; login is a documented exception to the three-band convention — see
@@ -38,10 +42,10 @@ const (
 //	row 1     error line (col 2)          | Time
 //	row 2                                 | System ID
 //	row 3                                 | Release
-//	rows 4..  branding (cols 0-79 verbatim, vertically centered; first-N
-//	  input-1   top-aligned clip when taller than the region)
+//	rows 4..  turquoise branding (cols 0-79 verbatim, vertically centered;
+//	  input-1   first-N top-aligned clip when taller than the region)
 //	BodyBottomRow  User ID + Password on one line (password input reaches col 78)
-//	HelpRow        PF3=Disconnect
+//	HelpRow        PF3=Disconnect (left, blue) | (C) Copyright ... (right, white)
 //
 // branding holds the already-split file lines (see SplitBranding); nil/empty
 // renders a blank body. status supplies the right-hand info; the presenter
@@ -65,6 +69,9 @@ func LoginScreen(geom Geometry, status MenuStatus, branding []string, errMsg str
 		{Row: row, Col: 44, Name: FieldPassword, Write: true, Hidden: true, Color: go3270.Green, Highlighting: go3270.Underscore},
 		{Row: row, Col: 79}, // stop field: password input runs cols 45-78
 		{Row: geom.HelpRow(), Col: 0, Color: go3270.Blue, Content: "PF3=Disconnect"},
+		// The login PF-key row only ever lists PF3, so the right side is free
+		// for a copyright line, right-aligned to end at col 79.
+		{Row: geom.HelpRow(), Col: max(79-len(loginCopyright), 0), Color: go3270.White, Content: loginCopyright},
 	}
 	// Status header on rows 0-3 at StatusBlockCol (startRow 0 places the four
 	// rows consecutively). No User ID (pre-login) and no Terminal, by design.
@@ -86,7 +93,7 @@ func LoginScreen(geom Geometry, status MenuStatus, branding []string, errMsg str
 		if ln == "" {
 			continue // blank line: spacing only, no protected field
 		}
-		screen = append(screen, go3270.Field{Row: top + pad + i, Col: 0, Color: go3270.White, Content: ln})
+		screen = append(screen, go3270.Field{Row: top + pad + i, Col: 0, Color: go3270.Turquoise, Content: ln})
 	}
 	rules := go3270.Rules{
 		FieldUsername: {Validator: go3270.NonBlank, ErrorText: "User ID is required"},
