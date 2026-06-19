@@ -70,7 +70,7 @@ Ascii()
 Quit()
 EOF
 check "1a enrollment screen shown"        "MFA ENROLLMENT" "$WORK/t1.out"
-check "1b enrollment shows the key label" "Key:"           "$WORK/t1.out"
+check "1b enrollment shows the key label" "Key . . ."      "$WORK/t1.out"
 check "1c confirmation-code prompt shown" "Confirmation code" "$WORK/t1.out"
 check "1d enrollment cursor on code field (11,26)" "I 2 24 80 11 26 " "$WORK/t1.out"
 # The otpauth URI must NOT be shown (manual entry is the 3270 path).
@@ -107,7 +107,7 @@ Ascii()
 Quit()
 EOF
 check "3a verification screen shown"             "MFA VERIFICATION" "$WORK/t3.out"
-check "3b verification cursor on code field (4,13)" "I 2 24 80 4 13 " "$WORK/t3.out"
+check "3b verification cursor on code field (5,17)" "I 2 24 80 5 17 " "$WORK/t3.out"
 
 # --- MFA-4: a wrong code re-prompts with an error (session stays on verify) ---
 s3 t4 <<EOF

@@ -89,11 +89,81 @@ func TestVerifyMFAScreen(t *testing.T) {
 	}
 }
 
+func TestEnrollMFAScreenRefinedLayout(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	screen, _, _ := EnrollMFAScreen(g, "SPLEX01PROXY", "ROBERT", "ZOTC MIKY H72O HYGS", "")
+
+	// Title carries the "TN3270 GATEWAY:" house prefix.
+	if !fieldContent(screen, "TN3270 GATEWAY: MFA ENROLLMENT") {
+		t.Errorf("title not prefixed; want 'TN3270 GATEWAY: MFA ENROLLMENT'")
+	}
+	// Dot-leader labels with colons aligned in a single column. Each is 21 runes
+	// so the trailing colon lands at the same position across rows.
+	for _, label := range []string{
+		"Issuer  . . . . . . :",
+		"Account . . . . . . :",
+		"Key . . . . . . . . :",
+		"Confirmation code . :",
+	} {
+		if len([]rune(label)) != 21 {
+			t.Fatalf("label %q is %d runes, want 21 (colon alignment)", label, len([]rune(label)))
+		}
+		if !fieldContent(screen, label) {
+			t.Errorf("dot-leader label %q missing", label)
+		}
+	}
+	// Values render (separate from the labels).
+	for _, v := range []string{"SPLEX01PROXY", "ROBERT", "ZOTC MIKY H72O HYGS"} {
+		if !fieldContent(screen, v) {
+			t.Errorf("value %q missing", v)
+		}
+	}
+	// Lost-on-confirm key-safety hint.
+	if !fieldContent(screen, "Save the key in your app before confirming. It won't be shown again.") {
+		t.Errorf("key-safety hint missing")
+	}
+	// Code input present and cursor not homed.
+	if !hasNamedField(screen, FieldMFACode) {
+		t.Errorf("code input field missing")
+	}
+}
+
+func TestVerifyMFAScreenRefinedLayout(t *testing.T) {
+	g := Geometry{Rows: 24, Cols: 80}
+	screen, _, _ := VerifyMFAScreen(g, "")
+
+	// Title carries the "TN3270 GATEWAY:" house prefix.
+	if !fieldContent(screen, "TN3270 GATEWAY: MFA VERIFICATION") {
+		t.Errorf("title not prefixed; want 'TN3270 GATEWAY: MFA VERIFICATION'")
+	}
+	// Instruction line retained.
+	if !fieldContent(screen, "Enter the current 6-digit code from your authenticator app.") {
+		t.Errorf("instruction line missing")
+	}
+	// Dot-leader label, matching the change-password house style.
+	if !fieldContent(screen, "Code . . . :") {
+		t.Errorf("dot-leader 'Code . . . :' label missing")
+	}
+	// Recovery hint for a lost device.
+	if !fieldContent(screen, "Contact your administrator to reset MFA") {
+		t.Errorf("lost-device recovery hint missing")
+	}
+	// A blank row separates the instruction from the Code field.
+	intro, ok := fieldByContent(screen, "Enter the current 6-digit code from your authenticator app.")
+	if !ok {
+		t.Fatal("instruction field not found for gap check")
+	}
+	code, _ := fieldByName(screen, FieldMFACode)
+	if code.Row <= intro.Row+1 {
+		t.Errorf("code row = %d, want a blank line below instruction row %d", code.Row, intro.Row)
+	}
+}
+
 func TestMFAScreensPalette(t *testing.T) {
 	g := Geometry{Rows: 24, Cols: 80}
 
 	enroll, _, _ := EnrollMFAScreen(g, "TN3270", "ROBERT", "ABCD EFGH", "")
-	et, ok := fieldByContent(enroll, "MFA ENROLLMENT - SECURITY KEY SETUP")
+	et, ok := fieldByContent(enroll, "TN3270 GATEWAY: MFA ENROLLMENT")
 	if !ok || et.Row != 0 || et.Color != go3270.White || !et.Intense {
 		t.Errorf("enroll title = %+v ok=%v, want row 0 white intense", et, ok)
 	}
@@ -111,7 +181,7 @@ func TestMFAScreensPalette(t *testing.T) {
 	}
 
 	verify, _, _ := VerifyMFAScreen(g, "")
-	vt, ok := fieldByContent(verify, "MFA VERIFICATION")
+	vt, ok := fieldByContent(verify, "TN3270 GATEWAY: MFA VERIFICATION")
 	if !ok || vt.Row != 0 || vt.Color != go3270.White || !vt.Intense {
 		t.Errorf("verify title = %+v ok=%v, want row 0 white intense", vt, ok)
 	}

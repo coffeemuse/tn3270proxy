@@ -23,6 +23,7 @@ import (
 	"context"
 	"net"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,17 @@ import (
 	"github.com/coffeemuse/tn3270proxy/internal/store"
 	"github.com/coffeemuse/tn3270proxy/internal/ui3270"
 )
+
+// formFieldByName returns a pointer to the first field with the given name, or
+// nil. Used by layout assertions on a captured FormView.
+func formFieldByName(v ui3270.FormView, name string) *ui3270.FormField {
+	for i := range v.Fields {
+		if v.Fields[i].Name == name {
+			return &v.Fields[i]
+		}
+	}
+	return nil
+}
 
 func TestSelfChangePassword(t *testing.T) {
 	ctx := context.Background()
@@ -94,6 +106,114 @@ func TestSelfChangePassword(t *testing.T) {
 		return ev.Kind == store.AuditPasswordSelf && ev.Username == "ALICE"
 	}) {
 		t.Errorf("no %s audit event for ALICE; got %v", store.AuditPasswordSelf, rec.kinds())
+	}
+}
+
+func TestStepUpPasswordFormLayout(t *testing.T) {
+	ctx := context.Background()
+	p := &fakePresenter{termType: "IBM-3278-2-E"}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.Authenticate = auth.Authenticate
+
+	// PF3-cancel so the step-up returns immediately; we only inspect the form.
+	fp := &fakeAdminPresenter{forms: []ui3270.FormAction{{Cancel: true}}}
+	s.AdminRenderer = func(_ net.Conn, _ Term) ui3270.Renderer { return fp }
+
+	aud := &auditTrail{auditor: &recordingAuditor{}}
+	term := Term{Type: "IBM-3278-2", Rows: 24, Cols: 80}
+	const intro = "Re-enter your password to continue setting up MFA."
+
+	ok, err := s.stepUpPassword(ctx, s.renderer(nil, term), "ALICE", intro, aud)
+	if err != nil {
+		t.Fatalf("stepUpPassword: %v", err)
+	}
+	if ok {
+		t.Errorf("PF3-cancel should yield ok=false")
+	}
+	if len(fp.gotForms) != 1 {
+		t.Fatalf("got %d forms, want 1", len(fp.gotForms))
+	}
+	v := fp.gotForms[0]
+
+	if v.Title != "TN3270 GATEWAY: VERIFY IDENTITY" {
+		t.Errorf("title = %q, want 'TN3270 GATEWAY: VERIFY IDENTITY'", v.Title)
+	}
+	if !v.Compact {
+		t.Errorf("form should be compact")
+	}
+	if v.Intro != intro {
+		t.Errorf("intro = %q, want %q", v.Intro, intro)
+	}
+	if v.PFHelp != "Enter=Verify   PF3=Cancel" {
+		t.Errorf("PFHelp = %q, want 'Enter=Verify   PF3=Cancel'", v.PFHelp)
+	}
+	f := formFieldByName(v, screens.FieldCurrentPassword)
+	if f == nil {
+		t.Fatal("password field missing")
+	}
+	if f.Label != "Password . . . . . :" || !f.Hidden || f.Length != 32 {
+		t.Errorf("password field = {Label:%q Hidden:%v Length:%d}, want {\"Password . . . . . :\" true 32}",
+			f.Label, f.Hidden, f.Length)
+	}
+}
+
+func TestSelfChangePasswordFormLayout(t *testing.T) {
+	ctx := context.Background()
+	p := &fakePresenter{termType: "IBM-3278-2-E"}
+	s := newTestSession(t, p, &fakeBridger{})
+	s.Authenticate = auth.Authenticate
+
+	// PF3-cancel on the first render so changePassword returns after one paint
+	// without needing a valid password; we only inspect the rendered form.
+	fp := &fakeAdminPresenter{forms: []ui3270.FormAction{{Cancel: true}}}
+	s.AdminRenderer = func(_ net.Conn, _ Term) ui3270.Renderer { return fp }
+
+	aud := &auditTrail{auditor: &recordingAuditor{}}
+	term := Term{Type: "IBM-3278-2", Rows: 24, Cols: 80}
+	identity := auth.Identity{UserID: 1, Username: "MERLIN"}
+
+	if err := s.changePassword(ctx, s.renderer(nil, term), identity, aud); err != nil {
+		t.Fatalf("changePassword: %v", err)
+	}
+	if len(fp.gotForms) != 1 {
+		t.Fatalf("got %d forms, want 1", len(fp.gotForms))
+	}
+	v := fp.gotForms[0]
+
+	// Sectioned/ISPF layout: compact, dot-leader colons.
+	if !v.Compact || !v.DotLeader {
+		t.Errorf("form Compact=%v DotLeader=%v, want both true", v.Compact, v.DotLeader)
+	}
+
+	// A read-only User ID field shows the logged-in username, standing above the
+	// editable group (it is the first field so it has no gutter of its own).
+	if len(v.Fields) == 0 || !v.Fields[0].ReadOnly ||
+		!strings.HasPrefix(v.Fields[0].Label, "User ID") || v.Fields[0].Value != "MERLIN" {
+		t.Errorf("first field = %+v, want read-only \"User ID\" = MERLIN", v.Fields[:1])
+	}
+
+	// Current password leads the editable group with a blank gutter above it.
+	if cur := formFieldByName(v, screens.FieldCurrentPassword); cur == nil || !cur.GapBefore {
+		t.Errorf("Current password field GapBefore not set: %+v", cur)
+	}
+
+	// All three inputs: renamed full-word labels, hidden, width 32 (must match the
+	// login password field so a user can always type back what they set).
+	wantLabels := map[string]string{
+		screens.FieldCurrentPassword: "Current password",
+		screens.FieldPassword:        "New password",
+		screens.FieldRetype:          "Confirm password",
+	}
+	for name, label := range wantLabels {
+		f := formFieldByName(v, name)
+		if f == nil {
+			t.Errorf("field %s missing", name)
+			continue
+		}
+		if f.Label != label || !f.Hidden || f.Length != 32 {
+			t.Errorf("field %s = {Label:%q Hidden:%v Length:%d}, want {%q true 32}",
+				name, f.Label, f.Hidden, f.Length, label)
+		}
 	}
 }
 

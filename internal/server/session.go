@@ -864,14 +864,21 @@ func (s *Session) userSettings(ctx context.Context, conn net.Conn, term Term, id
 // changePassword runs the self-service change-password form: re-verify the
 // current password (proof of possession), enforce new != current, then persist.
 func (s *Session) changePassword(ctx context.Context, r ui3270.Renderer, identity auth.Identity, aud *auditTrail) error {
+	// Layout (#130): the read-only User ID stands alone on top; a blank gutter
+	// (GapBefore, no banner) separates it from the three editable fields. Field
+	// width stays 32 to match the login password field — a longer password could
+	// be set here but not typed back in at login, locking the user out.
 	fields := []ui3270.FormField{
-		{Name: screens.FieldCurrentPassword, Label: "Current pwd", Hidden: true, Length: 32},
-		{Name: screens.FieldPassword, Label: "New pwd . .", Hidden: true, Length: 32},
-		{Name: screens.FieldRetype, Label: "Retype  . .", Hidden: true, Length: 32},
+		{Name: screens.FieldUsername, Label: "User ID", Value: identity.Username, ReadOnly: true},
+		{Name: screens.FieldCurrentPassword, Label: "Current password", Hidden: true, Length: 32, GapBefore: true},
+		{Name: screens.FieldPassword, Label: "New password", Hidden: true, Length: 32},
+		{Name: screens.FieldRetype, Label: "Confirm password", Hidden: true, Length: 32},
 	}
 	return ui3270.RunForm(ctx, r, ui3270.FormConfig{
-		Title:  "TN3270 GATEWAY: CHANGE PASSWORD",
-		Fields: fields,
+		Title:     "TN3270 GATEWAY: CHANGE PASSWORD",
+		Fields:    fields,
+		DotLeader: true,
+		Compact:   true,
 		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
 			current := vals[screens.FieldCurrentPassword]
 			if _, err := s.Authenticate(ctx, s.Store, identity.Username, current); err != nil {
@@ -912,13 +919,18 @@ func (s *Session) changePassword(ctx context.Context, r ui3270.Renderer, identit
 // stepUpPassword re-prompts for the current password and verifies it. ok=true
 // means verified (proceed); ok=false with err=nil means the user cancelled
 // (PF3). Failures fold into the shared throttle. Used as the step-up before
-// MFA enroll/re-enroll/disable.
-func (s *Session) stepUpPassword(ctx context.Context, r ui3270.Renderer, username string, aud *auditTrail) (bool, error) {
+// MFA enroll/re-enroll/disable; intro is the context-specific guidance line
+// (e.g. "...to continue setting up MFA"). The "Password" label is pre-formatted
+// as a dot leader (DotLeader off) so the lone field still gets the aligned colon.
+func (s *Session) stepUpPassword(ctx context.Context, r ui3270.Renderer, username, intro string, aud *auditTrail) (bool, error) {
 	ok := false
 	err := ui3270.RunForm(ctx, r, ui3270.FormConfig{
-		Title: "TN3270 GATEWAY: CONFIRM PASSWORD",
+		Title:   "TN3270 GATEWAY: VERIFY IDENTITY",
+		Intro:   intro,
+		Compact: true,
+		PFHelp:  "Enter=Verify   PF3=Cancel",
 		Fields: []ui3270.FormField{
-			{Name: screens.FieldCurrentPassword, Label: "Password . .", Hidden: true, Length: 32},
+			{Name: screens.FieldCurrentPassword, Label: "Password . . . . . :", Hidden: true, Length: 32},
 		},
 		Submit: func(ctx context.Context, vals map[string]string) (string, error) {
 			if _, e := s.Authenticate(ctx, s.Store, username, vals[screens.FieldCurrentPassword]); e != nil {
@@ -946,7 +958,7 @@ func (s *Session) stepUpPassword(ctx context.Context, r ui3270.Renderer, usernam
 // lastStep=0, stored on a correct code). Cancelled step-up or enrollment
 // returns to the user-settings menu.
 func (s *Session) selfMFAEnroll(ctx context.Context, conn net.Conn, term Term, r ui3270.Renderer, u store.User, aud *auditTrail) error {
-	ok, err := s.stepUpPassword(ctx, r, u.Username, aud)
+	ok, err := s.stepUpPassword(ctx, r, u.Username, "Re-enter your password to continue setting up MFA.", aud)
 	if err != nil {
 		return err
 	}
@@ -972,7 +984,7 @@ func (s *Session) selfMFADisable(ctx context.Context, r ui3270.Renderer, u store
 	if u.MFARequired {
 		return nil // enforcement is admin-only; never self-disable a required user
 	}
-	ok, err := s.stepUpPassword(ctx, r, u.Username, aud)
+	ok, err := s.stepUpPassword(ctx, r, u.Username, "Re-enter your password to disable MFA.", aud)
 	if err != nil {
 		return err
 	}
