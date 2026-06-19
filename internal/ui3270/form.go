@@ -28,7 +28,7 @@ import "context"
 func RunForm(ctx context.Context, r Renderer, cfg FormConfig) error {
 	errMsg := ""
 	for {
-		act, err := r.Form(FormView{Title: cfg.Title, Fields: cfg.Fields, ErrMsg: errMsg, DotLeader: cfg.DotLeader})
+		act, err := r.Form(FormView{Title: cfg.Title, Fields: cfg.Fields, ErrMsg: errMsg, DotLeader: cfg.DotLeader, Compact: cfg.Compact})
 		if err != nil {
 			return err
 		}

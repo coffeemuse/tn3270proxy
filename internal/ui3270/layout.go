@@ -19,7 +19,10 @@
 
 package ui3270
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // normRows clamps a sub-MOD 2 row count to the 24-row default. (Cols is not a
 // layout-math input — content stays within columns 0–79 at every width.)
@@ -114,4 +117,30 @@ func pageBounds(page, total, rows int) (clamped, start, end int, info string) {
 	start = page * size
 	end = min(start+size, total)
 	return page, start, end, fmt.Sprintf("ROW %d TO %d OF %d", start+1, end, total)
+}
+
+// Compact-layout geometry (FormView.Compact). The body starts at row 2 (the
+// message line moves to the bottom); SameRow fields and section banners use
+// fixed columns. Content stays within cols 0-79.
+const (
+	compactBodyTopRow  = 2  // first content row in compact mode (row 2 is freed up)
+	sameRowLabelCol    = 40 // second-column label attribute byte for a SameRow field
+	sameRowInputCol    = 54 // second-column value attribute byte for a SameRow field
+	sameRowLabelMax    = 12 // dot-leader width for a SameRow label (fits "MFA status :")
+	sectionBannerWidth = 77 // banner content width: cols 3..79 (dashes reach the right margin)
+)
+
+// compactMessageRow is the red message line row in compact mode (just above the
+// PF-key help line, since row 2 now carries content). 22 on MOD 2.
+func compactMessageRow(rows int) int { return helpRow(rows) - 1 }
+
+// sectionBanner renders an ISPF-style group header, e.g.
+// "--- Identity ----------------------------------------------------------",
+// padded with trailing dashes to sectionBannerWidth runes.
+func sectionBanner(name string) string {
+	prefix := "--- " + name + " "
+	if len([]rune(prefix)) >= sectionBannerWidth {
+		return string([]rune(prefix)[:sectionBannerWidth])
+	}
+	return prefix + strings.Repeat("-", sectionBannerWidth-len([]rune(prefix)))
 }

@@ -20,6 +20,7 @@
 package ui3270
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -257,6 +258,34 @@ func TestBuildFormScreenDotLeaderOffUnchanged(t *testing.T) {
 	}
 }
 
+func TestBuildFormScreenCompactSingleSpaced(t *testing.T) {
+	screen, cur := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8},
+		{Name: "b", Label: "B", Length: 8},
+	}})
+	a, _ := fieldByName(screen, "a")
+	b, _ := fieldByName(screen, "b")
+	if a.Row != 2 || b.Row != 3 {
+		t.Errorf("rows = %d,%d, want 2,3 (single-spaced from row 2)", a.Row, b.Row)
+	}
+	if cur != (Cursor{Row: 2, Col: a.Col + 1}) {
+		t.Errorf("cursor = %+v, want first writable input", cur)
+	}
+}
+
+func TestBuildFormScreenCompactMessageRowAtBottom(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8},
+	}})
+	msg, ok := fieldByName(screen, fieldError)
+	if !ok {
+		t.Fatal("error field not found")
+	}
+	if msg.Row != 22 {
+		t.Errorf("message row = %d, want 22", msg.Row)
+	}
+}
+
 func TestBuildListScreenPalette(t *testing.T) {
 	screen, cur := buildListScreen(24, ListView{
 		Title: "USER ADMINISTRATION", RowInfo: "ROW 1 TO 2 OF 2",
@@ -301,5 +330,112 @@ func TestBuildFormScreenPalette(t *testing.T) {
 	msg, ok := fieldByName(screen, fieldError)
 	if !ok || msg.Row != 2 || msg.Color != go3270.Red || !msg.Intense {
 		t.Errorf("message = %+v ok=%v, want row 2 red intense", msg, ok)
+	}
+}
+
+func TestBuildFormScreenCompactFirstSectionNoGutter(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8, Section: "Identity"},
+	}})
+	bannerRow := -1
+	for _, f := range screen {
+		if strings.HasPrefix(f.Content, "--- Identity") {
+			bannerRow = f.Row
+		}
+	}
+	if bannerRow != 2 {
+		t.Errorf("banner row = %d, want 2 (no gutter before the first section)", bannerRow)
+	}
+	a, _ := fieldByName(screen, "a")
+	if a.Row != 3 {
+		t.Errorf("field row = %d, want 3", a.Row)
+	}
+}
+
+func TestBuildFormScreenCompactSectionGutter(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8},                  // row 2
+		{Name: "b", Label: "B", Length: 8, Section: "Sect"}, // gutter 3, banner 4, field 5
+	}})
+	a, _ := fieldByName(screen, "a")
+	b, _ := fieldByName(screen, "b")
+	if a.Row != 2 || b.Row != 5 {
+		t.Errorf("rows = %d,%d, want 2,5", a.Row, b.Row)
+	}
+	bannerRow := -1
+	for _, f := range screen {
+		if strings.HasPrefix(f.Content, "--- Sect") {
+			bannerRow = f.Row
+		}
+	}
+	if bannerRow != 4 {
+		t.Errorf("banner row = %d, want 4 (gutter at 3)", bannerRow)
+	}
+}
+
+func TestBuildFormScreenCompactSuffix(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 1, Suffix: "Y/N"},
+	}})
+	a, _ := fieldByName(screen, "a")
+	stop := a.Col + 1 + 1 // inputCol + 1 + Length
+	sawSuffix := false
+	for _, f := range screen {
+		if f.Content == "Y/N" && f.Row == a.Row && f.Col == stop+1 {
+			sawSuffix = true
+		}
+	}
+	if !sawSuffix {
+		t.Errorf("suffix Y/N not found at row %d col %d", a.Row, stop+1)
+	}
+}
+
+func TestBuildFormScreenCompactSameRow(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, DotLeader: true, Fields: []FormField{
+		{Name: "req", Label: "MFA required", Length: 1, Suffix: "Y/N"},
+		{Name: "stat", Label: "MFA status", Value: "ENROLLED", ReadOnly: true, SameRow: true},
+	}})
+	req, _ := fieldByName(screen, "req")
+	statRow, statCol := -1, -1
+	for _, f := range screen {
+		if f.Content == "ENROLLED" && !f.Write {
+			statRow, statCol = f.Row, f.Col
+		}
+	}
+	if statRow != req.Row {
+		t.Errorf("status row = %d, want same as req row %d", statRow, req.Row)
+	}
+	if statCol != sameRowInputCol {
+		t.Errorf("status value col = %d, want %d", statCol, sameRowInputCol)
+	}
+}
+
+func TestBuildFormScreenCompactNoOverlapMessageRow(t *testing.T) {
+	var fields []FormField
+	for i := 0; i < 18; i++ {
+		f := FormField{Name: fmt.Sprintf("f%d", i), Label: "L", Length: 4}
+		if i == 16 {
+			f.Section = "Late"
+		}
+		fields = append(fields, f)
+	}
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: fields})
+	msgRow := compactMessageRow(24)
+	const helpContent = "Enter=Save    PF3=Cancel"
+	for _, fld := range screen {
+		// Skip the message field itself (it legitimately sits at msgRow).
+		if fld.Name == fieldError {
+			continue
+		}
+		// Skip the help line (Blue, row 23 on MOD2, content matches the help string).
+		if fld.Content == helpContent {
+			continue
+		}
+		if fld.Color == go3270.Blue && fld.Row >= msgRow {
+			t.Errorf("banner at row %d overlaps message row %d: %q", fld.Row, msgRow, fld.Content)
+		}
+		if fld.Write && fld.Row >= msgRow {
+			t.Errorf("input field %q at row %d overlaps message row %d", fld.Name, fld.Row, msgRow)
+		}
 	}
 }

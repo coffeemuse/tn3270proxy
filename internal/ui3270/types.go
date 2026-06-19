@@ -38,9 +38,12 @@ type ListView struct {
 // FormField is one labeled input on a form.
 type FormField struct {
 	Name, Label, Value string
-	Hidden             bool // non-display (passwords)
-	ReadOnly           bool // display-only: rendered as static content, never an input
-	Length             int  // input columns; effective max 62 (stop field clamps at col 79)
+	Hidden             bool   // non-display (passwords)
+	ReadOnly           bool   // display-only: rendered as static content, never an input
+	Length             int    // input columns; effective max 62 (stop field clamps at col 79)
+	Section            string // compact layout only: emit a "--- Section ---" banner above this field
+	Suffix             string // compact layout only: static hint text after the input (e.g. "Y/N")
+	SameRow            bool   // compact layout only: render on the previous field's row, second column
 }
 
 // FormView is what to paint for a labeled-input form.
@@ -48,6 +51,7 @@ type FormView struct {
 	Title, ErrMsg string
 	Fields        []FormField
 	DotLeader     bool // render labels with right-aligned-colon dot leaders
+	Compact       bool // sectioned, single-spaced layout (Section/Suffix/SameRow honored; bottom message line)
 }
 
 // ListAction is what the user did on a list screen. Cmd==0 && PF==0 ⇒ plain Enter.
@@ -142,6 +146,11 @@ type FormConfig struct {
 	// DotLeader renders the form's labels with right-aligned colons and dot
 	// leaders (ISPF-style) so colons line up across rows. Default off.
 	DotLeader bool
+	// Compact renders the form in the sectioned, single-spaced layout: Section
+	// banners group fields, Suffix adds trailing hint text, SameRow pairs a field
+	// onto the previous row, and the message line moves to the bottom. Default
+	// off (the flat double-spaced layout).
+	Compact bool
 }
 
 // SnapshotRow is one row of a snapshot list, laid as three fields so the middle

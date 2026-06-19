@@ -19,7 +19,10 @@
 
 package ui3270
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestPageBounds(t *testing.T) {
 	cases := []struct {
@@ -118,5 +121,19 @@ func TestTruncRunes(t *testing.T) {
 	}
 	if got := truncRunes("日本語", 2); got != "日本" {
 		t.Errorf("truncRunes(\"日本語\",2) = %q, want \"日本\"", got)
+	}
+}
+
+func TestSectionBanner(t *testing.T) {
+	b := sectionBanner("Identity")
+	if !strings.HasPrefix(b, "--- Identity ") {
+		t.Errorf("banner = %q, want prefix %q", b, "--- Identity ")
+	}
+	// Fills to the right margin within the 0-79 band (content begins at col 3).
+	if got := len([]rune(b)); got != sectionBannerWidth {
+		t.Errorf("banner width = %d, want %d", got, sectionBannerWidth)
+	}
+	if !strings.HasSuffix(b, "-") {
+		t.Errorf("banner should end in dashes: %q", b)
 	}
 }
