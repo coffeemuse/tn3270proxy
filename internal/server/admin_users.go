@@ -207,7 +207,7 @@ func (f *adminFlow) userEdit(ctx context.Context, r ui3270.Renderer, u *store.Us
 		// Account actions: a Clear-MFA wipe requires the toggle AND a typed CLEAR.
 		fields = append(fields,
 			ui3270.FormField{Name: screens.FieldMFAClear, Label: "Clear MFA", Length: 1, Value: "", Section: "Account actions", Suffix: "Y/N"},
-			ui3270.FormField{Name: screens.FieldMFAClearConfirm, Label: "Confirm: type CLEAR", Length: 7, Value: ""},
+			ui3270.FormField{Name: screens.FieldMFAClearConfirm, Label: "Confirm", Length: 7, Value: "", Suffix: "type CLEAR to confirm"},
 		)
 		// Hint: when MFA is required but no secret is enrolled, locking makes
 		// mfa_required a no-op (a locked account is never force-enrolled).

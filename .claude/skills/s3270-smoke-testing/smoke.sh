@@ -578,8 +578,8 @@ check "13c ENTER pages through MOTD to the menu" "TN3270 GATEWAY MENU" "$WORK/t1
 # --- 14. Edit User Details form (GH #46, #130): the user-list `S` line command
 # opens a unified edit form in the sectioned compact layout (#130). USERNAME is
 # display-only and stands alone above the "--- Identity" banner, so the cursor
-# lands on the first EDITABLE field (Full name, row 5, col 24 — the input column
-# is pushed right by the longest label "Confirm: type CLEAR"). NOTE: scenario 13
+# lands on the first EDITABLE field (Full name, row 5, col 23 — the input column
+# is pushed right by the longest label "Block self-service"). NOTE: scenario 13
 # activated the MOTD gate (the MOTD document in
 # front.db now holds a 2-page fixture), so every login here must clear the gate with
 # two ENTERs (Wait(Unlock) after each — the MOTD page has no input field) before
@@ -621,14 +621,13 @@ EOF
 check "14a edit-user form renders" "EDIT USER" "$WORK/t14.out"
 check "14b full name label present" "Full name" "$WORK/t14.out"
 check "14c email label present" "Email" "$WORK/t14.out"
-# Username is display-only, so the cursor homes to Full name at row 5 col 24
-# (compact layout: input column past the longest label "Confirm: type CLEAR").
-# Assert a 5 24 cursor line AFTER the users-list 4 3 line so nothing earlier can
-# satisfy it vacuously.
-if awk '/I 2 24 80 4 3 /{seen=1} seen && /I 2 24 80 5 24 /{ok=1} END{exit !ok}' "$WORK/t14.out"; then
-  PASS=$((PASS+1)); echo "PASS: 14d edit-user cursor on Full name (5,24), username read-only"
+# Username is display-only, so the cursor homes to Full name at row 5 col 23
+# (compact layout: input column past the longest label "Block self-service").
+# Gate on the "EDIT USER" title so the 5 23 line is unambiguously the edit form.
+if awk '/EDIT USER/{seen=1} seen && /I 2 24 80 5 23 /{ok=1} END{exit !ok}' "$WORK/t14.out"; then
+  PASS=$((PASS+1)); echo "PASS: 14d edit-user cursor on Full name (5,23), username read-only"
 else
-  FAIL=$((FAIL+1)); echo "FAIL: 14d edit-user cursor not at (5,24) after users list"
+  FAIL=$((FAIL+1)); echo "FAIL: 14d edit-user cursor not at (5,23) on the edit form"
 fi
 # Compact layout (#130): the four section banners group the form's fields.
 # (grep -- : the banner patterns start with dashes, so the plain check() helper
@@ -643,7 +642,7 @@ done
 # Destructive Clear-MFA needs both a Y toggle and a typed CLEAR confirm (#130);
 # the form must surface the confirmation field. (The reject/accept logic itself
 # is covered by the applyMFAEdit unit tests.)
-check "14g clear-MFA typed-confirm field present" "Confirm: type CLEAR" "$WORK/t14.out"
+check "14g clear-MFA typed-confirm field present" "type CLEAR to confirm" "$WORK/t14.out"
 # PF3 on the form returns to the users list: the edit-form title appears first,
 # then the list's distinctive legend ("S = edit user") reappears after it.
 if awk '/EDIT USER/{seen=1} seen && /S = edit user/{ok=1} END{exit !ok}' "$WORK/t14.out"; then
