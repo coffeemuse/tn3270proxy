@@ -337,13 +337,13 @@ check "9b admin/menu cursor on option field (1,13)" "I 2 24 80 1 13 " "$WORK/t9.
 # shift moved the CMD attribute to col 0, so input begins at col 1).
 check "9c users list cursor on first CMD field (4,1)" "I 2 24 80 4 1 " "$WORK/t9.out"
 # Add-user form (compact layout, #130): User ID is editable in create mode and
-# stands alone at the top, so the cursor homes to it at row 2 col 21 (input
-# column past the longest label "Confirm password"). The "ADD USER" title
-# uniquely identifies the form, so assert the 2 21 cursor after it.
-if awk '/ADD USER/{seen=1} seen && /I 2 24 80 2 21 /{ok=1} END{exit !ok}' "$WORK/t9.out"; then
-  PASS=$((PASS+1)); echo "PASS: 9d add-user form cursor on User ID (2,21)"
+# stands alone at the top, so the cursor homes to it at row 2 col 22 (input
+# column past the longest label "Confirm password" + its dot-leader colon). The
+# "ADD USER" title uniquely identifies the form, so assert the 2 22 cursor after it.
+if awk '/ADD USER/{seen=1} seen && /I 2 24 80 2 22 /{ok=1} END{exit !ok}' "$WORK/t9.out"; then
+  PASS=$((PASS+1)); echo "PASS: 9d add-user form cursor on User ID (2,22)"
 else
-  FAIL=$((FAIL+1)); echo "FAIL: 9d add-user form cursor not at (2,21)"
+  FAIL=$((FAIL+1)); echo "FAIL: 9d add-user form cursor not at (2,22)"
 fi
 
 # --- 10. post-auth idle LOGS OUT to the login screen (GH #18), not disconnect.
@@ -578,8 +578,9 @@ check "13c ENTER pages through MOTD to the menu" "TN3270 GATEWAY MENU" "$WORK/t1
 # --- 14. Edit User Details form (GH #46, #130): the user-list `S` line command
 # opens a unified edit form in the sectioned compact layout (#130). USERNAME is
 # display-only and stands alone above the "--- Identity" banner, so the cursor
-# lands on the first EDITABLE field (Full name, row 5, col 23 — the input column
-# is pushed right by the longest label "Block self-service"). NOTE: scenario 13
+# lands on the first EDITABLE field (Full name, row 5, col 24 — the input column
+# sits past the longest label "Block self-service" plus its dot-leader colon).
+# NOTE: scenario 13
 # activated the MOTD gate (the MOTD document in
 # front.db now holds a 2-page fixture), so every login here must clear the gate with
 # two ENTERs (Wait(Unlock) after each — the MOTD page has no input field) before
@@ -621,13 +622,13 @@ EOF
 check "14a edit-user form renders" "EDIT USER" "$WORK/t14.out"
 check "14b full name label present" "Full name" "$WORK/t14.out"
 check "14c email label present" "Email" "$WORK/t14.out"
-# Username is display-only, so the cursor homes to Full name at row 5 col 23
-# (compact layout: input column past the longest label "Block self-service").
-# Gate on the "EDIT USER" title so the 5 23 line is unambiguously the edit form.
-if awk '/EDIT USER/{seen=1} seen && /I 2 24 80 5 23 /{ok=1} END{exit !ok}' "$WORK/t14.out"; then
-  PASS=$((PASS+1)); echo "PASS: 14d edit-user cursor on Full name (5,23), username read-only"
+# Username is display-only, so the cursor homes to Full name at row 5 col 24
+# (compact layout: input column past the longest label "Block self-service" + colon).
+# Gate on the "EDIT USER" title so the 5 24 line is unambiguously the edit form.
+if awk '/EDIT USER/{seen=1} seen && /I 2 24 80 5 24 /{ok=1} END{exit !ok}' "$WORK/t14.out"; then
+  PASS=$((PASS+1)); echo "PASS: 14d edit-user cursor on Full name (5,24), username read-only"
 else
-  FAIL=$((FAIL+1)); echo "FAIL: 14d edit-user cursor not at (5,23) on the edit form"
+  FAIL=$((FAIL+1)); echo "FAIL: 14d edit-user cursor not at (5,24) on the edit form"
 fi
 # Compact layout (#130): the four section banners group the form's fields.
 # (grep -- : the banner patterns start with dashes, so the plain check() helper

@@ -155,7 +155,14 @@ func buildCompactFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 			maxLabel = n
 		}
 	}
-	inputCol := formInputCol(maxLabel)
+	// Reserve one extra column for the dot-leader colon so the LONGEST label
+	// still gets its right-aligned ":" — dotLeaderLabel appends the colon and
+	// drops it (clamps) when the label exactly fills the width.
+	labelCols := maxLabel
+	if v.DotLeader {
+		labelCols++
+	}
+	inputCol := formInputCol(labelCols)
 	labelMax := formLabelMax(inputCol)
 
 	cur := Cursor{Row: 0, Col: 0}
