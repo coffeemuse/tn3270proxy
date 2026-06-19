@@ -42,6 +42,7 @@ type FormField struct {
 	ReadOnly           bool   // display-only: rendered as static content, never an input
 	Length             int    // input columns; effective max 62 (stop field clamps at col 79)
 	Section            string // compact layout only: emit a "--- Section ---" banner above this field
+	GapBefore          bool   // compact layout only: insert a blank gutter row before this field (no banner); no-op on the first field or when Section is set (Section already gutters)
 	Suffix             string // compact layout only: static hint text after the input (e.g. "Y/N")
 	SameRow            bool   // compact layout only: render on the previous field's row, second column
 }
@@ -50,8 +51,10 @@ type FormField struct {
 type FormView struct {
 	Title, ErrMsg string
 	Fields        []FormField
-	DotLeader     bool // render labels with right-aligned-colon dot leaders
-	Compact       bool // sectioned, single-spaced layout (Section/Suffix/SameRow honored; bottom message line)
+	Intro         string // compact layout only: one protected guidance line above the fields (blank gutter follows)
+	PFHelp        string // override the PF-key help line; "" ⇒ default "Enter=Save    PF3=Cancel"
+	DotLeader     bool   // render labels with right-aligned-colon dot leaders
+	Compact       bool   // sectioned, single-spaced layout (Section/Suffix/SameRow honored; bottom message line)
 }
 
 // ListAction is what the user did on a list screen. Cmd==0 && PF==0 ⇒ plain Enter.
@@ -138,6 +141,12 @@ type ListConfig[T any] struct {
 type FormConfig struct {
 	Title  string
 	Fields []FormField
+	// Intro is an optional protected guidance line rendered above the fields in
+	// the compact layout (a blank gutter follows it). Ignored in the flat layout.
+	Intro string
+	// PFHelp overrides the PF-key help line (e.g. "Enter=Verify   PF3=Cancel");
+	// "" keeps the default "Enter=Save    PF3=Cancel".
+	PFHelp string
 	Submit func(ctx context.Context, values map[string]string) (errMsg string, fatal error)
 	// StayOnSave keeps the form on screen after a successful Submit (save in
 	// place) instead of returning to the caller; the user leaves via PF3

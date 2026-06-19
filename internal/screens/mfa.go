@@ -28,23 +28,32 @@ const FieldMFACode = "mfacode"
 // account, and the chunked base32 key for manual entry into an authenticator
 // app, and prompts for a confirmation code. The caller drives it with
 // HandleScreenAlt (AIDEnter submits, AIDPF3 cancels), errorField = FieldError.
+//
+// The four detail labels are dot-leader aligned (each exactly 21 runes, colon at
+// the last column) so their colons line up; their values/input sit one column
+// past the input attribute byte at col 25 (content col 26).
 func EnrollMFAScreen(geom Geometry, issuer, account, chunkedSecret, errMsg string) (go3270.Screen, go3270.Rules, Cursor) {
-	title := "MFA ENROLLMENT - SECURITY KEY SETUP"
-	// Row 5 left blank: one row of padding below the yellow notice; the body
-	// below it sits a row lower than its natural position.
-	code := go3270.Field{Row: 12, Col: 25, Name: FieldMFACode, Write: true, NumericOnly: true, Color: go3270.Green, Highlighting: go3270.Underscore}
+	title := "TN3270 GATEWAY: MFA ENROLLMENT"
+	const labelCol, valueCol = 2, 25 // label attribute / value (and input) attribute
+	code := go3270.Field{Row: 11, Col: valueCol, Name: FieldMFACode, Write: true, NumericOnly: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},
-		{Row: 4, Col: 2, Color: go3270.Yellow, Intense: true, Content: "Multi-factor authentication is now required for your account."},
-		{Row: 6, Col: 2, Color: go3270.Turquoise, Content: "Enter the key below into your authenticator app (any TOTP app),"},
-		{Row: 7, Col: 2, Color: go3270.Turquoise, Content: "then type the current 6-digit code to confirm enrollment."},
-		{Row: 9, Col: 5, Color: go3270.Turquoise, Content: "Issuer:   " + issuer},
-		{Row: 10, Col: 5, Color: go3270.Turquoise, Content: "Account:  " + account},
-		{Row: 11, Col: 5, Intense: true, Color: go3270.White, Content: "Key:      " + chunkedSecret},
-		{Row: 12, Col: 5, Color: go3270.Turquoise, Content: "Confirmation code:"},
+		{Row: 3, Col: labelCol, Color: go3270.Yellow, Intense: true, Content: "Multi-factor authentication is now required for your account."},
+		{Row: 5, Col: labelCol, Color: go3270.Turquoise, Content: "Enter the key below into your authenticator app (any TOTP app),"},
+		{Row: 6, Col: labelCol, Color: go3270.Turquoise, Content: "then type the current 6-digit code to confirm enrollment."},
+		// Detail rows: turquoise dot-leader label + value; the Key value is white
+		// intense to draw the eye to the bit the user must copy.
+		{Row: 8, Col: labelCol, Color: go3270.Turquoise, Content: "Issuer  . . . . . . :"},
+		{Row: 8, Col: valueCol, Color: go3270.Turquoise, Content: issuer},
+		{Row: 9, Col: labelCol, Color: go3270.Turquoise, Content: "Account . . . . . . :"},
+		{Row: 9, Col: valueCol, Color: go3270.Turquoise, Content: account},
+		{Row: 10, Col: labelCol, Color: go3270.Turquoise, Content: "Key . . . . . . . . :"},
+		{Row: 10, Col: valueCol, Color: go3270.White, Intense: true, Content: chunkedSecret},
+		{Row: 11, Col: labelCol, Color: go3270.Turquoise, Content: "Confirmation code . :"},
 		code,
-		{Row: 12, Col: 32}, // stop field
-		{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
+		{Row: 11, Col: valueCol + 1 + 6}, // stop field (6-digit input)
+		{Row: 13, Col: labelCol, Color: go3270.Turquoise, Content: "Save the key in your app before confirming. It won't be shown again."},
+		{Row: geom.MessageRow(), Col: labelCol, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
 		{Row: geom.HelpRow(), Col: 0, Color: go3270.Blue, Content: "Enter=Confirm   PF3=Cancel"},
 	}
 	rules := go3270.Rules{
@@ -53,16 +62,25 @@ func EnrollMFAScreen(geom Geometry, issuer, account, chunkedSecret, errMsg strin
 	return screen, rules, cursorAt(code)
 }
 
-// VerifyMFAScreen renders the per-login code prompt for an enrolled user.
+// VerifyMFAScreen renders the per-login code prompt for an enrolled user. The
+// instruction sits at the body top, a blank row separates it from the dot-leader
+// "Code" field (matching the change-password house style), and a lost-device
+// recovery hint sits below.
 func VerifyMFAScreen(geom Geometry, errMsg string) (go3270.Screen, go3270.Rules, Cursor) {
-	title := "MFA VERIFICATION"
-	code := go3270.Field{Row: 5, Col: 12, Name: FieldMFACode, Write: true, NumericOnly: true, Color: go3270.Green, Highlighting: go3270.Underscore}
+	title := "TN3270 GATEWAY: MFA VERIFICATION"
+	introRow := geom.BodyTopRow() // 3
+	codeRow := introRow + 2       // 5 — blank row between instruction and field
+	hintRow := codeRow + 3        // 8 — blank rows above the recovery hint
+	// "Code . . . :" content at cols 3..14 (colon col 14); input attribute at
+	// col 16, 6 digits at cols 17..22, stop field at col 23.
+	code := go3270.Field{Row: codeRow, Col: 16, Name: FieldMFACode, Write: true, NumericOnly: true, Color: go3270.Green, Highlighting: go3270.Underscore}
 	screen := go3270.Screen{
 		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},
-		{Row: 4, Col: 2, Color: go3270.Turquoise, Content: "Enter the current 6-digit code from your authenticator app."},
-		{Row: 5, Col: 2, Color: go3270.Turquoise, Content: "Code:"},
+		{Row: introRow, Col: 2, Color: go3270.Turquoise, Content: "Enter the current 6-digit code from your authenticator app."},
+		{Row: codeRow, Col: 2, Color: go3270.Turquoise, Content: "Code . . . :"},
 		code,
-		{Row: 5, Col: 19}, // stop field
+		{Row: codeRow, Col: 23}, // stop field
+		{Row: hintRow, Col: 2, Color: go3270.Turquoise, Content: "Lost your device? Contact your administrator to reset MFA."},
 		{Row: geom.MessageRow(), Col: 2, Name: FieldError, Color: go3270.Red, Intense: true, Content: errMsg},
 		{Row: geom.HelpRow(), Col: 0, Color: go3270.Blue, Content: "Enter=Verify   PF3=Cancel"},
 	}

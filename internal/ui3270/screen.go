@@ -100,9 +100,18 @@ func buildFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 	}
 	screen = append(screen,
 		go3270.Field{Row: messageRow(), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: "Enter=Save    PF3=Cancel"},
+		go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: formPFHelp(v)},
 	)
 	return screen, cur
+}
+
+// formPFHelp returns the PF-key help line for a form: the caller's override or
+// the default save/cancel legend.
+func formPFHelp(v FormView) string {
+	if v.PFHelp != "" {
+		return v.PFHelp
+	}
+	return "Enter=Save    PF3=Cancel"
 }
 
 // placeFormField appends the go3270 fields for one labeled input at the given
@@ -167,6 +176,10 @@ func buildCompactFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 
 	cur := Cursor{Row: 0, Col: 0}
 	row := compactBodyTopRow
+	if v.Intro != "" {
+		screen = append(screen, go3270.Field{Row: row, Col: labelAttrCol, Color: go3270.Turquoise, Content: v.Intro})
+		row += 2 // intro line + blank gutter before the fields
+	}
 	lastRow := row
 	limit := compactMessageRow(rows) - 1
 	first := true
@@ -177,6 +190,11 @@ func buildCompactFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 			}
 			placeFormField(&screen, &cur, f, lastRow, sameRowLabelCol, sameRowInputCol, sameRowLabelMax, v.DotLeader)
 			continue
+		}
+		// A bare gutter row (no banner) before this field. Section already emits
+		// its own gutter, so the two don't stack.
+		if f.GapBefore && !first && f.Section == "" {
+			row++
 		}
 		if f.Section != "" {
 			if !first {
@@ -201,7 +219,7 @@ func buildCompactFormScreen(rows int, v FormView) (go3270.Screen, Cursor) {
 	}
 	screen = append(screen,
 		go3270.Field{Row: compactMessageRow(rows), Col: 2, Name: fieldError, Color: go3270.Red, Intense: true, Content: v.ErrMsg},
-		go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: "Enter=Save    PF3=Cancel"},
+		go3270.Field{Row: helpRow(rows), Col: 0, Color: go3270.Blue, Content: formPFHelp(v)},
 	)
 	return screen, cur
 }

@@ -146,20 +146,37 @@ func TestNewsScreenFieldsRedProtectedWithGate(t *testing.T) {
 	if gate.Content != "***" {
 		t.Errorf("gate content = %q, want ***", gate.Content)
 	}
-	if gate.Row != mod2.NewsLinesPerPage()+1 { // 23 on MOD 2 (last row)
-		t.Errorf("gate row = %d, want %d", gate.Row, mod2.NewsLinesPerPage()+1)
+	if gate.Row != len(page)+1 { // one blank row below the last text line
+		t.Errorf("gate row = %d, want %d", gate.Row, len(page)+1)
 	}
 	if gate.Color != go3270.Red || gate.Write {
 		t.Errorf("gate field = %+v, want red protected", gate)
 	}
 }
 
-func TestNewsScreenGateRowFixedOnShortPage(t *testing.T) {
+func TestNewsScreenGateFloatsBelowShortPage(t *testing.T) {
 	mod2 := Geometry{Rows: 24, Cols: 80}
 	screen, _, _ := NewsScreen(mod2, []string{"only one line"})
 	gate := screen[len(screen)-1]
+	// One text line at row 0, blank row 1, gate at row 2 — not pinned to the
+	// bottom of the display (classic TSO floats it just below the content).
+	if gate.Row != 2 {
+		t.Errorf("gate row on short page = %d, want 2 (one blank line below content)", gate.Row)
+	}
+}
+
+func TestNewsScreenGateStaysOnLastRowForFullPage(t *testing.T) {
+	mod2 := Geometry{Rows: 24, Cols: 80} // 22 lines/page
+	page := make([]string, mod2.NewsLinesPerPage())
+	for i := range page {
+		page[i] = "L"
+	}
+	screen, _, _ := NewsScreen(mod2, page)
+	gate := screen[len(screen)-1]
+	// A full page leaves exactly one blank row, so the gate lands on the last
+	// row (23 on MOD 2) — unchanged from the old fixed placement.
 	if gate.Row != 23 {
-		t.Errorf("gate row on short page = %d, want 23 (always last row)", gate.Row)
+		t.Errorf("gate row on full page = %d, want 23 (last row)", gate.Row)
 	}
 }
 
