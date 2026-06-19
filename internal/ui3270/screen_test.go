@@ -373,6 +373,110 @@ func TestBuildFormScreenCompactSectionGutter(t *testing.T) {
 	}
 }
 
+func TestBuildFormScreenCompactIntro(t *testing.T) {
+	screen, cur := buildFormScreen(24, FormView{Compact: true, Intro: "Do the thing.", Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8},
+	}})
+	introRow := -1
+	for _, f := range screen {
+		if f.Content == "Do the thing." {
+			introRow = f.Row
+			if f.Color != go3270.Turquoise {
+				t.Errorf("intro color = %v, want turquoise", f.Color)
+			}
+			if f.Write {
+				t.Errorf("intro must be protected text")
+			}
+		}
+	}
+	if introRow != 2 {
+		t.Errorf("intro row = %d, want 2 (compact body top)", introRow)
+	}
+	// Field pushed below the intro + a blank gutter: row 4.
+	a, _ := fieldByName(screen, "a")
+	if a.Row != 4 {
+		t.Errorf("field row = %d, want 4 (below intro + blank)", a.Row)
+	}
+	if cur != (Cursor{Row: 4, Col: a.Col + 1}) {
+		t.Errorf("cursor = %+v, want first input on row 4", cur)
+	}
+}
+
+func TestBuildFormScreenPFHelpOverride(t *testing.T) {
+	for _, compact := range []bool{false, true} {
+		screen, _ := buildFormScreen(24, FormView{
+			Compact: compact, PFHelp: "Enter=Verify   PF3=Cancel",
+			Fields: []FormField{{Name: "a", Label: "A", Length: 8}},
+		})
+		var help string
+		for _, f := range screen {
+			if f.Row == helpRow(24) && f.Col == 0 {
+				help = f.Content
+			}
+		}
+		if help != "Enter=Verify   PF3=Cancel" {
+			t.Errorf("compact=%v help = %q, want override", compact, help)
+		}
+	}
+}
+
+func TestBuildFormScreenPFHelpDefault(t *testing.T) {
+	// Empty PFHelp keeps the historical default on both layouts.
+	for _, compact := range []bool{false, true} {
+		screen, _ := buildFormScreen(24, FormView{
+			Compact: compact, Fields: []FormField{{Name: "a", Label: "A", Length: 8}},
+		})
+		var help string
+		for _, f := range screen {
+			if f.Row == helpRow(24) && f.Col == 0 {
+				help = f.Content
+			}
+		}
+		if help != "Enter=Save    PF3=Cancel" {
+			t.Errorf("compact=%v default help = %q, want 'Enter=Save    PF3=Cancel'", compact, help)
+		}
+	}
+}
+
+func TestBuildFormScreenCompactNoIntroUnchanged(t *testing.T) {
+	// Intro == "" must leave the historical compact layout untouched (field at row 2).
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8},
+	}})
+	a, _ := fieldByName(screen, "a")
+	if a.Row != 2 {
+		t.Errorf("field row = %d, want 2 (no intro)", a.Row)
+	}
+}
+
+func TestBuildFormScreenCompactGapBefore(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8},                  // row 2
+		{Name: "b", Label: "B", Length: 8, GapBefore: true}, // blank gutter 3, field 4
+	}})
+	a, _ := fieldByName(screen, "a")
+	b, _ := fieldByName(screen, "b")
+	if a.Row != 2 || b.Row != 4 {
+		t.Errorf("rows = %d,%d, want 2,4 (blank gutter at row 3)", a.Row, b.Row)
+	}
+	// The gutter row must be truly blank — no banner (or any field) on row 3.
+	for _, f := range screen {
+		if f.Row == 3 {
+			t.Errorf("gutter row 3 is not blank: %+v", f)
+		}
+	}
+}
+
+func TestBuildFormScreenCompactGapBeforeFirstFieldNoOp(t *testing.T) {
+	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
+		{Name: "a", Label: "A", Length: 8, GapBefore: true},
+	}})
+	a, _ := fieldByName(screen, "a")
+	if a.Row != 2 {
+		t.Errorf("first field row = %d, want 2 (GapBefore is a no-op on the first field)", a.Row)
+	}
+}
+
 func TestBuildFormScreenCompactSuffix(t *testing.T) {
 	screen, _ := buildFormScreen(24, FormView{Compact: true, Fields: []FormField{
 		{Name: "a", Label: "A", Length: 1, Suffix: "Y/N"},
