@@ -127,7 +127,7 @@ const (
 	sameRowLabelCol    = 40 // second-column label attribute byte for a SameRow field
 	sameRowInputCol    = 54 // second-column value attribute byte for a SameRow field
 	sameRowLabelMax    = 12 // dot-leader width for a SameRow label (fits "MFA status :")
-	sectionBannerWidth = 69 // banner content width: cols 3..71 within the 0-79 band
+	sectionBannerWidth = 77 // banner content width: cols 3..79 (dashes reach the right margin)
 )
 
 // compactMessageRow is the red message line row in compact mode (just above the
