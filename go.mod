@@ -2,7 +2,7 @@ module github.com/coffeemuse/tn3270proxy
 
 go 1.25.0
 
-toolchain go1.25.11
+toolchain go1.25.12
 
 require (
 	github.com/pquerna/otp v1.5.0
