@@ -26,3 +26,9 @@ updates:
       github-actions:
         patterns:
           - "*"
+    ignore:
+      # Tracked deliberately via the floating `v1` tag, which is upstream's
+      # recommended reference. The action ships patches near-daily, so letting
+      # Dependabot pin it would mean an exact-version bump PR nearly every week
+      # for no review value. Re-evaluate if we ever move to SHA pinning.
+      - dependency-name: "anthropics/claude-code-action"
