@@ -66,7 +66,7 @@ TN3270PROXY_MFA_KEY=$(openssl rand -base64 32) ./bin/tn3270proxy serve -db proxy
 .claude/skills/s3270-smoke-testing/smoke.sh    # automated 3270 protocol smoke test (s3270)
 
 # container / release (GH #67):
-docker build -t tn3270proxy .                       # multi-stage distroless image
+docker build -t tn3270proxy .                       # multi-stage image (golang build → alpine runtime)
 docker compose -f examples/docker-compose.yml up    # sample deployment
 # tagged releases build via GoReleaser + GHCR multi-arch CI (.goreleaser.yaml, .github/).
 ```

@@ -125,7 +125,7 @@ otherwise.
 
 ### 📦 Modern packaging
 Pure-Go, **no cgo**, embedded SQLite (no external database to run). Ships as a
-multi-stage **distroless container image**, multi-arch images on GHCR, and
+multi-stage **container image**, multi-arch images on GHCR, and
 tagged releases with `SHA256SUMS`, plus a ready-to-run `docker-compose` example.
 
 ---
@@ -166,7 +166,7 @@ built for untrusted edges. Most ❌ entries below are simply outside
 | Login disclaimer / banner | ✅ MOTD/NEWS | ✅ 2-line disclaimer |
 | Custom login branding art (`BRANDING_FILE`) | ✅ | ❌ |
 | Version stamping | ✅ ldflags + VCS fallback | ❌ |
-| Container image / multi-arch releases | ✅ distroless + GHCR | ❌ |
+| Container image / multi-arch releases | ✅ multi-arch + GHCR | ❌ |
 | Telnet "un-negotiation" handoff option | ➖ unnecessary by design¹ | ✅ flag |
 
 ✅ = full support · ➖ = present but minimal · ❌ = not available / out of scope
