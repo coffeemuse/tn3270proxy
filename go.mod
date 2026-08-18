@@ -7,7 +7,7 @@ toolchain go1.25.12
 require (
 	github.com/pquerna/otp v1.5.0
 	github.com/racingmars/go3270 v0.9.13
-	golang.org/x/crypto v0.54.0
+	golang.org/x/crypto v0.55.0
 	modernc.org/sqlite v1.56.0
 )
 
