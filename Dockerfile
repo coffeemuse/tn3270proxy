@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- build stage ---
-FROM golang:1.25 AS build
+FROM golang:1.26 AS build
 # Version stamp injected by the release CI (VERSION=<tag>); defaults to the
 # "dev" sentinel for a plain `docker build`, which internal/version reports
 # honestly. .git is excluded from the build context (.dockerignore), so the

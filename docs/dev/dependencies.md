@@ -20,13 +20,46 @@ Most findings to date have been Go standard-library advisories (TLS/x509/net/pem
 the inbound listener, backend dialer, and cert loading). These are cleared by building
 with a patched Go toolchain, not by code changes. The mechanism:
 
-- `go.mod` keeps `go 1.25.0` as the **language floor** and a `toolchain go1.25.<patch>`
+- `go.mod` keeps `go 1.25.0` as the **language floor** and a `toolchain go1.26.<patch>`
   directive selects the **build toolchain**. With `GOTOOLCHAIN=auto` (and
   `actions/setup-go` reading `go-version-file: go.mod`), CI and local builds download
   and use that patched toolchain automatically.
 - To clear a fresh batch of stdlib advisories, bump the `toolchain` directive to the
   patch release named in govulncheck's "Fixed in" lines, rebuild, and confirm a clean
   scan. (2026-06-09: bumped to `go1.25.11`, which cleared 17 stdlib advisories.)
+- Rebuild the scanner after a toolchain bump. A `govulncheck` binary built by an older
+  Go refuses to load packages compiled by a newer one. CI installs it fresh every run,
+  so this bites locally only: re-run `go install golang.org/x/vuln/cmd/govulncheck@v1.3.0`.
+
+### Toolchain currency policy
+
+**Track the current Go major release.** Go supports a major release only until two
+more ship, so the second-newest major loses patch support the day the next one lands.
+Sitting on an unsupported major means the next stdlib advisory has *no* toolchain bump
+that clears it, and the govulncheck gate fails with no fix available.
+
+The rule: when a new Go major ships, bump the `toolchain` directive to the current
+major within a release cycle. Three files carry a Go version and must move together:
+
+| File | Line | What it pins |
+| --- | --- | --- |
+| `go.mod` | `toolchain go1.N.P` | Build toolchain for CI, releases, and local builds |
+| `Dockerfile` | `FROM golang:1.N AS build` | Container build stage |
+| `docs/install/03-from-source.md` | "Go 1.N or newer" | Language floor for source builders |
+
+The `go` line (language floor) is a **separate decision** and moves in its own PR. It
+sets the minimum Go a source builder needs, and it selects the GODEBUG defaults, so it
+can change runtime behavior. Bumping it to `go 1.26.0`, for example, enables the
+`SecP256r1MLKEM768` and `SecP384r1MLKEM1024` post-quantum TLS key exchanges by default
+(`tlssecpmlkem`). No code sets `Config.CurvePreferences`, so that would change the
+handshake on both the inbound listener and the backend dialer — smoke-test against a
+real backend before taking it.
+
+Dependabot does not bump the `toolchain` directive. These bumps are manual.
+
+- 2026-08-19: bumped to `go1.26.6`. Go 1.25 goes end-of-life when Go 1.27 ships, and
+  1.27 was already at rc3. No behavior change: GODEBUG defaults follow the `go` line,
+  which stayed at `go 1.25.0`.
 
 ## Dependency decision records
 
