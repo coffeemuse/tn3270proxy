@@ -8,13 +8,69 @@ suggested approach, and dependencies.
 
 The milestone numbers below are non-contiguous (4 and 6) because they preserve the original
 spec §9 numbering — the lower-numbered milestones have shipped and were removed from this doc.
+The `M.` entry is outside that scheme: it is maintenance, not a spec milestone.
 
-**Process reminder:** each milestone below is its own brainstorm → spec → plan →
+**Process reminder:** each numbered milestone below is its own brainstorm → spec → plan →
 implementation cycle, same as the MVP. New specs go in `docs/superpowers/specs/`, plans in
-`docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions.
+`docs/superpowers/plans/`. See `CLAUDE.md` for architecture and conventions. The `M.`
+maintenance item does not need that cycle — it is a one-PR change plus verification.
 
-**Next up: #4 (TN3270E support)** — then #6 (scale), which is deferred until real load data
-justifies it.
+**Next up: the Go 1.26 language-floor bump (below), which is time-boxed to the Go 1.27
+release window.** Then #4 (TN3270E support), then #6 (scale), which is deferred until real
+load data justifies it.
+
+---
+
+## M. Maintenance: Go 1.26 language floor
+
+Not a spec §9 milestone — a time-boxed maintenance item, listed here because it is the only
+scheduled work with an external deadline.
+
+**Goal:** Raise the `go.mod` language floor from `go 1.25.0` to `go 1.26.0`. The *build
+toolchain* already moved to `go1.26.6` (PR #152, shipped in v0.8.15); this is the separate
+second half.
+
+**When:** Go 1.27 was at rc3 on 2026-08-19 and ships in August 2026. Go patches a major
+release only until two more ship, so Go 1.25 goes end-of-life the day 1.27 lands. Do this
+within a release cycle of that date. The toolchain bump already removed the urgency — the
+govulncheck gate is safe on go1.26.x — so this is currency, not a fire.
+
+**Where it hooks in:**
+- `go.mod` — the `go 1.25.0` line. That is the whole code change.
+- `docs/install/03-from-source.md` — states "Go 1.25 or newer"; must move with it.
+- `docs/dev/dependencies.md` — the **Toolchain currency policy** section holds the checklist
+  and the reasoning. Update the dated log entry there.
+
+**Design considerations:**
+
+The `go` line is not cosmetic. It selects GODEBUG defaults, so it can change runtime
+behavior. The Go 1.26 defaults were checked against this codebase:
+
+| GODEBUG | Effect here |
+|---|---|
+| `tlssecpmlkem` | **Real change.** Enables the `SecP256r1MLKEM768` and `SecP384r1MLKEM1024` post-quantum key exchanges by default. No code sets `Config.CurvePreferences`, so both TLS legs use the Go default group list — `internal/listen` (inbound) and `internal/bridge` (backend dial). |
+| `cryptocustomrand` | None. Every call site already passes `crypto/rand.Reader`. |
+| `urlstrictcolons` | None. No package imports `net/url`. |
+
+The TLS change is the one that matters for a gateway that dials legacy hosts. A rigid backend
+TLS stack can reject a larger ClientHello or unknown groups. Escape hatches if it bites:
+set `Config.CurvePreferences`, or ship `GODEBUG=tlssecpmlkem=0`.
+
+Raising the floor also raises the minimum Go for source builders. `GOTOOLCHAIN=auto`
+downloads it automatically, so this is a documentation concern, not a breakage.
+
+**What it unlocks** (each needs the floor at 1.26 before the compiler will allow it):
+- `slog.NewMultiHandler` — replaces the hand-rolled `multiHandler` in `internal/logging`.
+- `errors.AsType` — type-safe generic `errors.As`.
+- `new(expr)` — `new` accepting an initial-value expression.
+
+None of these are the reason to do the bump; take them as follow-ups if they read better.
+
+**Suggested approach:** One PR, one line in `go.mod` plus the two doc updates. Then run the
+`s3270-smoke-testing` skill, and — because unit tests will not catch a handshake regression —
+verify a real TLS backend still bridges. Confirm the inbound leg against a live emulator too.
+
+**Dependencies:** Go 1.27 shipping (or close enough to it). Nothing in the codebase blocks it.
 
 ---
 
