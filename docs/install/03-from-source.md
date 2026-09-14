@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Go 1.25 or newer.** The Go toolchain is the only build dependency.
+- **Go 1.26 or newer.** The Go toolchain is the only build dependency.
   (`go.mod` may select a newer patch toolchain; recent Go versions download it
   automatically.)
 - **No cgo, no C compiler.** SQLite support is pure Go (`modernc.org/sqlite`),

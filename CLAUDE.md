@@ -409,13 +409,15 @@ so the session is unit-tested with fakes (no live 3270 client needed).
   safe (byte-by-byte, stops at IAC EOR). Watch for lost first keystrokes in emulator testing.
 - **Bridge is Telnet-aware, not a raw copy:** each leg negotiates Telnet independently, so
   negotiation is answered locally and never forwarded. Do NOT "simplify" it to `io.Copy`.
-- **Toolchain:** `modernc.org/sqlite` pulls Go ≥1.25 via the `go` directive; the toolchain
-  auto-downloads. No cgo. `go.mod` keeps `go 1.25.0` as the language floor and a separate
+- **Toolchain:** dependencies set the minimum `go` directive (`golang.org/x/crypto` v0.56.0
+  requires Go ≥1.26); the toolchain auto-downloads. No cgo. `go.mod` keeps `go 1.26.0` as
+  the language floor and a separate
   `toolchain go1.26.<patch>` directive selects the build toolchain — bump the latter to
   clear Go stdlib advisories from `govulncheck` (CI runs it), and to stay on a
   Go major that still gets patches. The `Dockerfile` build stage carries its own
   `FROM golang:1.N` pin and moves with it. Bumping the `go` line is a separate
-  decision — it changes GODEBUG defaults, so it can change TLS behavior. Policy and
+  decision — it changes GODEBUG defaults, so it can change TLS behavior — and a Dependabot
+  PR can raise it as a side effect (check its `go.mod` hunk). Policy and
   the full checklist: `docs/dev/dependencies.md`.
 - **`tn3270proxy.json` in the repo root is auto-loaded by `serve`** and enables a TLS
   listener on :2324 — a second instance collides with a running one. `-listen` overrides
