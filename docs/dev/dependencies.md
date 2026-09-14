@@ -20,7 +20,7 @@ Most findings to date have been Go standard-library advisories (TLS/x509/net/pem
 the inbound listener, backend dialer, and cert loading). These are cleared by building
 with a patched Go toolchain, not by code changes. The mechanism:
 
-- `go.mod` keeps `go 1.25.0` as the **language floor** and a `toolchain go1.26.<patch>`
+- `go.mod` keeps `go 1.26.0` as the **language floor** and a `toolchain go1.26.<patch>`
   directive selects the **build toolchain**. With `GOTOOLCHAIN=auto` (and
   `actions/setup-go` reading `go-version-file: go.mod`), CI and local builds download
   and use that patched toolchain automatically.
@@ -47,19 +47,32 @@ major within a release cycle. Three files carry a Go version and must move toget
 | `Dockerfile` | `FROM golang:1.N AS build` | Container build stage |
 | `docs/install/03-from-source.md` | "Go 1.N or newer" | Language floor for source builders |
 
-The `go` line (language floor) is a **separate decision** and moves in its own PR. It
-sets the minimum Go a source builder needs, and it selects the GODEBUG defaults, so it
-can change runtime behavior. Bumping it to `go 1.26.0`, for example, enables the
-`SecP256r1MLKEM768` and `SecP384r1MLKEM1024` post-quantum TLS key exchanges by default
-(`tlssecpmlkem`). No code sets `Config.CurvePreferences`, so that would change the
-handshake on both the inbound listener and the backend dialer — smoke-test against a
-real backend before taking it.
+The `go` line (language floor) is a **separate decision**. It sets the minimum Go a
+source builder needs, and it selects the GODEBUG defaults, so it can change runtime
+behavior. Before raising it, check that release's GODEBUG default changes against this
+codebase, and smoke-test both TLS legs (the inbound listener and the backend dialer).
 
-Dependabot does not bump the `toolchain` directive. These bumps are manual.
+Dependabot does not bump the `toolchain` directive. These bumps are manual. Dependabot
+*can* raise the `go` line, though: when a dependency requires a newer Go than our floor,
+its PR raises our `go` line in the same diff. Check the `go.mod` hunk of every Dependabot
+PR for it.
 
 - 2026-08-19: bumped to `go1.26.6`. Go 1.25 goes end-of-life when Go 1.27 ships, and
   1.27 was already at rc3. No behavior change: GODEBUG defaults follow the `go` line,
   which stayed at `go 1.25.0`.
+- 2026-09-14: raised the floor to `go 1.26.0` and bumped the toolchain to `go1.26.8`.
+  The floor came in with Dependabot #156, because `golang.org/x/crypto` v0.56.0 requires
+  Go 1.26. Go 1.27 has shipped, so Go 1.25 is end-of-life. One Go 1.26 GODEBUG default is
+  live here: `tlssecpmlkem` adds the `SecP256r1MLKEM768` and `SecP384r1MLKEM1024`
+  post-quantum groups, since no code sets `Config.CurvePreferences`. Measured on the
+  backend dial, the ClientHello grew from 1479 to 1483 bytes. Only the offered group list
+  changed: the key shares (X25519MLKEM768 and X25519) and the negotiated group stayed the
+  same, because X25519MLKEM768 was already on by default. `cryptocustomrand` and
+  `urlstrictcolons` are inert (every call site passes `crypto/rand.Reader`; nothing
+  imports `net/url`). If a legacy TLS backend rejects the handshake, set
+  `Config.CurvePreferences` or run with `GODEBUG=tlssecpmlkem=0`. The new floor also
+  allows `slog.NewMultiHandler` (could replace the hand-rolled `multiHandler` in
+  `internal/logging`), `errors.AsType`, and `new(expr)`.
 
 ## Dependency decision records
 
