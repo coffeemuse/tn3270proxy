@@ -1,7 +1,7 @@
 # TN3270 gateway — sample docker-compose.
 #
 # FIRST-RUN BOOTSTRAP (one-shot, creates the first admin):
-#   docker compose run --rm tn3270proxy bootstrap -db /data/proxy.db
+#   docker compose run --rm tn3270proxy tn3270proxy bootstrap -db /data/proxy.db
 # Then start the gateway normally with:
 #   docker compose up -d
 #
@@ -18,7 +18,7 @@ services:
     image: ghcr.io/coffeemuse/tn3270proxy:latest   # pin a version (e.g. :1.0.0) in production
     restart: unless-stopped
     # Drop "-listen" below if you mount a config that disables the plain listener.
-    command: ["serve", "-db", "/data/proxy.db", "-listen", ":2323"]
+    command: ["tn3270proxy", "serve", "-db", "/data/proxy.db", "-listen", ":2323"]
     ports:
       - "2323:2323"      # plaintext TN3270 listener
       # - "2324:2324"    # TLS listener (uncomment if you mount a TLS-enabled config)
