@@ -53,7 +53,7 @@ go build -ldflags "-X main.version=v1.2.3" -o bin/tn3270proxy ./cmd/tn3270proxy
 
 ./bin/tn3270proxy version                                      # print resolved version and exit
 ./bin/tn3270proxy bootstrap -db proxy.db                      # create first admin (fresh system)
-./bin/tn3270proxy seed -db proxy.db -file seed.example.json   # optional: bulk-load users/groups/services
+./bin/tn3270proxy seed -db proxy.db -file seed.example.json   # optional: bulk-load users/groups/services/trusted networks
 ./bin/tn3270proxy serve -db proxy.db -listen :2323            # run the proxy
 ./bin/tn3270proxy audit list -db proxy.db                      # query the audit trail
 ./bin/tn3270proxy audit prune -db proxy.db -older-than 90d     # retention cleanup
@@ -233,10 +233,12 @@ internal/dummy    Throwaway TN3270 server: pure go3270 screen builders (3 random
                   mockup welcome screens with a blinking red DUMMY3270 marker +
                   "Press PA3 to disconnect." footer) + a Telnet-negotiating
                   accept/repaint loop. No state, no logging.
-internal/seed     SeedData/SeedUser/SeedService + Apply(): declarative one-time seeding.
-                  NOT idempotent by design: Apply pre-flights and fails loudly when any
-                  user/service already exists ("seed is a one-time tool"); passwords are
-                  pre-validated so a mid-run bcrypt rejection can't leave partial state.
+internal/seed     SeedData/SeedUser/SeedService/SeedTrustedNetwork + Apply(): declarative
+                  one-time seeding. NOT idempotent by design: Apply pre-flights and fails
+                  loudly when any user/service/trusted network already exists ("seed is a
+                  one-time tool"); passwords and trusted networks (ParseTrustedCIDR +
+                  ValidateComment, in-file duplicates by canonical form) are pre-validated
+                  so a mid-run rejection can't leave partial state.
 internal/quickstart First-run provisioning for the Docker quick-start. Provision(ctx,dir)
                   generates the data dir (proxy.db via store + seed, mfa.key, self-signed
                   cert, motd.txt, branding.txt, SETUP-DEFAULTS.TXT) and writes tn3270proxy.json LAST as

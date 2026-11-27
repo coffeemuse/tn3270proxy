@@ -10,5 +10,9 @@
     { "name": "PUBTSO",  "description": "Public TSO",             "host": "localhost",         "port": 3270, "groups": ["ops"] },
     { "name": "SECCICS", "description": "Secure CICS Region",     "host": "cics.corp.example", "port": 992, "tls": true, "groups": ["ops"] },
     { "name": "LABCICS", "description": "Lab CICS (self-signed)", "host": "10.0.0.5",          "port": 992, "tls": true, "verify": false, "groups": ["dev"] }
+  ],
+  "trusted_networks": [
+    { "cidr": "127.0.0.1",     "comment": "Local terminal controller" },
+    { "cidr": "10.20.0.0/24",  "comment": "Machine-room console LAN" }
   ]
 }

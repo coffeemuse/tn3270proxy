@@ -25,7 +25,7 @@
 //
 //	serve      run the gateway (the default when omitted)
 //	bootstrap  create the first ADMIN account on a fresh database
-//	seed       bulk-load users/groups/services from a JSON file
+//	seed       bulk-load users/groups/services/trusted networks from JSON
 //	quickstart provision a fresh Docker data dir with opinionated defaults
 //	audit      query (list) or trim (prune) the audit trail
 //	doc        import/export the MOTD and branding documents
@@ -148,7 +148,8 @@ func runServe(args []string) error {
 }
 
 // runSeed implements the `seed` subcommand: parse a JSON seed file and apply
-// it idempotently (see internal/seed), then warn if the DB still has no admin.
+// it to a fresh database (see internal/seed; a re-seed fails on conflicts),
+// then warn if the DB still has no admin.
 func runSeed(args []string) error {
 	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
 	dbPath := fs.String("db", "tn3270proxy.db", "path to SQLite database file")
