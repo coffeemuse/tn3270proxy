@@ -33,6 +33,10 @@ entry. Each entry is:
 Deleting an entry affects new connections only; already-connected trusted
 clients keep their exemptions for the life of the connection.
 
+Automated installs can create the initial entries with the `trusted_networks`
+key of a [`seed`](14-cli.md) file instead — same validation, same canonical
+form.
+
 ## Use sparingly
 
 Every trusted network is a hole in the DoS posture. Trust only networks you

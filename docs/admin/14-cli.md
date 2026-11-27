@@ -35,6 +35,14 @@ Refuses if an admin already exists. Log in, create your real account, delete
 One-time convenience for a fresh database; fails loudly on conflicts. Use
 the admin UI for everything afterwards.
 
+The JSON file has four optional top-level lists — `groups`, `users`,
+`services`, and `trusted_networks` (`{"cidr": "...", "comment": "..."}`
+entries, same rules as [Trusted Networks](09-trusted-networks.md)). The whole
+file is validated before the first write, so a bad entry leaves the database
+untouched. Unknown keys are an error at every level, so a misspelt key (say
+`user_settings_lock`) fails the seed instead of being silently ignored. [`seed.example.json`](../../seed.example.json) shows every key; see
+[First run](../install/04-first-run.md) for details.
+
 ## `audit list` / `audit prune` — query and trim the audit trail
 
 See [The audit trail](12-audit.md) for filters and retention guidance.

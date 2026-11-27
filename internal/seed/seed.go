@@ -17,8 +17,9 @@
  * along with tn3270proxy. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Package seed populates the store with users, groups, and services from a
-// declarative description (used by the `seed` subcommand and tests).
+// Package seed populates the store with users, groups, services, and trusted
+// networks from a declarative description (used by the `seed` subcommand and
+// tests).
 package seed
 
 import (
@@ -49,17 +50,25 @@ type SeedService struct {
 	Groups      []string `json:"groups"`
 }
 
-// SeedData is the full set of records to apply.
-type SeedData struct {
-	Groups   []string      `json:"groups"`
-	Users    []SeedUser    `json:"users"`
-	Services []SeedService `json:"services"`
+// SeedTrustedNetwork describes one trusted client network to create. CIDR may
+// be a bare IP (stored as a host route) or a prefix; Comment is required.
+type SeedTrustedNetwork struct {
+	CIDR    string `json:"cidr"`
+	Comment string `json:"comment"`
 }
 
-// Apply creates the groups, users, and services described by data, linking
-// memberships and access. It is intended for first-run population of a fresh
-// database only; re-running against a populated database returns an error naming
-// the first conflicting user or service.
+// SeedData is the full set of records to apply.
+type SeedData struct {
+	Groups          []string             `json:"groups"`
+	Users           []SeedUser           `json:"users"`
+	Services        []SeedService        `json:"services"`
+	TrustedNetworks []SeedTrustedNetwork `json:"trusted_networks"`
+}
+
+// Apply creates the groups, users, services, and trusted networks described by
+// data, linking memberships and access. It is intended for first-run population
+// of a fresh database only; re-running against a populated database returns an
+// error naming the first conflicting user, service, or trusted network.
 func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 	// Pre-validate every password before any writes: Apply is non-transactional,
 	// so a password rejected mid-run (e.g. bcrypt's 72-byte limit) would leave
@@ -70,9 +79,30 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 		}
 	}
 
+	// Pre-validate every trusted network for the same reason. Entries are keyed
+	// by canonical form so one network listed under two spellings (127.0.0.1
+	// and 127.0.0.1/32) is rejected rather than silently dropping a comment.
+	seedNets := make(map[string]bool, len(data.TrustedNetworks))
+	netKeys := make([]string, 0, len(data.TrustedNetworks))
+	for _, n := range data.TrustedNetworks {
+		p, err := store.ParseTrustedCIDR(n.CIDR)
+		if err != nil {
+			return fmt.Errorf("trusted network %q: %w", n.CIDR, err)
+		}
+		if err := store.ValidateComment(n.Comment); err != nil {
+			return fmt.Errorf("trusted network %q: %w", n.CIDR, err)
+		}
+		key := p.String()
+		if seedNets[key] {
+			return fmt.Errorf("trusted network %q is listed more than once (both normalize to %s)", n.CIDR, key)
+		}
+		seedNets[key] = true
+		netKeys = append(netKeys, key)
+	}
+
 	// Pre-flight conflict check: seed is a one-time tool. Detect any colliding
-	// user or service before the first write so a re-seed fails loudly and
-	// atomically (no partial state).
+	// user, service, or trusted network before the first write so a re-seed
+	// fails loudly and atomically (no partial state).
 	for _, u := range data.Users {
 		if _, err := st.GetUserByUsername(ctx, u.Username); err == nil {
 			return fmt.Errorf("user %q already exists; seed is a one-time tool for new installations — use the admin UI to change passwords", u.Username)
@@ -85,6 +115,21 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 			return fmt.Errorf("service %q already exists; seed is a one-time tool for new installations — use the admin UI to manage services", svc.Name)
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return fmt.Errorf("check service %q: %w", svc.Name, err)
+		}
+	}
+	if len(netKeys) > 0 {
+		existing, err := st.ListTrustedNetworks(ctx)
+		if err != nil {
+			return fmt.Errorf("check trusted networks: %w", err)
+		}
+		have := make(map[string]bool, len(existing))
+		for _, e := range existing {
+			have[e.CIDR] = true
+		}
+		for _, key := range netKeys {
+			if have[key] {
+				return fmt.Errorf("trusted network %s already exists; seed is a one-time tool for new installations — use the admin UI to manage trusted networks", key)
+			}
 		}
 	}
 
@@ -149,6 +194,12 @@ func Apply(ctx context.Context, st *store.Store, data SeedData) error {
 			if err := st.LinkGroupService(ctx, gid, sid); err != nil {
 				return fmt.Errorf("link %q to %q: %w", svc.Name, g, err)
 			}
+		}
+	}
+
+	for _, n := range data.TrustedNetworks {
+		if _, err := st.CreateTrustedNetwork(ctx, n.CIDR, n.Comment); err != nil {
+			return fmt.Errorf("create trusted network %q: %w", n.CIDR, err)
 		}
 	}
 	return nil
