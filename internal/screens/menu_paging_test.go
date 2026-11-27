@@ -19,7 +19,13 @@
 
 package screens
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/coffeemuse/tn3270proxy/internal/store"
+)
 
 func TestMenuPageBounds(t *testing.T) {
 	g := DefaultGeometry // MOD 2: capacity 18 non-admin, 17 admin
@@ -48,6 +54,54 @@ func TestMenuPageBounds(t *testing.T) {
 				c.name, c.total, c.admin, c.page,
 				gotPage, gotStart, gotEnd, gotInd,
 				c.wantPage, c.wantStart, c.wantEnd, c.wantIndicator)
+		}
+	}
+}
+
+// TestMenuScreenIndicatorClearsTitle guards against the page indicator's field
+// attribute byte landing inside the centered title on the title row. The title
+// centers on the FULL negotiated width (CenterCol uses geom.Cols), but the
+// indicator is right-anchored to the 80-column margin. On a wide (132-col)
+// geometry the title therefore reaches past the indicator's start column, and
+// the indicator's attribute byte lands inside the title text and corrupts it.
+// The indicator must start strictly right of the title's last content column at
+// every supported geometry.
+func TestMenuScreenIndicatorClearsTitle(t *testing.T) {
+	const title = "TN3270 GATEWAY MENU"
+	// Enough services to span multiple pages so the indicator renders in its
+	// widest "ITEMS x TO y OF z" form (the most collision-prone case).
+	svcs := make([]store.Service, 60)
+	for i := range svcs {
+		svcs[i] = store.Service{ID: int64(i + 1), Name: fmt.Sprintf("SVC%02d", i+1), Host: "h", Port: 23}
+	}
+	geoms := []Geometry{
+		{Rows: 24, Cols: 80},  // MOD 2
+		{Rows: 32, Cols: 80},  // MOD 3
+		{Rows: 43, Cols: 80},  // MOD 4
+		{Rows: 27, Cols: 132}, // MOD 5
+	}
+	for _, g := range geoms {
+		screen, _, _ := MenuScreen(g, svcs, false, false, MenuStatus{}, "", 0)
+
+		titleF, ok := fieldByContent(screen, title)
+		if !ok {
+			t.Fatalf("%dx%d: title field %q not found", g.Rows, g.Cols, title)
+		}
+		titleEndCol := titleF.Col + len(title) - 1
+
+		indCol, indContent := -1, ""
+		for _, f := range screen {
+			if strings.HasPrefix(f.Content, "ITEMS ") {
+				indCol, indContent = f.Col, f.Content
+				break
+			}
+		}
+		if indCol < 0 {
+			t.Fatalf("%dx%d: page indicator field (ITEMS ...) not found", g.Rows, g.Cols)
+		}
+		if indCol <= titleEndCol {
+			t.Errorf("%dx%d: indicator %q starts at col %d, but title %q ends at col %d; indicator must start strictly right of the title",
+				g.Rows, g.Cols, indContent, indCol, title, titleEndCol)
 		}
 	}
 }

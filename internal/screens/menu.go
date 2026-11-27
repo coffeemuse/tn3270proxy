@@ -111,14 +111,25 @@ func MenuPageBounds(geom Geometry, total int, admin bool, page int) (clamped, st
 func MenuScreen(geom Geometry, services []store.Service, admin bool, settingsLocked bool, status MenuStatus, errMsg string, page int) (go3270.Screen, map[string]store.Service, Cursor) {
 	clamped, start, end, indicator := MenuPageBounds(geom, len(services), admin, page)
 
-	// Right-align the page indicator so its content ends at the screen's right
+	const title = "TN3270 GATEWAY MENU"
+
+	// Right-align the page indicator so its content ends at the 80-column right
 	// margin (col 79); this guarantees the full "ITEMS x TO y OF z" never clips
 	// (a Field's Col is the attribute byte, so content starts at Col+1). Kept
 	// within the 80-column logical width per the rows-only adaptation model.
 	indicatorCol := max(79-len(indicator), 0)
+	// ...but the title centers on the FULL negotiated width (CenterCol uses
+	// geom.Cols), so on a wide (132-col) geometry the title reaches past col 79
+	// and collides with the indicator — the indicator's attribute byte lands
+	// inside the title text and corrupts it. Push the indicator to the first
+	// column past the title in that case. titleEnd is one past the title's last
+	// content column, which doubles as the indicator's attribute-byte gap.
+	if titleEnd := geom.CenterCol(len(title)) + len(title); titleEnd > indicatorCol {
+		indicatorCol = titleEnd
+	}
 
 	screen := go3270.Screen{
-		{Row: geom.TitleRow(), Col: geom.CenterCol(len("TN3270 GATEWAY MENU")), Color: go3270.White, Intense: true, Content: "TN3270 GATEWAY MENU"},
+		{Row: geom.TitleRow(), Col: geom.CenterCol(len(title)), Color: go3270.White, Intense: true, Content: title},
 		{Row: geom.TitleRow(), Col: indicatorCol, Color: go3270.Turquoise, Content: indicator},
 	}
 
