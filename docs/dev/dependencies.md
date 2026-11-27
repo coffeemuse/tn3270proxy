@@ -73,6 +73,11 @@ PR for it.
   `Config.CurvePreferences` or run with `GODEBUG=tlssecpmlkem=0`. The new floor also
   allows `slog.NewMultiHandler` (could replace the hand-rolled `multiHandler` in
   `internal/logging`), `errors.AsType`, and `new(expr)`.
+- 2026-11-27: bumped the toolchain to `go1.26.10` to clear two stdlib advisories that
+  were failing the govulncheck gate on every PR: GO-2026-6809 (`crypto/x509`, fixed in
+  go1.26.10) and GO-2026-6607 (`crypto/tls`, fixed in go1.26.9). Both are reachable
+  through the inbound TLS listener and the backend TLS dial. The `go 1.26.0` floor is
+  unchanged, so GODEBUG defaults are unchanged.
 
 ## Dependency decision records
 
