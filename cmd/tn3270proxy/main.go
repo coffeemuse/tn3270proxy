@@ -38,7 +38,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -164,8 +163,8 @@ func runSeed(args []string) error {
 	if err != nil {
 		return err
 	}
-	var data seed.SeedData
-	if err := json.Unmarshal(raw, &data); err != nil {
+	data, err := seed.Parse(raw)
+	if err != nil {
 		return fmt.Errorf("parse seed file: %w", err)
 	}
 	st, err := store.Open(*dbPath)

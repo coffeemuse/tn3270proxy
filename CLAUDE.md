@@ -238,7 +238,9 @@ internal/seed     SeedData/SeedUser/SeedService/SeedTrustedNetwork + Apply(): de
                   loudly when any user/service/trusted network already exists ("seed is a
                   one-time tool"); passwords and trusted networks (ParseTrustedCIDR +
                   ValidateComment, in-file duplicates by canonical form) are pre-validated
-                  so a mid-run rejection can't leave partial state.
+                  so a mid-run rejection can't leave partial state. Parse is the strict
+                  decoder runSeed uses: unknown keys rejected at every level
+                  (DisallowUnknownFields) plus no trailing data after the object.
 internal/quickstart First-run provisioning for the Docker quick-start. Provision(ctx,dir)
                   generates the data dir (proxy.db via store + seed, mfa.key, self-signed
                   cert, motd.txt, branding.txt, SETUP-DEFAULTS.TXT) and writes tn3270proxy.json LAST as

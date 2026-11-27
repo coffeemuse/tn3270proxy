@@ -22,7 +22,10 @@ the admin UI for subsequent account and service management.
 
     ./bin/tn3270proxy seed -db proxy.db -file seed.example.json
 
-See [`seed.example.json`](../../seed.example.json) for the format. If the seed file
+See [`seed.example.json`](../../seed.example.json) for the format. Unknown keys are
+rejected at every level, so a typo fails the seed instead of being silently skipped.
+Older releases ignored unknown keys without warning, so make sure the binary is at
+least as new as the keys your seed file uses. If the seed file
 contains no ZZADMIN member, `serve` and `seed` will both warn that the admin UI is
 unreachable and point at `bootstrap`.
 

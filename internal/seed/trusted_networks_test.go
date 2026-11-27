@@ -21,7 +21,6 @@ package seed
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -195,15 +194,15 @@ func TestApplyBlocksReSeedTrustedNetwork(t *testing.T) {
 }
 
 func TestSeedExampleFileAppliesWithTrustedNetworks(t *testing.T) {
-	// The shipped example is the format reference; it must decode through the
-	// same json tags the `seed` subcommand uses and apply cleanly.
+	// The shipped example is the format reference; it must pass the same
+	// strict Parse the `seed` subcommand uses and apply cleanly.
 	raw, err := os.ReadFile(filepath.Join("..", "..", "seed.example.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var data SeedData
-	if err := json.Unmarshal(raw, &data); err != nil {
-		t.Fatalf("decode seed.example.json: %v", err)
+	data, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse(seed.example.json): %v", err)
 	}
 	if len(data.TrustedNetworks) == 0 {
 		t.Fatal("seed.example.json should demonstrate the trusted_networks key")
